@@ -135,10 +135,16 @@
   .conv-item.active{ background:var(--panel); color:var(--text-primary); border:1px solid var(--border-glass); }
   .sidebar-bottom{
     border-top:1px solid var(--border-glass); padding:14px 18px;
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
   }
-  .user-chip{ font-size:12.5px; color:var(--text-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .user-chip{ font-size:12.5px; color:var(--text-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
   .user-chip strong{ color:var(--text-primary); display:block; font-size:13px; }
+  .icon-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:8px; padding:7px 9px; font-size:13px; cursor:pointer;
+    font-family:'JetBrains Mono', monospace; flex-shrink:0;
+  }
+  .icon-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
 
   .chat-main{ flex:1; display:flex; flex-direction:column; height:100vh; min-width:0; }
   .chat-header{
@@ -160,6 +166,52 @@
   .msg.user{ align-self:flex-end; background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); color:#fff; border-bottom-right-radius:3px; }
   .msg.bot{ align-self:flex-start; background:var(--panel); border:1px solid var(--border-glass); border-bottom-left-radius:3px; }
   .msg.note{ align-self:center; color:var(--text-soft); font-family:'JetBrains Mono', monospace; font-size:11.5px; }
+
+  /* ---------- Code blocks inside messages ---------- */
+  .msg .code-block{
+    margin:10px 0; border-radius:9px; overflow:hidden;
+    background:#0B0F17; border:1px solid var(--border-glass);
+  }
+  .msg .code-block:first-child{ margin-top:2px; }
+  .msg .code-block:last-child{ margin-bottom:2px; }
+  .code-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:7px 12px; background:rgba(255,255,255,0.04);
+    border-bottom:1px solid var(--border-glass);
+    font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--text-soft);
+  }
+  .copy-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:6px; padding:4px 9px; font-size:11px; cursor:pointer;
+    font-family:'JetBrains Mono', monospace; display:flex; align-items:center; gap:5px;
+  }
+  .copy-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+  .copy-btn.copied{ color:var(--accent-glow); border-color:var(--accent-glow); }
+  .code-block pre{
+    margin:0; padding:12px 14px; overflow-x:auto;
+    font-family:'JetBrains Mono', monospace; font-size:12.5px; line-height:1.6;
+    color:#D6E2F0; white-space:pre;
+  }
+  .msg code.inline-code{
+    background:rgba(255,255,255,0.08); border-radius:4px; padding:1px 6px;
+    font-family:'JetBrains Mono', monospace; font-size:0.9em;
+  }
+  .msg img.chat-image{
+    max-width:100%; border-radius:10px; margin:8px 0; display:block;
+    border:1px solid var(--border-glass);
+  }
+  .preview-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:6px; padding:4px 9px; font-size:11px; cursor:pointer;
+    font-family:'JetBrains Mono', monospace;
+  }
+  .preview-btn:hover{ border-color:var(--accent-glow); color:var(--text-primary); }
+  .preview-btn.on{ color:var(--accent-glow); border-color:var(--accent-glow); }
+  .code-preview-frame{
+    display:none; border:none; width:100%; height:320px;
+    background:#fff; border-top:1px solid var(--border-glass);
+  }
+  .code-preview-frame.show{ display:block; }
   .typing{ align-self:flex-start; display:flex; gap:4px; padding:14px 15px; background:var(--panel); border:1px solid var(--border-glass); border-radius:12px; }
   .typing span{ width:6px; height:6px; border-radius:50%; background:var(--text-soft); animation:bounce 1.1s infinite; }
   .typing span:nth-child(2){ animation-delay:0.15s; }
@@ -251,6 +303,37 @@
   }
   .settings-field textarea{ min-height:70px; }
   .save-note{ font-size:12px; color:var(--accent-glow); font-family:'JetBrains Mono', monospace; margin-top:8px; }
+
+  /* ---------- Customer Account Settings ---------- */
+  #screen-account{ flex-direction:column; }
+  .account-top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 30px; border-bottom:1px solid var(--border-glass);
+  }
+  .account-body{ flex:1; padding:28px 30px; overflow-y:auto; max-width:560px; }
+  .account-section{ margin-bottom:36px; }
+  .account-section h3{ font-family:'Space Grotesk',sans-serif; font-size:16px; margin:0 0 6px; }
+  .account-section p.hint{ color:var(--text-soft); font-size:12.5px; margin:0 0 16px; }
+  .plan-card{
+    border:1px solid var(--border-glass); border-radius:12px; padding:14px 16px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background:var(--panel);
+  }
+  .plan-card.selected{ border-color:var(--accent-glow); }
+  .plan-card .plan-info h4{ margin:0 0 4px; font-family:'Space Grotesk',sans-serif; font-size:14.5px; }
+  .plan-card .plan-info p{ margin:0; color:var(--text-soft); font-size:12px; }
+  .plan-select-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-primary);
+    border-radius:8px; padding:8px 14px; font-size:12.5px; cursor:pointer; white-space:nowrap;
+    font-family:'Inter',sans-serif; font-weight:500;
+  }
+  .plan-select-btn:hover{ border-color:var(--accent-a); }
+  .plan-select-btn.current{ background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); border:none; cursor:default; }
+  @media (max-width:680px){
+    .account-top{ padding:14px 16px; }
+    .account-body{ padding:18px 16px; }
+  }
+
   ::-webkit-scrollbar{ width:8px; }
   ::-webkit-scrollbar-thumb{ background:var(--border-glass); border-radius:4px; }
 </style>
@@ -357,6 +440,7 @@
     <div class="conv-list" id="convList"></div>
     <div class="sidebar-bottom">
       <div class="user-chip"><strong id="whoamiName"></strong><span id="whoamiEmail"></span></div>
+      <button class="icon-btn" id="accountSettingsBtn" title="Account settings">⚙</button>
       <button class="logout-btn" id="logoutBtn">Sign out</button>
     </div>
   </div>
@@ -373,6 +457,57 @@
       <input id="userInput" type="text" placeholder="Type a message...">
       <button id="sendBtn">Send</button>
     </div>
+  </div>
+</div>
+
+<!-- CUSTOMER ACCOUNT SETTINGS -->
+<div class="screen" id="screen-account">
+  <div class="account-top">
+    <div class="brandmark"><span class="dot"></span> Account Settings</div>
+    <span class="back-link" id="backToChatFromAccount">← Back to chat</span>
+  </div>
+  <div class="account-body">
+
+    <div class="account-section">
+      <h3>Change password</h3>
+      <p class="hint">Update the password you use to sign in.</p>
+      <div id="accountPasswordError"></div>
+      <div class="settings-field">
+        <label>Current password</label>
+        <input id="accCurrentPassword" type="password" placeholder="••••••••">
+      </div>
+      <div class="settings-field">
+        <label>New password</label>
+        <input id="accNewPassword" type="password" placeholder="At least 6 characters">
+      </div>
+      <div class="settings-field">
+        <label>Confirm new password</label>
+        <input id="accConfirmPassword" type="password" placeholder="Type it again">
+      </div>
+      <button class="btn-primary" style="max-width:220px;" id="accChangePasswordBtn">Update password</button>
+      <div class="save-note" id="accPasswordSaveNote" style="display:none;">Password updated.</div>
+    </div>
+
+    <div class="account-section">
+      <h3>Personalize your assistant</h3>
+      <p class="hint">Tell the assistant how you'd like it to respond to you — for example a tone you prefer, or a language. This can never override SR Group's core rules.</p>
+      <div id="accountPreferenceError"></div>
+      <div class="settings-field">
+        <label>Your preference</label>
+        <textarea id="accPreference" style="min-height:100px;" placeholder="e.g. Please reply in Bangla, and keep answers very short."></textarea>
+      </div>
+      <button class="btn-primary" style="max-width:220px;" id="accSavePreferenceBtn">Save preference</button>
+      <div class="save-note" id="accPreferenceSaveNote" style="display:none;">Preference saved.</div>
+    </div>
+
+    <div class="account-section">
+      <h3>Plan</h3>
+      <p class="hint">Choose a plan. This doesn't charge you anything automatically — after selecting, SR Group will contact you to confirm and activate it.</p>
+      <div id="accountPlanError"></div>
+      <div id="planCards" style="display:flex; flex-direction:column; gap:10px; max-width:420px; margin-bottom:14px;"></div>
+      <div class="save-note" id="accPlanSaveNote" style="display:none;">Plan selection saved. SR Group will contact you soon.</div>
+    </div>
+
   </div>
 </div>
 
@@ -407,6 +542,10 @@
       <div class="settings-field">
         <label>Key facts (one per line — hours, pricing, policies...)</label>
         <textarea id="setFacts" style="min-height:140px;" placeholder="One fact per line"></textarea>
+      </div>
+      <div class="settings-field" style="max-width:280px;">
+        <label>Daily message limit per customer</label>
+        <input id="setDailyLimit" type="number" min="1" step="1" placeholder="e.g. 40">
       </div>
       <button class="btn-primary" style="max-width:200px;" id="saveSettingsBtn">Save settings</button>
       <div class="save-note" id="saveNote" style="display:none;">Saved.</div>
@@ -645,14 +784,126 @@ async function enterChat() {
   showScreen('screen-chat');
 }
 
+// ```lang\ncode\n``` কে সুন্দর কোড ব্লকে (copy + preview বাটনসহ), আর ![alt](url) কে
+// আসল ছবিতে বদলে দেয়। বাকি টেক্সট প্লেইন থাকে। XSS এড়াতে সব অংশ escapeHtml দিয়ে যায়।
+let previewIdCounter = 0;
+
+function renderMessageHtml(text) {
+  const parts = [];
+  const fenceRegex = /```(\w*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = fenceRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: 'code', lang: match[1] || 'text', value: match[2].replace(/\n$/, '') });
+    lastIndex = fenceRegex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', value: text.slice(lastIndex) });
+  }
+
+  return parts
+    .map((part) => {
+      if (part.type === 'code') {
+        const escaped = escapeHtml(part.value);
+        const isHtml = part.lang.toLowerCase() === 'html';
+        previewIdCounter += 1;
+        const previewId = 'preview-' + previewIdCounter;
+        const previewBtn = isHtml
+          ? `<button class="preview-btn" type="button" data-target="${previewId}">Preview</button>`
+          : '';
+        const previewFrame = isHtml
+          ? `<iframe class="code-preview-frame" id="${previewId}" sandbox="allow-scripts"></iframe>`
+          : '';
+        return `<div class="code-block">
+          <div class="code-header">
+            <span>${escapeHtml(part.lang)}</span>
+            <div style="display:flex; gap:6px;">
+              ${previewBtn}
+              <button class="copy-btn" type="button">
+                <span class="copy-label">Copy</span>
+              </button>
+            </div>
+          </div>
+          <pre><code>${escaped}</code></pre>
+          ${previewFrame}
+        </div>`;
+      }
+      // ![alt](url) থাকলে ছবি হিসেবে বসাই, নাহলে সাধারণ টেক্সট + ইনলাইন `code`
+      const withImages = part.value.replace(
+        /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
+        (m, alt, url) => `\u0000IMG\u0000${escapeHtml(alt)}\u0000${escapeHtml(url)}\u0000`
+      );
+      let escaped = escapeHtml(withImages)
+        .replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
+      escaped = escaped.replace(
+        /\u0000IMG\u0000([\s\S]*?)\u0000([\s\S]*?)\u0000/g,
+        (m, alt, url) => `<img class="chat-image" src="${url}" alt="${alt}" loading="lazy">`
+      );
+      return escaped;
+    })
+    .join('');
+}
+
 function addMessage(role, text) {
   const box = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'msg ' + role;
-  div.textContent = text;
+
+  if (role === 'bot' && (text.includes('```') || /!\[[^\]]*\]\(https?:\/\//.test(text))) {
+    div.innerHTML = renderMessageHtml(text);
+  } else {
+    div.textContent = text;
+  }
+
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 }
+
+// Copy বাটন হ্যান্ডেল করা
+document.getElementById('messages').addEventListener('click', (e) => {
+  const copyBtn = e.target.closest('.copy-btn');
+  if (copyBtn) {
+    const codeEl = copyBtn.closest('.code-block').querySelector('code');
+    const codeText = codeEl.textContent;
+    navigator.clipboard.writeText(codeText).then(() => {
+      const label = copyBtn.querySelector('.copy-label');
+      const original = label.textContent;
+      label.textContent = 'Copied!';
+      copyBtn.classList.add('copied');
+      setTimeout(() => { label.textContent = original; copyBtn.classList.remove('copied'); }, 1800);
+    }).catch(() => {
+      const range = document.createRange();
+      range.selectNodeContents(codeEl);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+    return;
+  }
+
+  // Preview বাটন হ্যান্ডেল করা — HTML code block কে iframe এ live দেখায়
+  const previewBtn = e.target.closest('.preview-btn');
+  if (previewBtn) {
+    const codeBlock = previewBtn.closest('.code-block');
+    const codeEl = codeBlock.querySelector('code');
+    const frame = document.getElementById(previewBtn.dataset.target);
+    const isOn = frame.classList.contains('show');
+    if (isOn) {
+      frame.classList.remove('show');
+      previewBtn.classList.remove('on');
+      previewBtn.textContent = 'Preview';
+    } else {
+      frame.srcdoc = codeEl.textContent;
+      frame.classList.add('show');
+      previewBtn.classList.add('on');
+      previewBtn.textContent = 'Hide preview';
+    }
+  }
+});
 
 function showTyping() {
   const box = document.getElementById('messages');
@@ -704,6 +955,106 @@ document.getElementById('logoutBtn').onclick = () => {
   document.getElementById('loginEmail').value = '';
   document.getElementById('loginPassword').value = '';
   showScreen('screen-login');
+};
+
+/* ---------------- Customer Account Settings ---------------- */
+document.getElementById('accountSettingsBtn').onclick = async () => {
+  setError('accountPasswordError', '');
+  setError('accountPreferenceError', '');
+  setError('accountPlanError', '');
+  document.getElementById('accCurrentPassword').value = '';
+  document.getElementById('accNewPassword').value = '';
+  document.getElementById('accConfirmPassword').value = '';
+  let currentPlan = 'free';
+  try {
+    const me = await api('/account/me', { token: userToken });
+    document.getElementById('accPreference').value = me.customPreference || '';
+    currentPlan = me.plan || 'free';
+  } catch (e) { /* leave blank if it fails to load */ }
+  renderPlanCards(currentPlan);
+  showScreen('screen-account');
+};
+document.getElementById('backToChatFromAccount').onclick = () => showScreen('screen-chat');
+
+const PLAN_DEFINITIONS = [
+  { id: 'free', name: 'Free', price: '৳0', desc: 'Basic chat access with the SR Group assistant.' },
+  { id: 'basic', name: 'Basic', price: 'Contact for pricing', desc: 'Higher daily message limit, priority support.' },
+  { id: 'pro', name: 'Pro', price: 'Contact for pricing', desc: 'Highest limits, custom setup for your business.' },
+];
+
+function renderPlanCards(currentPlan) {
+  const wrap = document.getElementById('planCards');
+  wrap.innerHTML = '';
+  PLAN_DEFINITIONS.forEach((p) => {
+    const isCurrent = p.id === currentPlan;
+    const card = document.createElement('div');
+    card.className = 'plan-card' + (isCurrent ? ' selected' : '');
+    card.innerHTML = `
+      <div class="plan-info">
+        <h4>${escapeHtml(p.name)} — ${escapeHtml(p.price)}</h4>
+        <p>${escapeHtml(p.desc)}</p>
+      </div>
+      <button class="plan-select-btn ${isCurrent ? 'current' : ''}" data-plan="${p.id}">
+        ${isCurrent ? 'Current plan' : 'Choose'}
+      </button>
+    `;
+    wrap.appendChild(card);
+  });
+  wrap.querySelectorAll('.plan-select-btn:not(.current)').forEach((btn) => {
+    btn.onclick = async () => {
+      setError('accountPlanError', '');
+      try {
+        await api('/account/plan', { method: 'POST', body: { plan: btn.dataset.plan }, token: userToken });
+        renderPlanCards(btn.dataset.plan);
+        const note = document.getElementById('accPlanSaveNote');
+        note.style.display = 'block';
+        setTimeout(() => (note.style.display = 'none'), 3000);
+      } catch (err) {
+        setError('accountPlanError', err.message);
+      }
+    };
+  });
+}
+
+document.getElementById('accChangePasswordBtn').onclick = async () => {
+  const currentPassword = document.getElementById('accCurrentPassword').value;
+  const newPassword = document.getElementById('accNewPassword').value;
+  const confirmPassword = document.getElementById('accConfirmPassword').value;
+  setError('accountPasswordError', '');
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    setError('accountPasswordError', 'Fill in all three fields.'); return;
+  }
+  if (newPassword.length < 6) {
+    setError('accountPasswordError', 'New password should be at least 6 characters.'); return;
+  }
+  if (newPassword !== confirmPassword) {
+    setError('accountPasswordError', "New password and confirmation don't match."); return;
+  }
+  try {
+    await api('/account/change-password', { method: 'POST', body: { currentPassword, newPassword }, token: userToken });
+    document.getElementById('accCurrentPassword').value = '';
+    document.getElementById('accNewPassword').value = '';
+    document.getElementById('accConfirmPassword').value = '';
+    const note = document.getElementById('accPasswordSaveNote');
+    note.style.display = 'block';
+    setTimeout(() => (note.style.display = 'none'), 2500);
+  } catch (err) {
+    setError('accountPasswordError', err.message);
+  }
+};
+
+document.getElementById('accSavePreferenceBtn').onclick = async () => {
+  const preference = document.getElementById('accPreference').value;
+  setError('accountPreferenceError', '');
+  try {
+    await api('/account/preference', { method: 'POST', body: { preference }, token: userToken });
+    const note = document.getElementById('accPreferenceSaveNote');
+    note.style.display = 'block';
+    setTimeout(() => (note.style.display = 'none'), 2500);
+  } catch (err) {
+    setError('accountPreferenceError', err.message);
+  }
 };
 
 /* ---------------- Admin ---------------- */
@@ -847,14 +1198,16 @@ async function loadSettingsPanel() {
     document.getElementById('setDesc').value = s.desc || '';
     document.getElementById('setTone').value = s.tone || '';
     document.getElementById('setFacts').value = s.facts || '';
+    document.getElementById('setDailyLimit').value = s.dailyLimit || 40;
   } catch (e) { console.error(e); }
 }
 document.getElementById('saveSettingsBtn').onclick = async () => {
   const desc = document.getElementById('setDesc').value;
   const tone = document.getElementById('setTone').value;
   const facts = document.getElementById('setFacts').value;
+  const dailyLimit = document.getElementById('setDailyLimit').value;
   try {
-    await api('/admin/settings', { method: 'POST', body: { desc, tone, facts }, token: adminToken });
+    await api('/admin/settings', { method: 'POST', body: { desc, tone, facts, dailyLimit }, token: adminToken });
     const note = document.getElementById('saveNote');
     note.style.display = 'block';
     setTimeout(() => (note.style.display = 'none'), 2000);
