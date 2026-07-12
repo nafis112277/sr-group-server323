@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { query, queryOne } from '../db.js';
-import { signUserToken } from '../auth.js';
+import { signUserToken, requireUser } from '../auth.js';
 
 const router = Router();
 const FIXED_SECURITY_QUESTION = "What's a word only you would know?";
@@ -95,6 +95,32 @@ router.post('/forgot/reset', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
+  }
+});
+
+// সাইন-ইন থাকা অবস্থায় নিজের পাসওয়ার্ড বদলানোর জন্য (forgot-password ফ্লো থেকে আলাদা)
+router.post('/change-password', requireUser, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Fill in both your current and new password.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password should be at least 6 characters.' });
+    }
+
+    const user = await queryOne('SELECT * FROM users WHERE email = $1', [req.userEmail]);
+    if (!user) return res.status(404).json({ error: 'Account not found.' });
+
+    const match = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!match) return res.status(401).json({ error: 'Current password is incorrect.' });
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await query('UPDATE users SET password_hash = $1 WHERE email = $2', [newHash, req.userEmail]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not update your password.' });
   }
 });
 
