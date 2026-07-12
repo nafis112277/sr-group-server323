@@ -137,8 +137,14 @@
     border-top:1px solid var(--border-glass); padding:14px 18px;
     display:flex; align-items:center; justify-content:space-between; gap:10px;
   }
-  .user-chip{ font-size:12.5px; color:var(--text-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .user-chip{ font-size:12.5px; color:var(--text-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
   .user-chip strong{ color:var(--text-primary); display:block; font-size:13px; }
+  .sidebar-bottom-actions{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
+  .icon-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:8px; padding:7px 9px; font-size:14px; cursor:pointer; line-height:1;
+  }
+  .icon-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
 
   .chat-main{ flex:1; display:flex; flex-direction:column; height:100vh; min-width:0; }
   .chat-header{
@@ -270,8 +276,30 @@
   .quota-save-btn.saved{ color:var(--accent-glow); border-color:var(--accent-glow); }
   .quota-hint{ font-size:10.5px; color:var(--text-soft); margin-top:2px; }
 
-  ::-webkit-scrollbar{ width:8px; }
-  ::-webkit-scrollbar-thumb{ background:var(--border-glass); border-radius:4px; }
+  /* ---------- Customer account/settings modal ---------- */
+  .modal-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(6,9,15,0.6);
+    backdrop-filter:blur(2px); z-index:80; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal-card{
+    width:100%; max-width:460px; max-height:88vh; overflow-y:auto;
+    background:var(--panel-solid); border:1px solid var(--border-glass);
+    border-radius:16px; padding:24px 24px 22px;
+  }
+  .modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .modal-head h2{ font-family:'Space Grotesk',sans-serif; font-size:17px; margin:0; font-weight:600; }
+  .modal-close{ background:none; border:none; color:var(--text-soft); font-size:20px; cursor:pointer; line-height:1; padding:2px 6px; }
+  .modal-close:hover{ color:var(--text-primary); }
+  .modal-tabs{ display:flex; gap:6px; margin-bottom:18px; }
+  .modal-tab-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    padding:7px 14px; border-radius:8px; cursor:pointer; font-size:12.5px;
+  }
+  .modal-tab-btn.active{ background:var(--panel); color:var(--text-primary); border-color:var(--accent-a); }
+  .modal-section{ display:none; }
+  .modal-section.active{ display:block; }
+  .modal-section p.hint{ color:var(--text-soft); font-size:12.5px; margin:-6px 0 14px; line-height:1.5; }
 </style>
 </head>
 <body>
@@ -376,7 +404,10 @@
     <div class="conv-list" id="convList"></div>
     <div class="sidebar-bottom">
       <div class="user-chip"><strong id="whoamiName"></strong><span id="whoamiEmail"></span></div>
-      <button class="logout-btn" id="logoutBtn">Sign out</button>
+      <div class="sidebar-bottom-actions">
+        <button class="icon-btn" id="openAccountModalBtn" title="Account settings">⚙</button>
+        <button class="logout-btn" id="logoutBtn">Sign out</button>
+      </div>
     </div>
   </div>
   <div class="chat-main">
@@ -391,6 +422,50 @@
     <div class="composer">
       <input id="userInput" type="text" placeholder="Type a message...">
       <button id="sendBtn">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- ACCOUNT SETTINGS MODAL (Customize AI + Change password) -->
+<div class="modal-backdrop" id="accountModalBackdrop">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>Account settings</h2>
+      <button class="modal-close" id="closeAccountModalBtn">×</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="modal-tab-btn active" data-modaltab="customize">Customize AI</button>
+      <button class="modal-tab-btn" data-modaltab="password">Change password</button>
+    </div>
+
+    <div class="modal-section active" id="modalSection-customize">
+      <p class="hint">Tell the assistant how you'd like it to talk to you — e.g. tone you prefer, topics you mostly ask about, reply length. This only applies to your own chats and can never override SR Group's core rules for the assistant.</p>
+      <div id="customizeError"></div>
+      <div class="settings-field">
+        <label>Your preferences</label>
+        <textarea id="customizeText" style="min-height:130px;" placeholder="e.g. Keep replies short and to the point. I mostly ask about pricing and delivery times."></textarea>
+      </div>
+      <button class="btn-primary" id="saveCustomizeBtn">Save preferences</button>
+      <div class="save-note" id="customizeSaveNote" style="display:none;">Saved.</div>
+    </div>
+
+    <div class="modal-section" id="modalSection-password">
+      <p class="hint">Change your password while staying signed in.</p>
+      <div id="changePasswordError"></div>
+      <div class="settings-field">
+        <label>Current password</label>
+        <input id="currentPasswordInput" type="password" placeholder="••••••••">
+      </div>
+      <div class="settings-field">
+        <label>New password</label>
+        <input id="newPasswordInput" type="password" placeholder="At least 6 characters">
+      </div>
+      <div class="settings-field">
+        <label>Confirm new password</label>
+        <input id="confirmPasswordInput" type="password" placeholder="Type it again">
+      </div>
+      <button class="btn-primary" id="changeOwnPasswordBtn">Update password</button>
+      <div class="save-note" id="changePasswordSaveNote" style="display:none;">Password updated.</div>
     </div>
   </div>
 </div>
@@ -728,6 +803,81 @@ document.getElementById('logoutBtn').onclick = () => {
   document.getElementById('loginEmail').value = '';
   document.getElementById('loginPassword').value = '';
   showScreen('screen-login');
+};
+
+/* ---------------- Account settings modal (Customize AI + Change password) ---------------- */
+function openAccountModal() {
+  document.getElementById('accountModalBackdrop').classList.add('show');
+  loadCustomizeText();
+}
+function closeAccountModal() {
+  document.getElementById('accountModalBackdrop').classList.remove('show');
+  setError('customizeError', '');
+  setError('changePasswordError', '');
+  document.getElementById('currentPasswordInput').value = '';
+  document.getElementById('newPasswordInput').value = '';
+  document.getElementById('confirmPasswordInput').value = '';
+}
+document.getElementById('openAccountModalBtn').onclick = () => { openAccountModal(); closeSidebarDrawer(); };
+document.getElementById('closeAccountModalBtn').onclick = closeAccountModal;
+document.getElementById('accountModalBackdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'accountModalBackdrop') closeAccountModal();
+});
+
+document.querySelectorAll('.modal-tab-btn').forEach((btn) => {
+  btn.onclick = () => {
+    document.querySelectorAll('.modal-tab-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.modal-section').forEach((s) => s.classList.remove('active'));
+    document.getElementById('modalSection-' + btn.dataset.modaltab).classList.add('active');
+  };
+});
+
+async function loadCustomizeText() {
+  try {
+    const data = await api('/chat/preferences', { token: userToken });
+    document.getElementById('customizeText').value = data.customInstructions || '';
+  } catch (e) { console.error(e); }
+}
+document.getElementById('saveCustomizeBtn').onclick = async () => {
+  const customInstructions = document.getElementById('customizeText').value;
+  try {
+    await api('/chat/preferences', { method: 'POST', body: { customInstructions }, token: userToken });
+    setError('customizeError', '');
+    const note = document.getElementById('customizeSaveNote');
+    note.style.display = 'block';
+    setTimeout(() => (note.style.display = 'none'), 2000);
+  } catch (err) {
+    setError('customizeError', err.message);
+  }
+};
+
+document.getElementById('changeOwnPasswordBtn').onclick = async () => {
+  const currentPassword = document.getElementById('currentPasswordInput').value;
+  const newPassword = document.getElementById('newPasswordInput').value;
+  const confirmPassword = document.getElementById('confirmPasswordInput').value;
+  setError('changePasswordError', '');
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    setError('changePasswordError', 'Fill in all three fields.'); return;
+  }
+  if (newPassword.length < 6) {
+    setError('changePasswordError', 'New password should be at least 6 characters.'); return;
+  }
+  if (newPassword !== confirmPassword) {
+    setError('changePasswordError', "New password and confirmation don't match."); return;
+  }
+  try {
+    await api('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword }, token: userToken });
+    document.getElementById('currentPasswordInput').value = '';
+    document.getElementById('newPasswordInput').value = '';
+    document.getElementById('confirmPasswordInput').value = '';
+    const note = document.getElementById('changePasswordSaveNote');
+    note.style.display = 'block';
+    setTimeout(() => (note.style.display = 'none'), 2500);
+  } catch (err) {
+    setError('changePasswordError', err.message);
+  }
 };
 
 /* ---------------- Admin ---------------- */
