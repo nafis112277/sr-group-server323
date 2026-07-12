@@ -7,6 +7,16 @@ import { getSettings, buildSystemPrompt } from '../settings.js';
 const router = Router();
 router.use(requireUser);
 
+// AI এর reply তে [GENERATE_IMAGE: description] থাকলে সেটাকে আসল ছবিতে বদলে দেয়
+// (Pollinations.ai — সম্পূর্ণ ফ্রি, কোনো key/signup লাগে না)
+function resolveImageMarkers(text) {
+  const match = text.match(/\[GENERATE_IMAGE:\s*(.+?)\]/i);
+  if (!match) return text;
+  const prompt = match[1].trim();
+  const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`;
+  return text.replace(match[0], `![${prompt}](${imageUrl})`);
+}
+
 router.get('/conversations', async (req, res) => {
   try {
     const rows = await query(
@@ -128,10 +138,12 @@ router.post('/conversations/:id/message', async (req, res) => {
       return res.status(502).json({ error: result.error });
     }
 
+    const finalText = resolveImageMarkers(result.text);
+
     await query('INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)', [
       conv.id,
       'assistant',
-      result.text,
+      finalText,
     ]);
 
     let title = conv.title;
@@ -139,7 +151,7 @@ router.post('/conversations/:id/message', async (req, res) => {
 
     await query('UPDATE conversations SET updated_at = now(), title = $1 WHERE id = $2', [title, conv.id]);
 
-    res.json({ reply: result.text, title });
+    res.json({ reply: finalText, title });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong sending your message.' });
