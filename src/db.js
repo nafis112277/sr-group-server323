@@ -23,6 +23,8 @@ export async function initDb() {
       password_hash TEXT NOT NULL,
       security_answer_hash TEXT NOT NULL,
       blocked BOOLEAN NOT NULL DEFAULT FALSE,
+      daily_limit INTEGER,
+      custom_instructions TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       last_login_at TIMESTAMPTZ
     );
@@ -36,7 +38,8 @@ export async function initDb() {
       id INTEGER PRIMARY KEY CHECK (id = 1),
       description TEXT NOT NULL DEFAULT '',
       tone TEXT NOT NULL DEFAULT '',
-      facts TEXT NOT NULL DEFAULT ''
+      facts TEXT NOT NULL DEFAULT '',
+      daily_limit INTEGER NOT NULL DEFAULT 40
     );
 
     CREATE TABLE IF NOT EXISTS conversations (
@@ -57,6 +60,13 @@ export async function initDb() {
 
     CREATE INDEX IF NOT EXISTS idx_conversations_email ON conversations(user_email);
     CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
+
+    -- আগে থেকে চলা ডাটাবেসে নতুন কলামগুলো নিরাপদে যোগ করে (already-running প্রজেক্টের জন্য মাইগ্রেশন)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_limit INTEGER;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_instructions TEXT NOT NULL DEFAULT '';
+    ALTER TABLE ai_settings ADD COLUMN IF NOT EXISTS daily_limit INTEGER NOT NULL DEFAULT 40;
+
+    CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
   `);
 }
 
