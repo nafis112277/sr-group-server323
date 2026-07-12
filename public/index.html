@@ -300,6 +300,85 @@
   .modal-section{ display:none; }
   .modal-section.active{ display:block; }
   .modal-section p.hint{ color:var(--text-soft); font-size:12.5px; margin:-6px 0 14px; line-height:1.5; }
+
+  /* ---------- Code artifact card (click to open side panel) ---------- */
+  .msg .artifact-card{
+    margin:10px 0; border-radius:10px; overflow:hidden; cursor:pointer;
+    background:#0B0F17; border:1px solid var(--border-glass);
+    display:flex; align-items:center; gap:12px; padding:12px 14px;
+    transition:border-color 0.15s;
+    max-width:320px;
+  }
+  .msg .artifact-card:first-child{ margin-top:2px; }
+  .msg .artifact-card:last-child{ margin-bottom:2px; }
+  .msg .artifact-card:hover{ border-color:var(--accent-a); background:#0E141F; }
+  .artifact-card-icon{
+    width:34px; height:34px; min-width:34px; border-radius:8px;
+    background:linear-gradient(135deg, var(--accent-a), var(--accent-b));
+    display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px;
+  }
+  .artifact-card-info{ min-width:0; flex:1; }
+  .artifact-card-title{
+    font-size:13px; font-weight:600; color:var(--text-primary);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .artifact-card-sub{
+    font-size:11px; color:var(--text-soft); font-family:'JetBrains Mono', monospace; margin-top:2px;
+  }
+  .msg code.inline-code{
+    background:rgba(255,255,255,0.08); border-radius:4px; padding:1px 6px;
+    font-family:'JetBrains Mono', monospace; font-size:0.9em;
+  }
+  .msg .msg-image-link{ display:inline-block; margin:8px 0; max-width:100%; }
+  .msg .msg-image{
+    display:block; max-width:100%; max-height:360px; border-radius:10px;
+    border:1px solid var(--border-glass); cursor:pointer;
+  }
+
+  /* ---------- Artifact side panel ---------- */
+  .artifact-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:70;
+  }
+  .artifact-backdrop.show{ display:block; }
+  .artifact-panel{
+    position:fixed; top:0; right:0; bottom:0; z-index:71;
+    width:520px; max-width:92vw;
+    background:var(--panel-solid); border-left:1px solid var(--border-glass);
+    display:flex; flex-direction:column;
+    transform:translateX(100%); transition:transform 0.25s ease;
+    box-shadow:-8px 0 30px rgba(0,0,0,0.4);
+  }
+  .artifact-panel.show{ transform:translateX(0); }
+  .artifact-panel-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px; border-bottom:1px solid var(--border-glass);
+  }
+  .artifact-panel-header .lang-label{
+    font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--text-soft);
+    text-transform:uppercase; letter-spacing:0.05em;
+  }
+  .artifact-panel-actions{ display:flex; align-items:center; gap:8px; }
+  .artifact-close-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:7px; width:30px; height:30px; cursor:pointer; font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .artifact-close-btn:hover{ border-color:var(--danger); color:var(--danger); }
+  .artifact-copy-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:7px; padding:6px 12px; font-size:12px; cursor:pointer;
+    font-family:'JetBrains Mono', monospace; display:flex; align-items:center; gap:5px;
+  }
+  .artifact-copy-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+  .artifact-copy-btn.copied{ color:var(--accent-glow); border-color:var(--accent-glow); }
+  .artifact-panel-body{
+    flex:1; overflow:auto; margin:0; padding:18px 20px;
+    font-family:'JetBrains Mono', monospace; font-size:13px; line-height:1.65;
+    color:#D6E2F0; white-space:pre;
+  }
+  @media (max-width:680px){
+    .artifact-panel{ width:100vw; max-width:100vw; }
+  }
 </style>
 </head>
 <body>
@@ -423,6 +502,20 @@
       <input id="userInput" type="text" placeholder="Type a message...">
       <button id="sendBtn">Send</button>
     </div>
+  </div>
+
+  <div class="artifact-backdrop" id="artifactBackdrop"></div>
+  <div class="artifact-panel" id="artifactPanel">
+    <div class="artifact-panel-header">
+      <span class="lang-label" id="artifactLangLabel">code</span>
+      <div class="artifact-panel-actions">
+        <button class="artifact-copy-btn" id="artifactCopyBtn" type="button">
+          <span class="copy-label">Copy</span>
+        </button>
+        <button class="artifact-close-btn" id="artifactCloseBtn" type="button">✕</button>
+      </div>
+    </div>
+    <pre class="artifact-panel-body"><code id="artifactCodeContent"></code></pre>
   </div>
 </div>
 
@@ -744,14 +837,118 @@ async function enterChat() {
   showScreen('screen-chat');
 }
 
+// প্রতিটা artifact (code block)-এর আসল টেক্সট এখানে id দিয়ে জমা থাকে —
+// HTML attribute-এ কোড embed না করে এভাবে রাখলে quote/special character নিয়ে ঝামেলা হয় না।
+const artifactStore = {};
+let artifactCounter = 0;
+
+// ```lang\ncode\n``` কে একটা ছোট্ট, ক্লিকযোগ্য কার্ডে বদলে দেয় (Claude-এর Artifact কার্ডের মতো),
+// ক্লিক করলে ডানপাশে সাইড প্যানেলে পুরো কোড খুলবে। ![alt](url) থাকলে আসল ছবি দেখায়।
+// XSS এড়াতে সব অংশ escapeHtml দিয়ে যায় — শুধু structure টা HTML হিসেবে বসে।
+function renderMessageHtml(text) {
+  const parts = [];
+  const fenceRegex = /```(\w*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = fenceRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: 'code', lang: match[1] || 'text', value: match[2].replace(/\n$/, '') });
+    lastIndex = fenceRegex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', value: text.slice(lastIndex) });
+  }
+
+  return parts
+    .map((part) => {
+      if (part.type === 'code') {
+        const id = 'artifact-' + (++artifactCounter);
+        artifactStore[id] = { lang: part.lang, code: part.value };
+        const lineCount = part.value.split('\n').length;
+        return `<div class="artifact-card" data-artifact-id="${id}">
+          <div class="artifact-card-icon">&lt;/&gt;</div>
+          <div class="artifact-card-info">
+            <div class="artifact-card-title">${escapeHtml(part.lang)} snippet</div>
+            <div class="artifact-card-sub">${lineCount} line${lineCount === 1 ? '' : 's'} · Click to view</div>
+          </div>
+        </div>`;
+      }
+      // markdown ছবি ![alt](url) -> আসল <img> (শুধু http/https লিংক গ্রহণযোগ্য)
+      let escaped = escapeHtml(part.value).replace(
+        /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
+        (m, alt, url) =>
+          `<a class="msg-image-link" href="${url}" target="_blank" rel="noopener noreferrer">` +
+          `<img class="msg-image" src="${url}" alt="${alt}" loading="lazy"></a>`
+      );
+      escaped = escaped.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
+      return escaped;
+    })
+    .join('');
+}
+
 function addMessage(role, text) {
   const box = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'msg ' + role;
-  div.textContent = text;
+
+  const hasRichContent = role === 'bot' && (text.includes('```') || /!\[[^\]]*\]\(https?:\/\/[^\s)]+\)/.test(text));
+  if (hasRichContent) {
+    div.innerHTML = renderMessageHtml(text);
+  } else {
+    div.textContent = text;
+  }
+
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 }
+
+/* ---------------- Artifact side panel ---------------- */
+let currentArtifactId = null;
+
+function openArtifactPanel(id) {
+  const artifact = artifactStore[id];
+  if (!artifact) return;
+  currentArtifactId = id;
+  document.getElementById('artifactLangLabel').textContent = artifact.lang;
+  document.getElementById('artifactCodeContent').textContent = artifact.code;
+  document.getElementById('artifactPanel').classList.add('show');
+  document.getElementById('artifactBackdrop').classList.add('show');
+}
+function closeArtifactPanel() {
+  document.getElementById('artifactPanel').classList.remove('show');
+  document.getElementById('artifactBackdrop').classList.remove('show');
+  currentArtifactId = null;
+}
+document.getElementById('artifactCloseBtn').onclick = closeArtifactPanel;
+document.getElementById('artifactBackdrop').onclick = closeArtifactPanel;
+
+document.getElementById('messages').addEventListener('click', (e) => {
+  const card = e.target.closest('.artifact-card');
+  if (card) openArtifactPanel(card.dataset.artifactId);
+});
+
+document.getElementById('artifactCopyBtn').addEventListener('click', () => {
+  if (!currentArtifactId) return;
+  const codeText = artifactStore[currentArtifactId].code;
+  const btn = document.getElementById('artifactCopyBtn');
+  navigator.clipboard.writeText(codeText).then(() => {
+    const label = btn.querySelector('.copy-label');
+    const original = label.textContent;
+    label.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { label.textContent = original; btn.classList.remove('copied'); }, 1800);
+  }).catch(() => {
+    const codeEl = document.getElementById('artifactCodeContent');
+    const range = document.createRange();
+    range.selectNodeContents(codeEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+});
 
 function showTyping() {
   const box = document.getElementById('messages');
