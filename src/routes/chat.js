@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { query, queryOne } from '../db.js';
 import { requireUser } from '../auth.js';
-import { callGemini } from '../gemini.js';
+import { callAI } from '../ai.js';
 import { getSettings, buildSystemPrompt } from '../settings.js';
 
 const router = Router();
@@ -52,6 +52,31 @@ router.get('/conversations/:id/messages', async (req, res) => {
   }
 });
 
+// এই কাস্টমার নিজের জন্য AI-কে কীভাবে চলতে বলছে (স্টাইল/টপিক পছন্দ) — admin-এর core rules-এর উপরে বসে, নিচে না
+router.get('/preferences', async (req, res) => {
+  try {
+    const row = await queryOne('SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1', [
+      req.userEmail,
+    ]);
+    res.json({ customInstructions: (row && row.customInstructions) || '' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load your preferences.' });
+  }
+});
+
+router.post('/preferences', async (req, res) => {
+  try {
+    let { customInstructions } = req.body || {};
+    customInstructions = (customInstructions || '').toString().slice(0, 2000);
+    await query('UPDATE users SET custom_instructions = $1 WHERE email = $2', [customInstructions, req.userEmail]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not save your preferences.' });
+  }
+});
+
 router.post('/conversations/:id/message', async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
@@ -63,6 +88,30 @@ router.post('/conversations/:id/message', async (req, res) => {
     const text = ((req.body || {}).content || '').trim();
     if (!text) return res.status(400).json({ error: 'Message is empty.' });
 
+    const [user, aiSettings] = await Promise.all([
+      queryOne('SELECT daily_limit AS "dailyLimit", custom_instructions AS "customInstructions" FROM users WHERE email = $1', [
+        req.userEmail,
+      ]),
+      getSettings(),
+    ]);
+
+    const limit =
+      user && user.dailyLimit !== null && user.dailyLimit !== undefined ? user.dailyLimit : aiSettings.dailyLimit;
+
+    if (limit && limit > 0) {
+      const countRow = await queryOne(
+        `SELECT COUNT(*)::int AS count FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         WHERE c.user_email = $1 AND m.role = 'user' AND m.created_at >= date_trunc('day', now())`,
+        [req.userEmail]
+      );
+      if (countRow.count >= limit) {
+        return res.status(429).json({
+          error: `You've reached today's message limit (${limit}). Please try again tomorrow, or contact SR Group.`,
+        });
+      }
+    }
+
     await query('INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)', [
       conv.id,
       'user',
@@ -72,8 +121,8 @@ router.post('/conversations/:id/message', async (req, res) => {
     const history = await query('SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY id ASC', [
       conv.id,
     ]);
-    const system = buildSystemPrompt(await getSettings());
-    const result = await callGemini(system, history);
+    const system = buildSystemPrompt(aiSettings, user && user.customInstructions);
+    const result = await callAI(system, history);
 
     if (!result.ok) {
       return res.status(502).json({ error: result.error });
