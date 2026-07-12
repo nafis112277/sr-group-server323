@@ -30,7 +30,8 @@ router.use(requireAdmin);
 router.get('/customers', async (req, res) => {
   try {
     const rows = await query(
-      `SELECT name, email, created_at AS "createdAt", last_login_at AS "lastLoginAt", blocked
+      `SELECT name, email, created_at AS "createdAt", last_login_at AS "lastLoginAt", blocked,
+              daily_limit AS "dailyLimit"
        FROM users ORDER BY created_at DESC`
     );
     res.json({ customers: rows });
@@ -51,6 +52,32 @@ router.post('/customers/:email/block', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not update this customer.' });
+  }
+});
+
+// প্রতিটা কাস্টমারের জন্য আলাদা daily message limit সেট করা — খালি/null দিলে সে আবার global default ব্যবহার করবে
+router.post('/customers/:email/quota', async (req, res) => {
+  try {
+    const email = req.params.email.toLowerCase();
+    let { dailyLimit } = req.body || {};
+
+    if (dailyLimit === null || dailyLimit === undefined || dailyLimit === '') {
+      dailyLimit = null;
+    } else {
+      dailyLimit = parseInt(dailyLimit, 10);
+      if (Number.isNaN(dailyLimit) || dailyLimit < 0) {
+        return res.status(400).json({ error: 'Enter a valid non-negative number, or leave it empty for the default.' });
+      }
+    }
+
+    const user = await queryOne('SELECT id FROM users WHERE email = $1', [email]);
+    if (!user) return res.status(404).json({ error: 'Customer not found.' });
+
+    await query('UPDATE users SET daily_limit = $1 WHERE email = $2', [dailyLimit, email]);
+    res.json({ ok: true, dailyLimit });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not update this customer\'s limit.' });
   }
 });
 
@@ -91,8 +118,8 @@ router.get('/settings', async (req, res) => {
 
 router.post('/settings', async (req, res) => {
   try {
-    const { desc, tone, facts } = req.body || {};
-    await setSettings({ desc, tone, facts });
+    const { desc, tone, facts, dailyLimit } = req.body || {};
+    await setSettings({ desc, tone, facts, dailyLimit });
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
