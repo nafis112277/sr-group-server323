@@ -1,4 +1,6 @@
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+// TEXT + IMAGE dutoi ekshathe generate korte pare emon model — "Nano Banana"
+// pura chat-e always eita use hobe, jate AI nijei prompt onujayi image ditey pare.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-image';
 
 // একাধিক key কমা দিয়ে আলাদা করে GEMINI_API_KEYS-এ দেওয়া যায়:
 //   GEMINI_API_KEYS=key1,key2,key3
@@ -43,7 +45,12 @@ export async function callGemini(systemPrompt, history) {
           body: JSON.stringify({
             contents,
             systemInstruction: { parts: [{ text: systemPrompt }] },
-            generationConfig: { maxOutputTokens: 8000 },
+            generationConfig: {
+              maxOutputTokens: 8000,
+              // Model-ke text ebong image duitai generate korar permission deওয়া hocche;
+              // model nijei bujhe dorkar mone korle image return korbe, na hole shudhu text.
+              responseModalities: ['TEXT', 'IMAGE'],
+            },
           }),
         }
       );
@@ -53,10 +60,34 @@ export async function callGemini(systemPrompt, history) {
       if (response.ok) {
         const candidate = data && data.candidates && data.candidates[0];
         const parts = candidate && candidate.content && candidate.content.parts;
+
         if (parts && parts.length) {
-          const text = parts.map((p) => p.text || '').filter(Boolean).join('\n');
-          if (text) return { ok: true, text, provider: 'gemini' };
+          const textChunks = [];
+          const images = [];
+
+          for (const p of parts) {
+            if (p.text) {
+              textChunks.push(p.text);
+            } else if (p.inlineData && p.inlineData.data) {
+              images.push({
+                base64: p.inlineData.data,
+                mimeType: p.inlineData.mimeType || 'image/png',
+              });
+            }
+          }
+
+          const text = textChunks.join('\n');
+
+          if (text || images.length) {
+            return {
+              ok: true,
+              text,
+              images: images.length ? images : null,
+              provider: 'gemini',
+            };
+          }
         }
+
         lastError = 'The AI did not return a reply.';
         continue;
       }
