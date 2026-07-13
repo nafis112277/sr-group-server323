@@ -123,3 +123,5 @@ router.post('/change-password', requireUser, async (req, res) => {
     res.status(500).json({ error: 'Could not update your password.' });
   }
 });
+
+export default router;
