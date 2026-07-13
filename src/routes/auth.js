@@ -123,18 +123,3 @@ router.post('/change-password', requireUser, async (req, res) => {
     res.status(500).json({ error: 'Could not update your password.' });
   }
 });
-// কাস্টমারের নিজের "Customize AI" preferences সেভ করা
-router.post('/preferences', requireUser, async (req, res) => {
-  try {
-    const { customInstructions } = req.body || {};
-    const text = typeof customInstructions === 'string' ? customInstructions.slice(0, 2000) : '';
-
-    await query('UPDATE users SET custom_instructions = $1 WHERE email = $2', [text, req.userEmail]);
-    res.json({ ok: true, customInstructions: text });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Could not save your preferences.' });
-  }
-});
-
-export default router;
