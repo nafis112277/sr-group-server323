@@ -1106,7 +1106,7 @@ function renderMessageHtml(text) {
           `<span class="msg-image-wrap">` +
           `<a class="msg-image-link" href="${url}" target="_blank" rel="noopener noreferrer">` +
           `<img class="msg-image" src="${url}" alt="${alt}" loading="lazy"></a>` +
-          `<a class="msg-image-download" href="${url}" download title="Download image">⬇</a>` +
+          `<button type="button" class="msg-image-download" onclick="event.stopPropagation(); downloadImageUrl('${url}', 'sr-group-image.png')" title="Download image">⬇</button>` +
           `</span>`
       );
       escaped = escaped.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
@@ -1156,7 +1156,11 @@ function addMessage(role, text, opts = {}) {
     dlBtn.download = `sr-group-image.${extensionFromDataUrl(msgRecord.imageUrl)}`;
     dlBtn.title = 'Download image';
     dlBtn.textContent = '⬇';
-    dlBtn.onclick = (e) => e.stopPropagation();
+    dlBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      downloadImageUrl(msgRecord.imageUrl, `sr-group-image.${extensionFromDataUrl(msgRecord.imageUrl)}`);
+    };
     imgWrap.appendChild(dlBtn);
 
     bubble.appendChild(imgWrap);
@@ -1803,6 +1807,34 @@ document.getElementById('changePasscodeBtn').onclick = async () => {
     errBox.innerHTML = `<div class="error-note">${err.message}</div>`;
   }
 };
+
+// cross-origin URL-e <a download> kaj kore na (browser ignore kore) — tai fetch kore
+// blob banie shei blob URL diye download trigger kori. data: URL hole shorashori download hobe.
+async function downloadImageUrl(url, filenameHint) {
+  if (url.startsWith('data:')) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filenameHint;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return;
+  }
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filenameHint;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(blobUrl);
+  } catch (e) {
+    window.open(url, '_blank');
+  }
+}
 
 function extensionFromDataUrl(dataUrl) {
   const m = /^data:image\/(\w+);base64,/.exec(dataUrl || '');
