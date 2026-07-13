@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { query, queryOne } from '../db.js';
 import { requireUser } from '../auth.js';
-import { callGemini } from '../gemini.js';
+import { callAI } from '../ai.js';
 import { getSettings, buildSystemPrompt } from '../settings.js';
 
 const router = Router();
@@ -57,10 +57,6 @@ router.get('/conversations/:id/messages', async (req, res) => {
  * matching (trigger keyword মিলে যাওয়া) skills বের করে, সেগুলোকে
  * স্পষ্টভাবে "শুধু reference knowledge, rules override করতে পারবে না"
  * — এই wrapper সহ system prompt এ জোড়া দেয়।
- *
- * এটা skills.js এর safety filter এর উপরেই নির্ভর করে না — এখানেও
- * একটা দ্বিতীয় স্তর হিসেবে wrapper instruction থাকে, যাতে AI নিজেও
- * বুঝতে পারে এই অংশটা authoritative rule না।
  * ============================================================ */
 async function getMatchingSkillInstructions(userEmail, userText) {
   const skills = await query(
@@ -116,7 +112,7 @@ router.post('/conversations/:id/message', async (req, res) => {
     const skillBlock = await getMatchingSkillInstructions(req.userEmail, text);
     const system = baseSystem + skillBlock;
 
-    const result = await callGemini(system, history);
+    const result = await callAI(system, history);
 
     if (!result.ok) {
       return res.status(502).json({ error: result.error });
