@@ -43,10 +43,11 @@ function isSkillContentSafe(text) {
  */
 const TRUSTED_DOMAINS = [
   'nctb.gov.bd',
+  'teachers.gov.bd',
   'bdjobs.com',
   '10minuteschool.com',
+  'wikipedia.org',
 ];
-
 function isTrustedDomain(hostname) {
   const host = hostname.toLowerCase();
   return TRUSTED_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
