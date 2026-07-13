@@ -77,6 +77,8 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_limit INTEGER;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_instructions TEXT NOT NULL DEFAULT '';
     ALTER TABLE ai_settings ADD COLUMN IF NOT EXISTS daily_limit INTEGER NOT NULL DEFAULT 40;
+    ALTER TABLE user_skills ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE user_skills ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
 
     CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
   `);
