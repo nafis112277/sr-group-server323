@@ -199,12 +199,11 @@ router.post('/conversations/:id/message', async (req, res) => {
     }
 
     const userImageRecord = dataUrlToImageRecord(incomingImage);
-    await query('INSERT INTO messages (conversation_id, role, content, images) VALUES ($1, $2, $3, $4)', [
-      conv.id,
-      'user',
-      text,
-      userImageRecord ? JSON.stringify([userImageRecord]) : null,
-    ]);
+    const insertedUserMsg = await queryOne(
+      `INSERT INTO messages (conversation_id, role, content, images) VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [conv.id, 'user', text, userImageRecord ? JSON.stringify([userImageRecord]) : null]
+    );
 
     const fullHistory = await query(
       'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
@@ -242,7 +241,13 @@ router.post('/conversations/:id/message', async (req, res) => {
 
     await query('UPDATE conversations SET updated_at = now(), title = $1 WHERE id = $2', [title, conv.id]);
 
-    res.json({ reply: result.text, images, replyImageUrl: firstImageAsDataUrl(images), title });
+    res.json({
+      reply: result.text,
+      images,
+      replyImageUrl: firstImageAsDataUrl(images),
+      title,
+      userMessageId: insertedUserMsg.id,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong sending your message.' });
