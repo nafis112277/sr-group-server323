@@ -43,7 +43,7 @@ export async function callGemini(systemPrompt, history) {
           body: JSON.stringify({
             contents,
             systemInstruction: { parts: [{ text: systemPrompt }] },
-            generationConfig: { maxOutputTokens: 1000 },
+            generationConfig: { maxOutputTokens: 8000 },
           }),
         }
       );
