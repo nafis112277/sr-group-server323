@@ -44,7 +44,7 @@ async function checkDailyQuota(userEmail, settings) {
  * ============================================================ */
 async function getMatchingSkillInstructions(userEmail, userText) {
   const skills = await query(
-    'SELECT name, triggers, instructions FROM user_skills WHERE user_email = $1 AND enabled = TRUE',
+    'SELECT name, triggers, instructions FROM user_skills WHERE user_email = $1',
     [userEmail]
   );
   if (!skills || skills.length === 0) return '';
