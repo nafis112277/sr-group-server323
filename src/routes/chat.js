@@ -78,6 +78,14 @@ function dataUrlToImageRecord(dataUrl) {
   return { mimeType: match[1], base64: match[2] };
 }
 
+// DB theke asha raw "images" (jsonb string ba array/null) ke সবসময় array-e normalize kore rakhi,
+// jate history AI-ke pathanor shomoy prottekta message er chobi soho jai.
+function normalizeImages(images) {
+  if (!images) return null;
+  const arr = typeof images === 'string' ? JSON.parse(images) : images;
+  return Array.isArray(arr) && arr.length > 0 ? arr : null;
+}
+
 router.get('/conversations', async (req, res) => {
   try {
     const rows = await query(
@@ -205,11 +213,16 @@ router.post('/conversations/:id/message', async (req, res) => {
       [conv.id, 'user', text, userImageRecord ? JSON.stringify([userImageRecord]) : null]
     );
 
+    // ---- FIX: images column ta ageo select korte hobe, na hole AI-ke pathanor shomoy chobi hariye jay ----
     const fullHistory = await query(
-      'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
+      'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
       [conv.id]
     );
-    const history = fullHistory.slice(-MAX_HISTORY_MESSAGES);
+    const history = fullHistory.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
+      role: m.role,
+      content: m.content,
+      images: normalizeImages(m.images),
+    }));
 
     const customerRow = await queryOne(
       'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
@@ -289,11 +302,16 @@ router.put('/conversations/:id/messages/:messageId', async (req, res) => {
     // ei message-er por ja ja eshechilo (purono bot reply shoho) shob mucche dei — Claude-er moto edit behavior
     await query('DELETE FROM messages WHERE conversation_id = $1 AND id > $2', [conv.id, target.id]);
 
+    // ---- FIX: eikhaneo images column select kora dorkar ----
     const fullHistory = await query(
-      'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
+      'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
       [conv.id]
     );
-    const history = fullHistory.slice(-MAX_HISTORY_MESSAGES);
+    const history = fullHistory.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
+      role: m.role,
+      content: m.content,
+      images: normalizeImages(m.images),
+    }));
 
     const customerRow = await queryOne(
       'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
