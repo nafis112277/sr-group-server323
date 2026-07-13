@@ -12,17 +12,39 @@ let nextKeyIndex = 0;
 function isQuotaOrKeyError(status) {
   return status === 429 || status === 403 || status === 401;
 }
-// history: [{ role: 'user' | 'assistant', content: string }]
+// history: [{ role: 'user' | 'assistant', content: string, images?: [{base64, mimeType}] }]
 // options: { webSearch?: boolean } — true hole Google Search grounding tool jog hoy.
 export async function callGemini(systemPrompt, history, options = {}) {
   const { webSearch = false } = options;
   if (apiKeys.length === 0) {
     return { ok: false, error: 'Gemini is not configured (no GEMINI_API_KEY / GEMINI_API_KEYS).' };
   }
-  const contents = history.map((m) => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
-  }));
+
+  // FIX: age shudhu text pathano hoto, image data ignore hoye jeto.
+  // ekhon prottek message-er images (thakle) inlineData part hishebe jure dei,
+  // jate Gemini customer-er uploaded chobi ta actually dekhte pay.
+  const contents = history.map((m) => {
+    const parts = [];
+    if (m.content) parts.push({ text: m.content });
+    if (Array.isArray(m.images)) {
+      for (const img of m.images) {
+        if (img && img.base64) {
+          parts.push({
+            inlineData: {
+              mimeType: img.mimeType || 'image/png',
+              data: img.base64,
+            },
+          });
+        }
+      }
+    }
+    // dutoi khali hoile Gemini empty parts array niye error dey, tai fallback text rakhi
+    if (parts.length === 0) parts.push({ text: '' });
+    return {
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts,
+    };
+  });
 
   // NOTE: Google Search grounding shadharonoto text-only model-er jonno design kora.
   // ei model TEXT+IMAGE dutoi generate kore, tai googleSearch tool combine korle
