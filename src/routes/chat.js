@@ -143,7 +143,13 @@ router.post('/conversations/:id/message', async (req, res) => {
       conv.id,
     ]);
 
-    const baseSystem = buildSystemPrompt(settings);
+    // এই কাস্টমারের নিজের "Customize AI" preference (থাকলে) লোড করা
+    const customerRow = await queryOne(
+      'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
+      [req.userEmail]
+    );
+
+    const baseSystem = buildSystemPrompt(settings, customerRow?.customInstructions);
     const skillBlock = await getMatchingSkillInstructions(req.userEmail, text);
     const system = baseSystem + skillBlock;
 
