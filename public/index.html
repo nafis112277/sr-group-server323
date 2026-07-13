@@ -1076,7 +1076,7 @@ function addMessage(role, text, opts = {}) {
     div.textContent = text;
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
-    return;
+    return null;
   }
 
   const msgRecord = { id: opts.id || null, role, content: text, imageUrl: opts.imageUrl || null };
@@ -1126,6 +1126,7 @@ function addMessage(role, text, opts = {}) {
 
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;
+  return { record: msgRecord, row };
 }
 
 /* ---------------- Edit a previously sent user message ----------------
@@ -1252,7 +1253,7 @@ async function sendMessage() {
   const attachment = pendingAttachment;
   pendingAttachment = null;
   renderComposerAttachment();
-  addMessage('user', text, { imageUrl: attachment ? attachment.dataUrl : null });
+  const userEntry = addMessage('user', text, { imageUrl: attachment ? attachment.dataUrl : null });
   input.value = '';
   showTyping();
 
@@ -1266,6 +1267,14 @@ async function sendMessage() {
       method: 'POST', body, token: userToken,
     });
     hideTyping();
+
+    // just-sent message-e server-er real id boshai — ei id na thakle "Edit" click korle
+    // "missing id from server" error dekhabe, jotokhon na page reload kore purono history load hoy
+    if (userEntry && data.userMessageId != null) {
+      userEntry.record.id = data.userMessageId;
+      userEntry.row.dataset.msgId = data.userMessageId;
+    }
+
     addMessage('bot', data.reply, { imageUrl: data.replyImageUrl || null });
 
     const conv = conversations.find((c) => c.id === currentConvId);
