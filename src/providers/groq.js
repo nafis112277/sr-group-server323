@@ -39,7 +39,7 @@ export async function callGroq(systemPrompt, history) {
         body: JSON.stringify({
           model: GROQ_MODEL,
           messages,
-          max_tokens: 8000,
+          max_tokens: 4000,
         }),
       });
 
