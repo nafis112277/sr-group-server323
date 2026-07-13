@@ -53,6 +53,30 @@ router.get('/conversations/:id/messages', async (req, res) => {
 });
 
 /* ============================================================
+ * DAILY QUOTA CHECK
+ * প্রতিটা কাস্টমারের users.daily_limit থাকলে সেটা ব্যবহার হয়;
+ * না থাকলে (NULL) admin settings এর global default দিয়ে চেক হয়।
+ * আজকে (দিনের শুরু থেকে এখন পর্যন্ত) সে কতগুলো user মেসেজ
+ * পাঠিয়েছে সেটা গুনে limit-এর সাথে তুলনা করা হয়।
+ * ============================================================ */
+async function checkDailyQuota(userEmail, settings) {
+  const user = await queryOne('SELECT daily_limit AS "dailyLimit" FROM users WHERE email = $1', [userEmail]);
+  const effectiveLimit =
+    user && user.dailyLimit !== null && user.dailyLimit !== undefined
+      ? user.dailyLimit
+      : Number(settings.dailyLimit) || 40;
+
+  const usedToday = await queryOne(
+    `SELECT COUNT(*)::int AS count FROM messages m
+     JOIN conversations c ON c.id = m.conversation_id
+     WHERE c.user_email = $1 AND m.role = 'user' AND m.created_at >= date_trunc('day', now())`,
+    [userEmail]
+  );
+
+  return { allowed: usedToday.count < effectiveLimit, limit: effectiveLimit, used: usedToday.count };
+}
+
+/* ============================================================
  * ক্লায়েন্টের ডাউনলোড করা skills থেকে, বর্তমান মেসেজের সাথে
  * matching (trigger keyword মিলে যাওয়া) skills বের করে, সেগুলোকে
  * স্পষ্টভাবে "শুধু reference knowledge, rules override করতে পারবে না"
@@ -98,6 +122,17 @@ router.post('/conversations/:id/message', async (req, res) => {
     const text = ((req.body || {}).content || '').trim();
     if (!text) return res.status(400).json({ error: 'Message is empty.' });
 
+    const settings = await getSettings();
+
+    // ---- Daily quota check (must happen before inserting the message) ----
+    const quota = await checkDailyQuota(req.userEmail, settings);
+    if (!quota.allowed) {
+      return res.status(429).json({
+        error: `You've reached your daily message limit (${quota.limit}). Please try again tomorrow.`,
+      });
+    }
+    // ---- end quota check ----
+
     await query('INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)', [
       conv.id,
       'user',
@@ -108,7 +143,7 @@ router.post('/conversations/:id/message', async (req, res) => {
       conv.id,
     ]);
 
-    const baseSystem = buildSystemPrompt(await getSettings());
+    const baseSystem = buildSystemPrompt(settings);
     const skillBlock = await getMatchingSkillInstructions(req.userEmail, text);
     const system = baseSystem + skillBlock;
 
