@@ -39,7 +39,7 @@ export async function callOpenAI(systemPrompt, history) {
         body: JSON.stringify({
           model: OPENAI_MODEL,
           messages,
-          max_tokens: 1000,
+          max_tokens: 8000,
         }),
       });
 
