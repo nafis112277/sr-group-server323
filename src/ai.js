@@ -11,9 +11,9 @@ const PROVIDERS = {
 };
 
 // কোন provider আগে ট্রাই হবে, কমা দিয়ে .env-এ সেট করা যায়:
-//   AI_PROVIDER_ORDER=gemini,groq,openai,anthropic
+//   AI_PROVIDER_ORDER=gemini,openai,anthropic,groq
 // একটা provider-এর সব key fail করলে (quota শেষ / invalid) পরের provider দিয়ে চেষ্টা হয়।
-const order = (process.env.AI_PROVIDER_ORDER || 'gemini,groq,openai,anthropic')
+const order = (process.env.AI_PROVIDER_ORDER || 'gemini,openai,anthropic,groq')
   .split(',')
   .map((s) => s.trim().toLowerCase())
   .filter((name) => PROVIDERS[name]);
