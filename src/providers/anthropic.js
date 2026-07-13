@@ -41,7 +41,7 @@ export async function callAnthropicAI(systemPrompt, history) {
           model: ANTHROPIC_MODEL,
           system: systemPrompt,
           messages,
-          max_tokens: 1000,
+          max_tokens: 8000,
         }),
       });
 
