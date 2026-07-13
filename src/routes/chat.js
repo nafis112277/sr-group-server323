@@ -7,17 +7,10 @@ import { getSettings, buildSystemPrompt } from '../settings.js';
 const router = Router();
 router.use(requireUser);
 
-// একটা রিকোয়েস্টে সর্বোচ্চ কতগুলো আগের মেসেজ পাঠানো হবে — এর বেশি লম্বা কথোপকথনে পুরনো মেসেজগুলো
-// (এবং সেগুলোর ভেতরের বড় কোড ব্লক) আর প্রতিটা নতুন মেসেজের সাথে পাঠানো হয় না। টোকেন খরচ ও গতি দুটোই ভালো থাকে,
-// আর Groq-এর মতো কড়া per-minute টোকেন লিমিটের provider-এও "request too large" এরর এড়ানো যায়।
 const MAX_HISTORY_MESSAGES = 24;
 
 /* ============================================================
- * DAILY QUOTA CHECK
- * প্রতিটা কাস্টমারের users.daily_limit থাকলে সেটা ব্যবহার হয়;
- * না থাকলে (NULL) admin settings এর global default দিয়ে চেক হয়।
- * আজকে (দিনের শুরু থেকে এখন পর্যন্ত) সে কতগুলো user মেসেজ
- * পাঠিয়েছে সেটা গুনে limit-এর সাথে তুলনা করা হয়।
+ * DAILY QUOTA CHECK — অপরিবর্তিত
  * ============================================================ */
 async function checkDailyQuota(userEmail, settings) {
   const user = await queryOne('SELECT daily_limit AS "dailyLimit" FROM users WHERE email = $1', [userEmail]);
@@ -36,12 +29,6 @@ async function checkDailyQuota(userEmail, settings) {
   return { allowed: usedToday.count < effectiveLimit, limit: effectiveLimit, used: usedToday.count };
 }
 
-/* ============================================================
- * ক্লায়েন্টের ডাউনলোড করা skills থেকে, বর্তমান মেসেজের সাথে
- * matching (trigger keyword মিলে যাওয়া) skills বের করে, সেগুলোকে
- * স্পষ্টভাবে "শুধু reference knowledge, rules override করতে পারবে না"
- * — এই wrapper সহ system prompt এ জোড়া দেয়।
- * ============================================================ */
 async function getMatchingSkillInstructions(userEmail, userText) {
   const skills = await query(
     'SELECT name, triggers, instructions FROM user_skills WHERE user_email = $1 AND enabled = TRUE',
@@ -98,6 +85,7 @@ router.post('/conversations', async (req, res) => {
   }
 });
 
+// ---- images soho messages লোড করা হচ্ছে, jate purono conversation reload korleo image thake ----
 router.get('/conversations/:id/messages', async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
@@ -106,9 +94,10 @@ router.get('/conversations/:id/messages', async (req, res) => {
     ]);
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
 
-    const rows = await query('SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY id ASC', [
-      conv.id,
-    ]);
+    const rows = await query(
+      'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
+      [conv.id]
+    );
     res.json({ messages: rows });
   } catch (err) {
     console.error(err);
@@ -116,7 +105,6 @@ router.get('/conversations/:id/messages', async (req, res) => {
   }
 });
 
-// কাস্টমারের নিজের "Customize AI" preferences লোড করা
 router.get('/preferences', async (req, res) => {
   try {
     const user = await queryOne('SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1', [
@@ -130,7 +118,6 @@ router.get('/preferences', async (req, res) => {
   }
 });
 
-// কাস্টমারের নিজের "Customize AI" preferences সেভ করা
 router.post('/preferences', async (req, res) => {
   try {
     const { customInstructions } = req.body || {};
@@ -157,14 +144,12 @@ router.post('/conversations/:id/message', async (req, res) => {
 
     const settings = await getSettings();
 
-    // ---- Daily quota check (must happen before inserting the message) ----
     const quota = await checkDailyQuota(req.userEmail, settings);
     if (!quota.allowed) {
       return res.status(429).json({
         error: `You've reached your daily message limit (${quota.limit}). Please try again tomorrow.`,
       });
     }
-    // ---- end quota check ----
 
     await query('INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)', [
       conv.id,
@@ -176,11 +161,8 @@ router.post('/conversations/:id/message', async (req, res) => {
       'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
       [conv.id]
     );
-    // শুধু সাম্প্রতিক MAX_HISTORY_MESSAGES টা AI-কে পাঠানো হয় — পুরনো বড় কোড ব্লক বারবার পাঠিয়ে
-    // টোকেন উড়িয়ে দেওয়া এড়াতে
     const history = fullHistory.slice(-MAX_HISTORY_MESSAGES);
 
-    // এই কাস্টমারের নিজের "Customize AI" preference (থাকলে) লোড করা
     const customerRow = await queryOne(
       'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
       [req.userEmail]
@@ -196,10 +178,14 @@ router.post('/conversations/:id/message', async (req, res) => {
       return res.status(502).json({ error: result.error });
     }
 
-    await query('INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)', [
+    // callGemini already [{ base64, mimeType }] shape e normalize kore pathay
+    const images = result.images || null;
+
+    await query('INSERT INTO messages (conversation_id, role, content, images) VALUES ($1, $2, $3, $4)', [
       conv.id,
       'assistant',
-      result.text,
+      result.text || '',
+      images ? JSON.stringify(images) : null,
     ]);
 
     let title = conv.title;
@@ -207,7 +193,7 @@ router.post('/conversations/:id/message', async (req, res) => {
 
     await query('UPDATE conversations SET updated_at = now(), title = $1 WHERE id = $2', [title, conv.id]);
 
-    res.json({ reply: result.text, title });
+    res.json({ reply: result.text, images, title });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong sending your message.' });
