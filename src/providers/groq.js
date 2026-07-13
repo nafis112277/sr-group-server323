@@ -13,7 +13,6 @@ function isQuotaOrKeyError(status) {
 }
 
 // history: [{ role: 'user' | 'assistant', content: string }]
-// Groq-এর API OpenAI-এর সাথে সামঞ্জস্যপূর্ণ (একই request/response ফরম্যাট), শুধু আলাদা URL আর মডেল নাম
 export async function callGroq(systemPrompt, history) {
   if (apiKeys.length === 0) {
     return { ok: false, error: 'Groq is not configured (no GROQ_API_KEY / GROQ_API_KEYS).' };
@@ -40,7 +39,7 @@ export async function callGroq(systemPrompt, history) {
         body: JSON.stringify({
           model: GROQ_MODEL,
           messages,
-          max_tokens: 1000,
+          max_tokens: 8000,
         }),
       });
 
