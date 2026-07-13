@@ -435,6 +435,14 @@
     display:block; max-width:100%; max-height:360px; border-radius:10px;
     border:1px solid var(--border-glass); cursor:pointer;
   }
+  .msg-image-wrap{ position:relative; display:inline-block; margin:8px 0; max-width:100%; }
+  .msg-image-download{
+    position:absolute; top:8px; right:8px; width:30px; height:30px;
+    background:rgba(10,14,20,0.75); border:1px solid var(--border-glass); border-radius:8px;
+    color:#fff; display:flex; align-items:center; justify-content:center;
+    font-size:14px; text-decoration:none; cursor:pointer;
+  }
+  .msg-image-download:hover{ border-color:var(--accent-a); background:rgba(10,14,20,0.9); }
 
   /* ---------- Artifact side panel ---------- */
   .artifact-backdrop{
@@ -644,6 +652,9 @@
       <div class="artifact-panel-actions">
         <button class="artifact-run-btn" id="artifactRunBtn" type="button" style="display:none;">
           <span class="run-label">▶ Run</span>
+        </button>
+        <button class="artifact-copy-btn" id="artifactDownloadBtn" type="button">
+          <span class="download-label">⬇ Download</span>
         </button>
         <button class="artifact-copy-btn" id="artifactCopyBtn" type="button">
           <span class="copy-label">Copy</span>
@@ -1092,8 +1103,11 @@ function renderMessageHtml(text) {
       let escaped = escapeHtml(part.value).replace(
         /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
         (m, alt, url) =>
+          `<span class="msg-image-wrap">` +
           `<a class="msg-image-link" href="${url}" target="_blank" rel="noopener noreferrer">` +
-          `<img class="msg-image" src="${url}" alt="${alt}" loading="lazy"></a>`
+          `<img class="msg-image" src="${url}" alt="${alt}" loading="lazy"></a>` +
+          `<a class="msg-image-download" href="${url}" download title="Download image">⬇</a>` +
+          `</span>`
       );
       escaped = escaped.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
       return escaped;
@@ -1126,12 +1140,26 @@ function addMessage(role, text, opts = {}) {
   bubble.className = 'msg ' + role;
 
   if (msgRecord.imageUrl) {
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'msg-image-wrap';
+    imgWrap.style.marginBottom = text ? '8px' : '0';
+
     const img = document.createElement('img');
     img.className = 'msg-image';
     img.src = msgRecord.imageUrl;
     img.alt = 'attached photo';
-    img.style.marginBottom = text ? '8px' : '0';
-    bubble.appendChild(img);
+    imgWrap.appendChild(img);
+
+    const dlBtn = document.createElement('a');
+    dlBtn.className = 'msg-image-download';
+    dlBtn.href = msgRecord.imageUrl;
+    dlBtn.download = `sr-group-image.${extensionFromDataUrl(msgRecord.imageUrl)}`;
+    dlBtn.title = 'Download image';
+    dlBtn.textContent = '⬇';
+    dlBtn.onclick = (e) => e.stopPropagation();
+    imgWrap.appendChild(dlBtn);
+
+    bubble.appendChild(imgWrap);
   }
 
   if (text) {
@@ -1774,6 +1802,45 @@ document.getElementById('changePasscodeBtn').onclick = async () => {
   } catch (err) {
     errBox.innerHTML = `<div class="error-note">${err.message}</div>`;
   }
+};
+
+function extensionFromDataUrl(dataUrl) {
+  const m = /^data:image\/(\w+);base64,/.exec(dataUrl || '');
+  return m ? m[1] : 'png';
+}
+
+const LANG_EXTENSIONS = {
+  javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts', python: 'py', py: 'py',
+  html: 'html', css: 'css', json: 'json', java: 'java', c: 'c', cpp: 'cpp', 'c++': 'cpp',
+  csharp: 'cs', 'c#': 'cs', php: 'php', ruby: 'rb', go: 'go', rust: 'rs', sql: 'sql',
+  bash: 'sh', sh: 'sh', shell: 'sh', yaml: 'yml', yml: 'yml', xml: 'xml', markdown: 'md', md: 'md',
+  text: 'txt',
+};
+function extensionForLang(lang) {
+  return LANG_EXTENSIONS[(lang || '').toLowerCase()] || 'txt';
+}
+
+// kon artifact card ekhon khola ache tar id mone rakhi, download button e lagbe
+let currentOpenArtifactId = null;
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('.artifact-card');
+  if (card && card.dataset.artifactId) currentOpenArtifactId = card.dataset.artifactId;
+});
+
+document.getElementById('artifactDownloadBtn').onclick = () => {
+  if (!currentOpenArtifactId) return;
+  const art = artifactStore[currentOpenArtifactId];
+  if (!art) return;
+  const ext = extensionForLang(art.lang);
+  const blob = new Blob([art.code], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `code.${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 };
 
 init();
