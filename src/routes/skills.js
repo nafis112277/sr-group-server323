@@ -92,12 +92,32 @@ router.delete('/:id', async (req, res) => {
 
 // GitHub-এ থাকা raw .md skill ফাইল fetch + parse করে — সেভ করে না, শুধু ফর্মে ভরার জন্য ডেটা ফেরত দেয়
 // (ব্লাইন্ড সেভ না করে কাস্টমারকে আগে চোখে দেখিয়ে নেওয়ার সুযোগ দিতে)
+// সাধারণ github.com/USER/REPO/blob/BRANCH/path.md লিংককে
+// raw.githubusercontent.com/USER/REPO/BRANCH/path.md এ অটো-কনভার্ট করে,
+// যাতে ইউজার হাতে raw URL না বানিয়ে সরাসরি normal GitHub লিংক পেস্ট করলেও কাজ করে।
+function toRawGithubUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'github.com') {
+      const parts = u.pathname.split('/').filter(Boolean); // [user, repo, blob, branch, ...path]
+      if (parts.length >= 5 && parts[2] === 'blob') {
+        const [user, repo, , branch, ...pathParts] = parts;
+        return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${pathParts.join('/')}`;
+      }
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 router.post('/import', async (req, res) => {
   try {
-    const url = (req.body || {}).url;
+    let url = (req.body || {}).url;
     if (!url || typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
       return res.status(400).json({ error: 'Provide a valid http(s) URL.' });
     }
+    url = toRawGithubUrl(url);
 
     const fetchRes = await fetch(url);
     if (!fetchRes.ok) {
