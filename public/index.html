@@ -230,6 +230,28 @@
     display:flex; align-items:center; justify-content:center;
   }
   .attach-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+
+  /* ---------- Composer "+" dropdown menu (Claude-style) ---------- */
+  .plus-menu-wrap{ position:relative; }
+  .plus-menu{
+    display:none;
+    position:absolute; bottom:52px; left:0; z-index:40;
+    min-width:220px;
+    background:var(--panel-solid); border:1px solid var(--border-glass);
+    border-radius:12px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.45);
+  }
+  .plus-menu.show{ display:block; }
+  .plus-menu-item{
+    display:flex; align-items:center; gap:10px;
+    padding:9px 10px; border-radius:8px; cursor:pointer;
+    font-size:13.5px; color:var(--text-primary);
+  }
+  .plus-menu-item:hover{ background:rgba(255,255,255,0.06); }
+  .plus-menu-item .pmi-icon{ width:18px; text-align:center; font-size:14px; flex-shrink:0; }
+  .plus-menu-item .pmi-label{ flex:1; }
+  .plus-menu-item .pmi-check{ font-size:12px; color:var(--accent-glow); opacity:0; }
+  .plus-menu-item.toggled .pmi-check{ opacity:1; }
+  .plus-menu-divider{ border:none; border-top:1px solid var(--border-glass); margin:6px 2px; }
   @media (max-width:820px){
     .chat-sidebar{ width:220px; min-width:220px; }
   }
@@ -594,7 +616,21 @@
       <div class="composer-attachments" id="composerAttachments"></div>
       <div class="composer-row">
         <input type="file" id="imageFileInput" accept="image/*" style="display:none;">
-        <button class="attach-btn" id="attachBtn" type="button" title="Add photo">📎</button>
+        <div class="plus-menu-wrap">
+          <button class="attach-btn" id="composerPlusBtn" type="button" title="Add">+</button>
+          <div class="plus-menu" id="composerPlusMenu">
+            <div class="plus-menu-item" id="menuAddPhoto">
+              <span class="pmi-icon">📷</span><span class="pmi-label">Add photo</span>
+            </div>
+            <div class="plus-menu-item" id="menuOpenSkills">
+              <span class="pmi-icon">🧩</span><span class="pmi-label">Skills</span>
+            </div>
+            <hr class="plus-menu-divider">
+            <div class="plus-menu-item" id="menuWebSearch">
+              <span class="pmi-icon">🌐</span><span class="pmi-label">Web search</span><span class="pmi-check">✓</span>
+            </div>
+          </div>
+        </div>
         <input id="userInput" type="text" placeholder="Type a message...">
         <button class="send-btn" id="sendBtn">Send</button>
       </div>
@@ -1199,8 +1235,37 @@ async function submitEditedMessage(row, msgRecord, newContent, saveBtn) {
   }
 }
 
+/* ---------------- "+" composer menu (photo / skills / web search) ---------------- */
+let webSearchEnabled = false;
+
+function togglePlusMenu(forceState) {
+  const menu = document.getElementById('composerPlusMenu');
+  const shouldShow = forceState !== undefined ? forceState : !menu.classList.contains('show');
+  menu.classList.toggle('show', shouldShow);
+}
+document.getElementById('composerPlusBtn').onclick = (e) => { e.stopPropagation(); togglePlusMenu(); };
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.plus-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) togglePlusMenu(false);
+});
+
+document.getElementById('menuAddPhoto').onclick = () => {
+  togglePlusMenu(false);
+  document.getElementById('imageFileInput').click();
+};
+document.getElementById('menuOpenSkills').onclick = () => {
+  togglePlusMenu(false);
+  openAccountModal();
+  document.querySelector('.modal-tab-btn[data-modaltab="skills"]').click();
+};
+// web search toggle kore rakhi — menu-i khola thake jate ekbare kaj korle abar khulte na hoy
+document.getElementById('menuWebSearch').onclick = (e) => {
+  e.stopPropagation();
+  webSearchEnabled = !webSearchEnabled;
+  document.getElementById('menuWebSearch').classList.toggle('toggled', webSearchEnabled);
+};
+
 /* ---------------- Photo attach (upload) ---------------- */
-document.getElementById('attachBtn').onclick = () => document.getElementById('imageFileInput').click();
 document.getElementById('imageFileInput').onchange = (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
@@ -1262,6 +1327,7 @@ async function sendMessage() {
     // একটা স্থায়ী URL রিটার্ন করবে বলে ধরে নিচ্ছি (data.reply, data.title-এর পাশাপাশি)।
     const body = { content: text };
     if (attachment) body.image = attachment.dataUrl;
+    if (webSearchEnabled) body.webSearch = true;
 
     const data = await api(`/chat/conversations/${currentConvId}/message`, {
       method: 'POST', body, token: userToken,
