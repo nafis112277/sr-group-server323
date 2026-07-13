@@ -81,22 +81,21 @@ router.post('/customers/:email/quota', async (req, res) => {
   }
 });
 
-// অ্যাডমিন থেকে সরাসরি কাস্টমারের পাসওয়ার্ড রিসেট করা — security answer লাগবে না
+// অ্যাডমিন থেকে সরাসরি কাস্টমারের পাসওয়ার্ড রিসেট করা — একটা নতুন random temporary password
+// জেনারেট করে, হ্যাশ করে সেভ করে, আর plaintext-টা একবারের জন্য ফেরত দেয় যাতে admin কাস্টমারকে জানাতে পারে
 router.post('/customers/:email/reset-password', async (req, res) => {
   try {
     const email = req.params.email.toLowerCase();
-    const { newPassword } = req.body || {};
-
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password should be at least 6 characters.' });
-    }
 
     const user = await queryOne('SELECT id FROM users WHERE email = $1', [email]);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
 
-    const newHash = await bcrypt.hash(newPassword, 10);
+    const tempPassword = Math.random().toString(36).slice(-5) + Math.random().toString(36).slice(-5);
+
+    const newHash = await bcrypt.hash(tempPassword, 10);
     await query('UPDATE users SET password_hash = $1 WHERE email = $2', [newHash, email]);
-    res.json({ ok: true });
+
+    res.json({ ok: true, tempPassword });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not reset this customer\'s password.' });
