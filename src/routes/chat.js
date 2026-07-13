@@ -58,6 +58,26 @@ async function getMatchingSkillInstructions(userEmail, userText) {
   return block;
 }
 
+// images column e [{ base64, mimeType }, ...] jsonb thake (AI-generated ba user-uploaded, dutoi).
+// frontend shudhu ekta imageUrl (data URL) ashe kore, tai first image thke seta banie dei.
+function firstImageAsDataUrl(images) {
+  if (!images) return null;
+  const arr = typeof images === 'string' ? JSON.parse(images) : images;
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  const img = arr[0];
+  if (!img || !img.base64) return null;
+  const mime = img.mimeType || 'image/png';
+  return `data:${mime};base64,${img.base64}`;
+}
+
+// frontend theke asha data URL ("data:image/png;base64,....") ke DB-te rakhar {base64, mimeType} shape e vangi.
+function dataUrlToImageRecord(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return null;
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  return { mimeType: match[1], base64: match[2] };
+}
+
 router.get('/conversations', async (req, res) => {
   try {
     const rows = await query(
@@ -85,7 +105,8 @@ router.post('/conversations', async (req, res) => {
   }
 });
 
-// ---- images soho messages লোড করা হচ্ছে, jate purono conversation reload korleo image thake ----
+// ---- id soho pathano hocche — eta na thakle frontend-er "edit message" feature kaj korte parbe na,
+// karon ei id diyei PUT /messages/:messageId call hoy. ----
 router.get('/conversations/:id/messages', async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
@@ -95,13 +116,38 @@ router.get('/conversations/:id/messages', async (req, res) => {
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
 
     const rows = await query(
-      'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
+      'SELECT id, role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
       [conv.id]
     );
-    res.json({ messages: rows });
+    const messages = rows.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      imageUrl: firstImageAsDataUrl(m.images),
+    }));
+    res.json({ messages });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not load messages.' });
+  }
+});
+
+// ---- pura conversation delete — sidebar-er delete button ei call hoy ----
+router.delete('/conversations/:id', async (req, res) => {
+  try {
+    const conv = await queryOne('SELECT id FROM conversations WHERE id = $1 AND user_email = $2', [
+      req.params.id,
+      req.userEmail,
+    ]);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
+
+    await query('DELETE FROM messages WHERE conversation_id = $1', [conv.id]);
+    await query('DELETE FROM conversations WHERE id = $1', [conv.id]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not delete this conversation.' });
   }
 });
 
@@ -140,7 +186,8 @@ router.post('/conversations/:id/message', async (req, res) => {
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
 
     const text = ((req.body || {}).content || '').trim();
-    if (!text) return res.status(400).json({ error: 'Message is empty.' });
+    const incomingImage = (req.body || {}).image || null; // data URL, optional
+    if (!text && !incomingImage) return res.status(400).json({ error: 'Message is empty.' });
 
     const settings = await getSettings();
 
@@ -151,10 +198,12 @@ router.post('/conversations/:id/message', async (req, res) => {
       });
     }
 
-    await query('INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)', [
+    const userImageRecord = dataUrlToImageRecord(incomingImage);
+    await query('INSERT INTO messages (conversation_id, role, content, images) VALUES ($1, $2, $3, $4)', [
       conv.id,
       'user',
       text,
+      userImageRecord ? JSON.stringify([userImageRecord]) : null,
     ]);
 
     const fullHistory = await query(
@@ -189,14 +238,88 @@ router.post('/conversations/:id/message', async (req, res) => {
     ]);
 
     let title = conv.title;
-    if (title === 'New chat') title = text.slice(0, 40);
+    if (title === 'New chat') title = (text || 'Photo').slice(0, 40);
 
     await query('UPDATE conversations SET updated_at = now(), title = $1 WHERE id = $2', [title, conv.id]);
 
-    res.json({ reply: result.text, images, title });
+    res.json({ reply: result.text, images, replyImageUrl: firstImageAsDataUrl(images), title });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong sending your message.' });
+  }
+});
+
+// ---- age pathano ekta user message edit kore, tar por theke shob delete kore,
+// notun kore AI reply generate kore. Frontend-er "Save & regenerate" ei call hoy. ----
+router.put('/conversations/:id/messages/:messageId', async (req, res) => {
+  try {
+    const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
+      req.params.id,
+      req.userEmail,
+    ]);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
+
+    const newContent = ((req.body || {}).content || '').trim();
+    if (!newContent) return res.status(400).json({ error: 'Message is empty.' });
+
+    const target = await queryOne(
+      'SELECT id, role FROM messages WHERE id = $1 AND conversation_id = $2',
+      [req.params.messageId, conv.id]
+    );
+    if (!target) return res.status(404).json({ error: 'Message not found.' });
+    if (target.role !== 'user') return res.status(400).json({ error: 'Only your own messages can be edited.' });
+
+    const settings = await getSettings();
+
+    // edit kora eta ekta "notun" message hishebe count hobe na quota-te,
+    // shudhu regenerate check kori jate purono limit pass kora keu abuse na kore
+    const quota = await checkDailyQuota(req.userEmail, settings);
+    if (!quota.allowed) {
+      return res.status(429).json({
+        error: `You've reached your daily message limit (${quota.limit}). Please try again tomorrow.`,
+      });
+    }
+
+    await query('UPDATE messages SET content = $1 WHERE id = $2', [newContent, target.id]);
+    // ei message-er por ja ja eshechilo (purono bot reply shoho) shob mucche dei — Claude-er moto edit behavior
+    await query('DELETE FROM messages WHERE conversation_id = $1 AND id > $2', [conv.id, target.id]);
+
+    const fullHistory = await query(
+      'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
+      [conv.id]
+    );
+    const history = fullHistory.slice(-MAX_HISTORY_MESSAGES);
+
+    const customerRow = await queryOne(
+      'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
+      [req.userEmail]
+    );
+
+    const baseSystem = buildSystemPrompt(settings, customerRow?.customInstructions);
+    const skillBlock = await getMatchingSkillInstructions(req.userEmail, newContent);
+    const system = baseSystem + skillBlock;
+
+    const result = await callAI(system, history);
+    if (!result.ok) {
+      return res.status(502).json({ error: result.error });
+    }
+
+    const images = result.images || null;
+    await query('INSERT INTO messages (conversation_id, role, content, images) VALUES ($1, $2, $3, $4)', [
+      conv.id,
+      'assistant',
+      result.text || '',
+      images ? JSON.stringify(images) : null,
+    ]);
+
+    let title = conv.title;
+    if (title === 'New chat') title = newContent.slice(0, 40);
+    await query('UPDATE conversations SET updated_at = now(), title = $1 WHERE id = $2', [title, conv.id]);
+
+    res.json({ reply: result.text, images, replyImageUrl: firstImageAsDataUrl(images), title });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not save the edit.' });
   }
 });
 
