@@ -225,3 +225,10 @@ router.delete('/:name', async (req, res) => {
 
 export default router;
 export { isSkillContentSafe };
+const TRUSTED_DOMAINS = [
+  'nctb.gov.bd',
+  'teachers.gov.bd',
+  'bdjobs.com',
+  '10minuteschool.com',
+  'wikipedia.org',
+];
