@@ -19,16 +19,19 @@ const order = (process.env.AI_PROVIDER_ORDER || 'gemini,openai,anthropic,groq')
   .filter((name) => PROVIDERS[name]);
 
 // history: [{ role: 'user' | 'assistant', content: string }]
-export async function callAI(systemPrompt, history) {
+// options: { webSearch?: boolean } — customer composer-er "+" menu theke web search
+// toggle on korle eta true hoye ashe, prottek provider function-e forward kora hoy.
+// jei provider-e web search support kora nei (openai, groq), oira ei extra option
+// shudhu ignore kore normal reply dibe — kono crash hobe na.
+export async function callAI(systemPrompt, history, options = {}) {
+  const { webSearch = false } = options;
   let lastError = 'No AI provider is configured on the server. Add at least one API key in the Environment Variables (Render dashboard or .env).';
-
   for (const name of order) {
     const fn = PROVIDERS[name];
-    const result = await fn(systemPrompt, history);
+    const result = await fn(systemPrompt, history, { webSearch });
     if (result.ok) return result;
     lastError = result.error || lastError;
   }
-
   return { ok: false, error: lastError };
 }
 
