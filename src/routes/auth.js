@@ -124,4 +124,32 @@ router.post('/change-password', requireUser, async (req, res) => {
   }
 });
 
+// কাস্টমারের নিজের "Customize AI" preferences লোড করা
+router.get('/preferences', requireUser, async (req, res) => {
+  try {
+    const user = await queryOne('SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1', [
+      req.userEmail,
+    ]);
+    if (!user) return res.status(404).json({ error: 'Account not found.' });
+    res.json({ customInstructions: user.customInstructions || '' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load your preferences.' });
+  }
+});
+
+// কাস্টমারের নিজের "Customize AI" preferences সেভ করা
+router.post('/preferences', requireUser, async (req, res) => {
+  try {
+    const { customInstructions } = req.body || {};
+    const text = typeof customInstructions === 'string' ? customInstructions.slice(0, 2000) : '';
+
+    await query('UPDATE users SET custom_instructions = $1 WHERE email = $2', [text, req.userEmail]);
+    res.json({ ok: true, customInstructions: text });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not save your preferences.' });
+  }
+});
+
 export default router;
