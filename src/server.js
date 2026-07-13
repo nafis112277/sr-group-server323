@@ -49,7 +49,7 @@ async function start() {
   const anyKeyPresent = order.some((name) => availability[name]);
   if (!anyKeyPresent) {
     console.warn(
-      `[SR Group] সতর্কতা: AI_PROVIDER_ORDER-এ থাকা কোনো provider-এর জন্যই API key পাওয়া যায়নি (${order.join(', ')})। চ্যাট কাজ করবে না যতক্ষণ না অন্তত একটা key সেট করা হয় (GEMINI_API_KEY(S) / OPENAI_API_KEY(S) / ANTHROPIC_API_KEY(S)).`
+      `[SR Group] সতর্কতা: AI_PROVIDER_ORDER-এ থাকা কোনো provider-এর জন্যই API key পাওয়া যায়নি (${order.join(', ')})। চ্যাট কাজ করবে না যতক্ষণ না অন্তত একটা key সেট করা হয় (GEMINI_API_KEY(S) / OPENAI_API_KEY(S) / ANTHROPIC_API_KEY(S) / GROQ_API_KEY(S)).`
     );
   } else {
     console.log(`[SR Group] AI provider ready — চেষ্টার ক্রম: ${order.filter((n) => availability[n]).join(' → ')}`);
