@@ -12,6 +12,7 @@ router.use(requireUser);
  * সবচেয়ে সাধারণ prompt-injection / harmful-content প্যাটার্নগুলো
  * ধরে ফেলে)। কোনো skill এর instructions/description এ এসব
  * প্যাটার্নের কাছাকাছি কিছু পেলে সেটা সরাসরি reject হয়ে যাবে।
+ * এই ফিল্টার সব সোর্স (trusted বা untrusted) — সবার জন্যই প্রযোজ্য।
  * ============================================================ */
 const UNSAFE_PATTERNS = [
   /ignore (all|any|previous|prior)\s+(instructions|rules)/i,
@@ -36,27 +37,42 @@ function isSkillContentSafe(text) {
   return !UNSAFE_PATTERNS.some((re) => re.test(text));
 }
 
+/* ---------- বিশ্বস্ত ডোমেইন allowlist ----------
+ * এই ডোমেইনগুলো থেকে fetch করার সময় SSRF/private-IP চেক স্কিপ হবে।
+ * (root domain + সব subdomain ম্যাচ করবে, যেমন www.nctb.gov.bd, files.bdjobs.com)
+ */
+const TRUSTED_DOMAINS = [
+  'nctb.gov.bd',
+  'bdjobs.com',
+  '10minuteschool.com',
+];
+
+function isTrustedDomain(hostname) {
+  const host = hostname.toLowerCase();
+  return TRUSTED_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
 /* ---------- SSRF protection: internal/private ঠিকানায় fetch আটকানো ---------- */
 function isPrivateOrReservedIp(ip) {
   if (net.isIPv4(ip)) {
     const parts = ip.split('.').map(Number);
     const [a, b] = parts;
-    if (a === 127) return true;                          // loopback
-    if (a === 10) return true;                            // 10.0.0.0/8
-    if (a === 172 && b >= 16 && b <= 31) return true;      // 172.16.0.0/12
-    if (a === 192 && b === 168) return true;               // 192.168.0.0/16
-    if (a === 169 && b === 254) return true;               // link-local / cloud metadata
+    if (a === 127) return true;
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
     if (a === 0) return true;
     return false;
   }
   if (net.isIPv6(ip)) {
     const lower = ip.toLowerCase();
-    if (lower === '::1') return true;                      // loopback
-    if (lower.startsWith('fe80:')) return true;             // link-local
-    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local
+    if (lower === '::1') return true;
+    if (lower.startsWith('fe80:')) return true;
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
     return false;
   }
-  return true; // অচেনা format হলে নিরাপদ ধরে না নেওয়াই ভালো
+  return true;
 }
 
 async function isUrlSafeToFetch(urlStr) {
@@ -71,6 +87,11 @@ async function isUrlSafeToFetch(urlStr) {
   }
   if (parsed.username || parsed.password) {
     return { safe: false, reason: 'URLs with embedded credentials are not allowed.' };
+  }
+
+  // বিশ্বস্ত ডোমেইন হলে DNS/private-IP চেক স্কিপ
+  if (isTrustedDomain(parsed.hostname)) {
+    return { safe: true };
   }
 
   let addresses;
@@ -129,7 +150,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-/* ---------- নতুন skill ডাউনলোড করা (এখন যেকোনো https লিংক থেকে) ---------- */
+/* ---------- নতুন skill ডাউনলোড করা ---------- */
 router.post('/', async (req, res) => {
   try {
     const { url } = req.body || {};
