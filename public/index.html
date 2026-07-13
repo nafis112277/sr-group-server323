@@ -276,7 +276,7 @@
   .quota-save-btn.saved{ color:var(--accent-glow); border-color:var(--accent-glow); }
   .quota-hint{ font-size:10.5px; color:var(--text-soft); margin-top:2px; }
 
-  /* ---------- Generic modal (account / skills) ---------- */
+  /* ---------- Customer account/settings modal ---------- */
   .modal-backdrop{
     display:none; position:fixed; inset:0; background:rgba(6,9,15,0.6);
     backdrop-filter:blur(2px); z-index:80; align-items:center; justify-content:center; padding:20px;
@@ -291,7 +291,7 @@
   .modal-head h2{ font-family:'Space Grotesk',sans-serif; font-size:17px; margin:0; font-weight:600; }
   .modal-close{ background:none; border:none; color:var(--text-soft); font-size:20px; cursor:pointer; line-height:1; padding:2px 6px; }
   .modal-close:hover{ color:var(--text-primary); }
-  .modal-tabs{ display:flex; gap:6px; margin-bottom:18px; }
+  .modal-tabs{ display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap; }
   .modal-tab-btn{
     background:none; border:1px solid var(--border-glass); color:var(--text-soft);
     padding:7px 14px; border-radius:8px; cursor:pointer; font-size:12.5px;
@@ -301,38 +301,116 @@
   .modal-section.active{ display:block; }
   .modal-section p.hint{ color:var(--text-soft); font-size:12.5px; margin:-6px 0 14px; line-height:1.5; }
 
-  /* ---------- Skills modal specifics ---------- */
-  .skill-add-row{ display:flex; gap:8px; margin-bottom:6px; }
-  .skill-add-row input{
-    flex:1; background:rgba(255,255,255,0.04); border:1px solid var(--border-glass); border-radius:9px;
-    padding:10px 12px; color:var(--text-primary); font-size:13px; font-family:'JetBrains Mono', monospace;
-  }
-  .skill-add-row input:focus{ outline:2px solid var(--accent-a); outline-offset:1px; }
-  .skill-add-row button{
-    background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); border:none; border-radius:9px;
-    color:#fff; padding:0 16px; font-weight:600; font-size:12.5px; cursor:pointer; white-space:nowrap;
-  }
-  .skill-add-row button:disabled{ opacity:0.55; cursor:default; }
-  .skill-list{ display:flex; flex-direction:column; gap:8px; margin-top:16px; }
+  /* ---------- Skills tab ---------- */
+  .skill-list{ display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
   .skill-item{
     border:1px solid var(--border-glass); border-radius:10px; padding:10px 12px;
-    display:flex; align-items:flex-start; justify-content:space-between; gap:10px; background:var(--panel);
+    background:rgba(255,255,255,0.03);
   }
-  .skill-item-info{ min-width:0; }
-  .skill-item-name{ font-size:13px; font-weight:600; color:var(--text-primary); font-family:'JetBrains Mono', monospace; }
-  .skill-item-desc{ font-size:12px; color:var(--text-soft); margin-top:3px; line-height:1.45; }
+  .skill-item-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .skill-item-name{ font-weight:600; font-size:13.5px; }
+  .skill-item-desc{ color:var(--text-soft); font-size:12px; margin-top:3px; }
+  .skill-item-triggers{ color:var(--text-soft); font-size:11px; font-family:'JetBrains Mono',monospace; margin-top:5px; }
+  .skill-item-actions{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
+  .skill-toggle-btn{
+    border:1px solid var(--border-glass); background:none; color:var(--text-soft);
+    border-radius:6px; padding:4px 9px; font-size:11px; cursor:pointer; font-family:'JetBrains Mono',monospace;
+  }
+  .skill-toggle-btn.on{ color:var(--accent-glow); border-color:var(--accent-glow); }
   .skill-remove-btn{
-    background:none; border:1px solid var(--border-glass); color:var(--danger);
-    border-radius:7px; padding:5px 10px; font-size:11px; cursor:pointer; white-space:nowrap; flex-shrink:0;
+    border:1px solid var(--border-glass); background:none; color:var(--danger);
+    border-radius:6px; padding:4px 9px; font-size:11px; cursor:pointer;
   }
-  .skill-remove-btn:hover{ border-color:var(--danger); background:rgba(255,107,107,0.08); }
-  .safety-note{
-    font-size:11.5px; color:var(--text-soft); background:rgba(63,225,198,0.06);
-    border:1px solid rgba(63,225,198,0.25); border-radius:9px; padding:9px 11px; margin-top:14px; line-height:1.5;
+  .import-row{ display:flex; gap:8px; margin-bottom:18px; }
+  .import-row input{
+    flex:1; background:var(--panel); border:1px solid var(--border-glass); border-radius:8px;
+    padding:9px 11px; color:var(--text-primary); font-size:12.5px;
+  }
+  .import-row button{
+    background:none; border:1px solid var(--border-glass); color:var(--text-primary);
+    border-radius:8px; padding:0 14px; font-size:12px; cursor:pointer;
+  }
+  .import-row button:hover{ border-color:var(--accent-a); }
+  .skills-divider{ border:none; border-top:1px solid var(--border-glass); margin:18px 0; }
+
+  /* ---------- Code artifact card (click to open side panel) ---------- */
+  .msg .artifact-card{
+    margin:10px 0; border-radius:10px; overflow:hidden; cursor:pointer;
+    background:#0B0F17; border:1px solid var(--border-glass);
+    display:flex; align-items:center; gap:12px; padding:12px 14px;
+    transition:border-color 0.15s;
+    max-width:320px;
+  }
+  .msg .artifact-card:first-child{ margin-top:2px; }
+  .msg .artifact-card:last-child{ margin-bottom:2px; }
+  .msg .artifact-card:hover{ border-color:var(--accent-a); background:#0E141F; }
+  .artifact-card-icon{
+    width:34px; height:34px; min-width:34px; border-radius:8px;
+    background:linear-gradient(135deg, var(--accent-a), var(--accent-b));
+    display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px;
+  }
+  .artifact-card-info{ min-width:0; flex:1; }
+  .artifact-card-title{
+    font-size:13px; font-weight:600; color:var(--text-primary);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .artifact-card-sub{
+    font-size:11px; color:var(--text-soft); font-family:'JetBrains Mono', monospace; margin-top:2px;
+  }
+  .msg code.inline-code{
+    background:rgba(255,255,255,0.08); border-radius:4px; padding:1px 6px;
+    font-family:'JetBrains Mono', monospace; font-size:0.9em;
+  }
+  .msg .msg-image-link{ display:inline-block; margin:8px 0; max-width:100%; }
+  .msg .msg-image{
+    display:block; max-width:100%; max-height:360px; border-radius:10px;
+    border:1px solid var(--border-glass); cursor:pointer;
   }
 
-  ::-webkit-scrollbar{ width:8px; }
-  ::-webkit-scrollbar-thumb{ background:var(--border-glass); border-radius:4px; }
+  /* ---------- Artifact side panel ---------- */
+  .artifact-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:70;
+  }
+  .artifact-backdrop.show{ display:block; }
+  .artifact-panel{
+    position:fixed; top:0; right:0; bottom:0; z-index:71;
+    width:520px; max-width:92vw;
+    background:var(--panel-solid); border-left:1px solid var(--border-glass);
+    display:flex; flex-direction:column;
+    transform:translateX(100%); transition:transform 0.25s ease;
+    box-shadow:-8px 0 30px rgba(0,0,0,0.4);
+  }
+  .artifact-panel.show{ transform:translateX(0); }
+  .artifact-panel-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px; border-bottom:1px solid var(--border-glass);
+  }
+  .artifact-panel-header .lang-label{
+    font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--text-soft);
+    text-transform:uppercase; letter-spacing:0.05em;
+  }
+  .artifact-panel-actions{ display:flex; align-items:center; gap:8px; }
+  .artifact-close-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:7px; width:30px; height:30px; cursor:pointer; font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .artifact-close-btn:hover{ border-color:var(--danger); color:var(--danger); }
+  .artifact-copy-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:7px; padding:6px 12px; font-size:12px; cursor:pointer;
+    font-family:'JetBrains Mono', monospace; display:flex; align-items:center; gap:5px;
+  }
+  .artifact-copy-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+  .artifact-copy-btn.copied{ color:var(--accent-glow); border-color:var(--accent-glow); }
+  .artifact-panel-body{
+    flex:1; overflow:auto; margin:0; padding:18px 20px;
+    font-family:'JetBrains Mono', monospace; font-size:13px; line-height:1.65;
+    color:#D6E2F0; white-space:pre;
+  }
+  @media (max-width:680px){
+    .artifact-panel{ width:100vw; max-width:100vw; }
+  }
 </style>
 </head>
 <body>
@@ -438,7 +516,6 @@
     <div class="sidebar-bottom">
       <div class="user-chip"><strong id="whoamiName"></strong><span id="whoamiEmail"></span></div>
       <div class="sidebar-bottom-actions">
-        <button class="icon-btn" id="openSkillsModalBtn" title="Skills">🧩</button>
         <button class="icon-btn" id="openAccountModalBtn" title="Account settings">⚙</button>
         <button class="logout-btn" id="logoutBtn">Sign out</button>
       </div>
@@ -450,7 +527,10 @@
         <button class="sidebar-toggle-btn" id="sidebarToggleBtn">☰</button>
         <div class="brandmark"><span class="dot"></span> SR Group Assistant</div>
       </div>
-      <span class="who" id="convStatus"></span>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button class="icon-btn" id="openSkillsHeaderBtn" title="Skills">🧩</button>
+        <span class="who" id="convStatus"></span>
+      </div>
     </div>
     <div class="messages" id="messages"></div>
     <div class="composer">
@@ -458,30 +538,23 @@
       <button id="sendBtn">Send</button>
     </div>
   </div>
-</div>
 
-<!-- SKILLS MODAL — ক্লায়েন্ট নিজের ইচ্ছামতো (GitHub raw .md) স্কিল ডাউনলোড করে
-     assistant-এর জন্য extra reference knowledge যোগ করতে পারে। প্রতিটা ডাউনলোড
-     সার্ভারের safety filter দিয়ে যায় — rules bypass/harmful content ধরা পড়লে
-     সেটা reject হয়ে যাবে এবং কখনো core rules override করতে পারবে না। -->
-<div class="modal-backdrop" id="skillsModalBackdrop">
-  <div class="modal-card">
-    <div class="modal-head">
-      <h2>Skills</h2>
-      <button class="modal-close" id="closeSkillsModalBtn">×</button>
+  <div class="artifact-backdrop" id="artifactBackdrop"></div>
+  <div class="artifact-panel" id="artifactPanel">
+    <div class="artifact-panel-header">
+      <span class="lang-label" id="artifactLangLabel">code</span>
+      <div class="artifact-panel-actions">
+        <button class="artifact-copy-btn" id="artifactCopyBtn" type="button">
+          <span class="copy-label">Copy</span>
+        </button>
+        <button class="artifact-close-btn" id="artifactCloseBtn" type="button">✕</button>
+      </div>
     </div>
-    <p class="hint">Add optional reference knowledge for the assistant from a GitHub skill file (raw.githubusercontent.com link). These only add background information for your own chats — they can never bypass SR Group's safety rules, and anything that tries to will be automatically rejected.</p>
-    <div id="skillsError"></div>
-    <div class="skill-add-row">
-      <input id="skillUrlInput" type="text" placeholder="https://raw.githubusercontent.com/.../skill.md">
-      <button id="addSkillBtn">Add</button>
-    </div>
-    <div class="skill-list" id="skillList"></div>
-    <div class="safety-note">🛡️ Every skill is checked automatically before it's saved. Skills that try to change the assistant's rules, remove safety limits, or request harmful content are blocked.</div>
+    <pre class="artifact-panel-body"><code id="artifactCodeContent"></code></pre>
   </div>
 </div>
 
-<!-- ACCOUNT SETTINGS MODAL (Customize AI + Change password) -->
+<!-- ACCOUNT SETTINGS MODAL (Customize AI + Skills + Change password) -->
 <div class="modal-backdrop" id="accountModalBackdrop">
   <div class="modal-card">
     <div class="modal-head">
@@ -490,6 +563,7 @@
     </div>
     <div class="modal-tabs">
       <button class="modal-tab-btn active" data-modaltab="customize">Customize AI</button>
+      <button class="modal-tab-btn" data-modaltab="skills">Skills</button>
       <button class="modal-tab-btn" data-modaltab="password">Change password</button>
     </div>
 
@@ -502,6 +576,38 @@
       </div>
       <button class="btn-primary" id="saveCustomizeBtn">Save preferences</button>
       <div class="save-note" id="customizeSaveNote" style="display:none;">Saved.</div>
+    </div>
+
+    <div class="modal-section" id="modalSection-skills">
+      <p class="hint">Install skills to teach the assistant extra topic knowledge. A skill only activates on a message that contains one of its trigger words — trigger words are required. Skills are saved to your account (works across devices). Anything that looks like malicious code or a rule-breaking instruction is blocked automatically, both here and on the server, and can never override SR Group's core rules.</p>
+      <div id="skillsError"></div>
+      <div class="skill-list" id="skillList"></div>
+
+      <div class="import-row">
+        <input id="skillImportUrl" type="text" placeholder="Paste a raw skill .md URL to import...">
+        <button id="skillImportBtn" type="button">Import</button>
+      </div>
+
+      <hr class="skills-divider">
+
+      <div class="settings-field">
+        <label>Skill name</label>
+        <input id="newSkillName" type="text" placeholder="e.g. refund_policy">
+      </div>
+      <div class="settings-field">
+        <label>Description (optional)</label>
+        <input id="newSkillDesc" type="text" placeholder="What this skill is for">
+      </div>
+      <div class="settings-field">
+        <label>Trigger words (comma-separated, required)</label>
+        <input id="newSkillTriggers" type="text" placeholder="refund, return, রিফান্ড">
+      </div>
+      <div class="settings-field">
+        <label>Instructions</label>
+        <textarea id="newSkillInstructions" style="min-height:110px;" placeholder="What should the assistant know or do when this skill is active?"></textarea>
+      </div>
+      <button class="btn-primary" id="addSkillBtn">Add skill</button>
+      <div class="save-note" id="skillSaveNote" style="display:none;">Saved.</div>
     </div>
 
     <div class="modal-section" id="modalSection-password">
@@ -799,14 +905,118 @@ async function enterChat() {
   showScreen('screen-chat');
 }
 
+// প্রতিটা artifact (code block)-এর আসল টেক্সট এখানে id দিয়ে জমা থাকে —
+// HTML attribute-এ কোড embed না করে এভাবে রাখলে quote/special character নিয়ে ঝামেলা হয় না।
+const artifactStore = {};
+let artifactCounter = 0;
+
+// ```lang\ncode\n``` কে একটা ছোট্ট, ক্লিকযোগ্য কার্ডে বদলে দেয় (Claude-এর Artifact কার্ডের মতো),
+// ক্লিক করলে ডানপাশে সাইড প্যানেলে পুরো কোড খুলবে। ![alt](url) থাকলে আসল ছবি দেখায়।
+// XSS এড়াতে সব অংশ escapeHtml দিয়ে যায় — শুধু structure টা HTML হিসেবে বসে।
+function renderMessageHtml(text) {
+  const parts = [];
+  const fenceRegex = /```(\w*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = fenceRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: 'code', lang: match[1] || 'text', value: match[2].replace(/\n$/, '') });
+    lastIndex = fenceRegex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', value: text.slice(lastIndex) });
+  }
+
+  return parts
+    .map((part) => {
+      if (part.type === 'code') {
+        const id = 'artifact-' + (++artifactCounter);
+        artifactStore[id] = { lang: part.lang, code: part.value };
+        const lineCount = part.value.split('\n').length;
+        return `<div class="artifact-card" data-artifact-id="${id}">
+          <div class="artifact-card-icon">&lt;/&gt;</div>
+          <div class="artifact-card-info">
+            <div class="artifact-card-title">${escapeHtml(part.lang)} snippet</div>
+            <div class="artifact-card-sub">${lineCount} line${lineCount === 1 ? '' : 's'} · Click to view</div>
+          </div>
+        </div>`;
+      }
+      // markdown ছবি ![alt](url) -> আসল <img> (শুধু http/https লিংক গ্রহণযোগ্য)
+      let escaped = escapeHtml(part.value).replace(
+        /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
+        (m, alt, url) =>
+          `<a class="msg-image-link" href="${url}" target="_blank" rel="noopener noreferrer">` +
+          `<img class="msg-image" src="${url}" alt="${alt}" loading="lazy"></a>`
+      );
+      escaped = escaped.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
+      return escaped;
+    })
+    .join('');
+}
+
 function addMessage(role, text) {
   const box = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'msg ' + role;
-  div.textContent = text;
+
+  const hasRichContent = role === 'bot' && (text.includes('```') || /!\[[^\]]*\]\(https?:\/\/[^\s)]+\)/.test(text));
+  if (hasRichContent) {
+    div.innerHTML = renderMessageHtml(text);
+  } else {
+    div.textContent = text;
+  }
+
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 }
+
+/* ---------------- Artifact side panel ---------------- */
+let currentArtifactId = null;
+
+function openArtifactPanel(id) {
+  const artifact = artifactStore[id];
+  if (!artifact) return;
+  currentArtifactId = id;
+  document.getElementById('artifactLangLabel').textContent = artifact.lang;
+  document.getElementById('artifactCodeContent').textContent = artifact.code;
+  document.getElementById('artifactPanel').classList.add('show');
+  document.getElementById('artifactBackdrop').classList.add('show');
+}
+function closeArtifactPanel() {
+  document.getElementById('artifactPanel').classList.remove('show');
+  document.getElementById('artifactBackdrop').classList.remove('show');
+  currentArtifactId = null;
+}
+document.getElementById('artifactCloseBtn').onclick = closeArtifactPanel;
+document.getElementById('artifactBackdrop').onclick = closeArtifactPanel;
+
+document.getElementById('messages').addEventListener('click', (e) => {
+  const card = e.target.closest('.artifact-card');
+  if (card) openArtifactPanel(card.dataset.artifactId);
+});
+
+document.getElementById('artifactCopyBtn').addEventListener('click', () => {
+  if (!currentArtifactId) return;
+  const codeText = artifactStore[currentArtifactId].code;
+  const btn = document.getElementById('artifactCopyBtn');
+  navigator.clipboard.writeText(codeText).then(() => {
+    const label = btn.querySelector('.copy-label');
+    const original = label.textContent;
+    label.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { label.textContent = original; btn.classList.remove('copied'); }, 1800);
+  }).catch(() => {
+    const codeEl = document.getElementById('artifactCodeContent');
+    const range = document.createRange();
+    range.selectNodeContents(codeEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+});
 
 function showTyping() {
   const box = document.getElementById('messages');
@@ -860,93 +1070,17 @@ document.getElementById('logoutBtn').onclick = () => {
   showScreen('screen-login');
 };
 
-/* ---------------- Skills modal (client-controlled, backend-verified) ---------------- */
-function openSkillsModal() {
-  document.getElementById('skillsModalBackdrop').classList.add('show');
-  setError('skillsError', '');
-  document.getElementById('skillUrlInput').value = '';
-  loadSkillsList();
-}
-function closeSkillsModal() {
-  document.getElementById('skillsModalBackdrop').classList.remove('show');
-}
-document.getElementById('openSkillsModalBtn').onclick = () => { openSkillsModal(); closeSidebarDrawer(); };
-document.getElementById('closeSkillsModalBtn').onclick = closeSkillsModal;
-document.getElementById('skillsModalBackdrop').addEventListener('click', (e) => {
-  if (e.target.id === 'skillsModalBackdrop') closeSkillsModal();
-});
-
-async function loadSkillsList() {
-  const wrap = document.getElementById('skillList');
-  wrap.innerHTML = '<div class="empty-state">Loading...</div>';
-  try {
-    const data = await api('/skills', { token: userToken });
-    const skills = data.skills || [];
-    if (skills.length === 0) {
-      wrap.innerHTML = '<div class="empty-state">No skills added yet.</div>';
-      return;
-    }
-    wrap.innerHTML = '';
-    skills.forEach((s) => {
-      const row = document.createElement('div');
-      row.className = 'skill-item';
-      row.innerHTML = `
-        <div class="skill-item-info">
-          <div class="skill-item-name">${escapeHtml(s.name)}</div>
-          <div class="skill-item-desc">${escapeHtml(s.description || 'No description')}</div>
-        </div>
-        <button class="skill-remove-btn" data-name="${escapeHtml(s.name)}">Remove</button>
-      `;
-      wrap.appendChild(row);
-    });
-    wrap.querySelectorAll('.skill-remove-btn').forEach((btn) => {
-      btn.onclick = async () => {
-        btn.disabled = true;
-        try {
-          await api(`/skills/${encodeURIComponent(btn.dataset.name)}`, { method: 'DELETE', token: userToken });
-          loadSkillsList();
-        } catch (err) {
-          setError('skillsError', err.message);
-          btn.disabled = false;
-        }
-      };
-    });
-  } catch (err) {
-    wrap.innerHTML = '<div class="empty-state">Could not load skills.</div>';
-  }
-}
-
-document.getElementById('addSkillBtn').onclick = async () => {
-  const urlInput = document.getElementById('skillUrlInput');
-  const url = urlInput.value.trim();
-  setError('skillsError', '');
-  if (!url) { setError('skillsError', 'Paste a skill file URL first.'); return; }
-
-  const btn = document.getElementById('addSkillBtn');
-  btn.disabled = true;
-  btn.textContent = 'Adding...';
-  try {
-    // সার্ভার নিজেই raw.githubusercontent.com domain check এবং safety filter চালায় —
-    // rules-bypass বা harmful content ধরা পড়লে এখানেই error হয়ে ফিরে আসবে।
-    await api('/skills', { method: 'POST', body: { url }, token: userToken });
-    urlInput.value = '';
-    loadSkillsList();
-  } catch (err) {
-    setError('skillsError', err.message);
-  }
-  btn.disabled = false;
-  btn.textContent = 'Add';
-};
-
-/* ---------------- Account settings modal (Customize AI + Change password) ---------------- */
+/* ---------------- Account settings modal (Customize AI + Skills + Change password) ---------------- */
 function openAccountModal() {
   document.getElementById('accountModalBackdrop').classList.add('show');
   loadCustomizeText();
+  renderSkillList();
 }
 function closeAccountModal() {
   document.getElementById('accountModalBackdrop').classList.remove('show');
   setError('customizeError', '');
   setError('changePasswordError', '');
+  setError('skillsError', '');
   document.getElementById('currentPasswordInput').value = '';
   document.getElementById('newPasswordInput').value = '';
   document.getElementById('confirmPasswordInput').value = '';
@@ -983,6 +1117,95 @@ document.getElementById('saveCustomizeBtn').onclick = async () => {
   } catch (err) {
     setError('customizeError', err.message);
   }
+};
+
+/* ---------------- Skills (server-side, stored in the database, matched automatically per message) ----------------
+   chat.js নিজেই প্রতিটা মেসেজে user_skills টেবিল থেকে trigger-match করা skill বের করে system prompt-এ জোড়ে,
+   তাই এখানে শুধু CRUD UI — মেসেজ পাঠানোর সময় client থেকে আলাদা করে কিছু পাঠাতে হয় না। */
+
+function renderSkillList() {
+  const wrap = document.getElementById('skillList');
+  wrap.innerHTML = '<div class="empty-state">Loading...</div>';
+  api('/skills', { token: userToken }).then((data) => {
+    const skills = data.skills || [];
+    if (skills.length === 0) { wrap.innerHTML = '<div class="empty-state">No skills installed yet.</div>'; return; }
+    wrap.innerHTML = '';
+    skills.forEach((s) => {
+      const item = document.createElement('div');
+      item.className = 'skill-item';
+      item.innerHTML = `
+        <div class="skill-item-top">
+          <div>
+            <div class="skill-item-name">${escapeHtml(s.name)}</div>
+            ${s.description ? `<div class="skill-item-desc">${escapeHtml(s.description)}</div>` : ''}
+            <div class="skill-item-triggers">Triggers: ${escapeHtml(s.triggers)}</div>
+          </div>
+          <div class="skill-item-actions">
+            <button class="skill-toggle-btn ${s.enabled ? 'on' : ''}" data-id="${s.id}" type="button">${s.enabled ? 'On' : 'Off'}</button>
+            <button class="skill-remove-btn" data-id="${s.id}" type="button">Remove</button>
+          </div>
+        </div>`;
+      wrap.appendChild(item);
+    });
+    wrap.querySelectorAll('.skill-toggle-btn').forEach((btn) => {
+      btn.onclick = async () => {
+        try { await api(`/skills/${btn.dataset.id}/toggle`, { method: 'POST', token: userToken }); renderSkillList(); }
+        catch (err) { setError('skillsError', err.message); }
+      };
+    });
+    wrap.querySelectorAll('.skill-remove-btn').forEach((btn) => {
+      btn.onclick = async () => {
+        try { await api(`/skills/${btn.dataset.id}`, { method: 'DELETE', token: userToken }); renderSkillList(); }
+        catch (err) { setError('skillsError', err.message); }
+      };
+    });
+  }).catch(() => { wrap.innerHTML = '<div class="empty-state">Could not load your skills.</div>'; });
+}
+
+document.getElementById('addSkillBtn').onclick = async () => {
+  const name = document.getElementById('newSkillName').value.trim();
+  const description = document.getElementById('newSkillDesc').value.trim();
+  const triggers = document.getElementById('newSkillTriggers').value.trim();
+  const instructions = document.getElementById('newSkillInstructions').value.trim();
+  setError('skillsError', '');
+  if (!name || !instructions) { setError('skillsError', 'A skill needs at least a name and instructions.'); return; }
+  if (!triggers) { setError('skillsError', 'Add at least one trigger word — a skill without triggers will never activate.'); return; }
+  try {
+    await api('/skills', { method: 'POST', body: { name, description, triggers, instructions }, token: userToken });
+    document.getElementById('newSkillName').value = '';
+    document.getElementById('newSkillDesc').value = '';
+    document.getElementById('newSkillTriggers').value = '';
+    document.getElementById('newSkillInstructions').value = '';
+    const note = document.getElementById('skillSaveNote');
+    note.style.display = 'block';
+    setTimeout(() => (note.style.display = 'none'), 2000);
+    renderSkillList();
+  } catch (err) {
+    setError('skillsError', err.message);
+  }
+};
+
+// সার্ভার নিজেই URL fetch করে parse করে দেয় (CORS ঝামেলা এড়াতে) — সেভ করে না, ফর্মে ভরে দেয় যাতে রিভিউ করা যায়
+document.getElementById('skillImportBtn').onclick = async () => {
+  const url = document.getElementById('skillImportUrl').value.trim();
+  setError('skillsError', '');
+  if (!url) { setError('skillsError', 'Paste a URL first.'); return; }
+  try {
+    const parsed = await api('/skills/import', { method: 'POST', body: { url }, token: userToken });
+    document.getElementById('newSkillName').value = parsed.name || '';
+    document.getElementById('newSkillDesc').value = parsed.description || '';
+    document.getElementById('newSkillTriggers').value = parsed.triggers || '';
+    document.getElementById('newSkillInstructions').value = parsed.instructions || '';
+    document.getElementById('skillImportUrl').value = '';
+    setError('skillsError', '');
+  } catch (err) {
+    setError('skillsError', err.message + ' Review the fields below, then click "Add skill" to save.');
+  }
+};
+
+document.getElementById('openSkillsHeaderBtn').onclick = () => {
+  openAccountModal();
+  document.querySelector('.modal-tab-btn[data-modaltab="skills"]').click();
 };
 
 document.getElementById('changeOwnPasswordBtn').onclick = async () => {
@@ -1039,7 +1262,7 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
   };
 });
 
-/* ---------- Customer list, with a per-customer quota column ---------- */
+/* ---------- Customer list, now with a per-customer quota column ---------- */
 async function loadCustomerList() {
   const wrap = document.getElementById('customerListWrap');
   wrap.innerHTML = '<div class="empty-state">Loading...</div>';
@@ -1056,6 +1279,8 @@ async function loadCustomerList() {
       const actionLabel = u.blocked ? 'Unblock' : 'Block';
       const actionColor = u.blocked ? 'var(--accent-glow)' : 'var(--danger)';
       const lastLogin = u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never (signed up only)';
+      // u.dailyLimit থাকলে সেটাই দেখাই (কাস্টমারের নিজস্ব কোটা); না থাকলে ইনপুট খালি রাখি,
+      // যাতে বোঝা যায় সে global default limit ব্যবহার করছে।
       const quotaValue = (u.dailyLimit !== null && u.dailyLimit !== undefined) ? u.dailyLimit : '';
       rows += `<tr data-email="${escapeHtml(u.email)}">
         <td>${escapeHtml(u.name)}</td>
@@ -1091,11 +1316,13 @@ async function loadCustomerList() {
       };
     });
 
+    // প্রতিটা কাস্টমারের quota আলাদাভাবে সেভ করার বাটন
     wrap.querySelectorAll('.quota-save-btn').forEach((btn) => {
       btn.onclick = async () => {
         const email = btn.dataset.email;
         const input = wrap.querySelector(`.quota-input[data-email="${CSS.escape(email)}"]`);
         const raw = input.value.trim();
+        // খালি রাখলে customer-specific quota মুছে যাবে, তখন সে আবার global default limit ব্যবহার করবে
         const dailyLimit = raw === '' ? null : parseInt(raw, 10);
         if (raw !== '' && (Number.isNaN(dailyLimit) || dailyLimit < 0)) {
           input.style.borderColor = 'var(--danger)';
