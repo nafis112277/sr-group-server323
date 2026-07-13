@@ -403,6 +403,16 @@
   }
   .artifact-copy-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
   .artifact-copy-btn.copied{ color:var(--accent-glow); border-color:var(--accent-glow); }
+  .artifact-run-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:7px; padding:6px 12px; font-size:12px; cursor:pointer;
+    font-family:'JetBrains Mono', monospace; display:flex; align-items:center; gap:5px;
+  }
+  .artifact-run-btn:hover{ border-color:var(--accent-glow); color:var(--text-primary); }
+  .artifact-run-btn.running{ color:var(--accent-glow); border-color:var(--accent-glow); }
+  .artifact-preview-frame{
+    flex:1; width:100%; border:none; background:#fff; display:none;
+  }
   .artifact-panel-body{
     flex:1; overflow:auto; margin:0; padding:18px 20px;
     font-family:'JetBrains Mono', monospace; font-size:13px; line-height:1.65;
@@ -544,6 +554,9 @@
     <div class="artifact-panel-header">
       <span class="lang-label" id="artifactLangLabel">code</span>
       <div class="artifact-panel-actions">
+        <button class="artifact-run-btn" id="artifactRunBtn" type="button" style="display:none;">
+          <span class="run-label">▶ Run</span>
+        </button>
         <button class="artifact-copy-btn" id="artifactCopyBtn" type="button">
           <span class="copy-label">Copy</span>
         </button>
@@ -551,6 +564,7 @@
       </div>
     </div>
     <pre class="artifact-panel-body"><code id="artifactCodeContent"></code></pre>
+    <iframe class="artifact-preview-frame" id="artifactPreviewFrame" sandbox="allow-scripts" title="Code preview"></iframe>
   </div>
 </div>
 
@@ -975,6 +989,86 @@ function addMessage(role, text) {
 
 /* ---------------- Artifact side panel ---------------- */
 let currentArtifactId = null;
+let previewShowing = false;
+
+const RUNNABLE_LANGS = ['html', 'htm', 'javascript', 'js', 'css'];
+function isRunnableLang(lang) {
+  return RUNNABLE_LANGS.includes((lang || '').toLowerCase());
+}
+
+// runnable ভাষার জন্য একটা sandboxed iframe-এ চালানোর মতো পুরো HTML document বানায়।
+// JS-এর জন্য console.log/error/warn ধরে স্ক্রিনে দেখায়, যেহেতু iframe-এ devtools console সরাসরি দেখা যায় না।
+function buildPreviewDoc(lang, code) {
+  const l = (lang || '').toLowerCase();
+  if (l === 'html' || l === 'htm') return code;
+
+  if (l === 'css') {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${code}</style></head>
+<body style="font-family:sans-serif; padding:20px;">
+  <h1>Heading</h1>
+  <p>Paragraph text so you can preview your CSS against real elements.</p>
+  <button>Button</button>
+</body></html>`;
+  }
+
+  // javascript / js — console output ও DOM manipulation দুটোই দেখা যাবে
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+  body{ font-family:'JetBrains Mono',monospace; font-size:13px; padding:14px; color:#1a1a1a; background:#fff; }
+  .log{ border-bottom:1px solid #eee; padding:4px 0; white-space:pre-wrap; }
+  .log.err{ color:#c0392b; }
+</style></head><body>
+<div id="__out"></div>
+<script>
+  const out = document.getElementById('__out');
+  function write(cls, args) {
+    const div = document.createElement('div');
+    div.className = 'log ' + cls;
+    div.textContent = Array.from(args).map((a) => {
+      if (typeof a === 'string') return a;
+      try { return JSON.stringify(a); } catch (e) { return String(a); }
+    }).join(' ');
+    out.appendChild(div);
+  }
+  const _log = console.log, _err = console.error, _warn = console.warn;
+  console.log = function(){ write('', arguments); _log.apply(console, arguments); };
+  console.error = function(){ write('err', arguments); _err.apply(console, arguments); };
+  console.warn = function(){ write('', arguments); _warn.apply(console, arguments); };
+  window.onerror = function(msg){ write('err', [String(msg)]); };
+  try {
+    ${code}
+  } catch (e) {
+    write('err', [e && e.message ? e.message : String(e)]);
+  }
+<\/script>
+</body></html>`;
+}
+
+function showArtifactCodeView() {
+  previewShowing = false;
+  document.querySelector('.artifact-panel-body').style.display = 'block';
+  const frame = document.getElementById('artifactPreviewFrame');
+  frame.style.display = 'none';
+  frame.srcdoc = '';
+  document.getElementById('artifactRunBtn').querySelector('.run-label').textContent = '▶ Run';
+  document.getElementById('artifactRunBtn').classList.remove('running');
+}
+
+function showArtifactPreview() {
+  const artifact = artifactStore[currentArtifactId];
+  if (!artifact) return;
+  previewShowing = true;
+  document.querySelector('.artifact-panel-body').style.display = 'none';
+  const frame = document.getElementById('artifactPreviewFrame');
+  frame.srcdoc = buildPreviewDoc(artifact.lang, artifact.code);
+  frame.style.display = 'block';
+  document.getElementById('artifactRunBtn').querySelector('.run-label').textContent = '{ } Code';
+  document.getElementById('artifactRunBtn').classList.add('running');
+}
+
+document.getElementById('artifactRunBtn').onclick = () => {
+  if (previewShowing) showArtifactCodeView();
+  else showArtifactPreview();
+};
 
 function openArtifactPanel(id) {
   const artifact = artifactStore[id];
@@ -982,12 +1076,15 @@ function openArtifactPanel(id) {
   currentArtifactId = id;
   document.getElementById('artifactLangLabel').textContent = artifact.lang;
   document.getElementById('artifactCodeContent').textContent = artifact.code;
+  document.getElementById('artifactRunBtn').style.display = isRunnableLang(artifact.lang) ? 'flex' : 'none';
+  showArtifactCodeView();
   document.getElementById('artifactPanel').classList.add('show');
   document.getElementById('artifactBackdrop').classList.add('show');
 }
 function closeArtifactPanel() {
   document.getElementById('artifactPanel').classList.remove('show');
   document.getElementById('artifactBackdrop').classList.remove('show');
+  showArtifactCodeView();
   currentArtifactId = null;
 }
 document.getElementById('artifactCloseBtn').onclick = closeArtifactPanel;
