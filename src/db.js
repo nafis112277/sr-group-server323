@@ -58,8 +58,20 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS user_skills (
+      id SERIAL PRIMARY KEY,
+      user_email TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      triggers TEXT NOT NULL DEFAULT '',
+      instructions TEXT NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE INDEX IF NOT EXISTS idx_conversations_email ON conversations(user_email);
     CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
+    CREATE INDEX IF NOT EXISTS idx_user_skills_email ON user_skills(user_email);
 
     -- আগে থেকে চলা ডাটাবেসে নতুন কলামগুলো নিরাপদে যোগ করে (already-running প্রজেক্টের জন্য মাইগ্রেশন)
     ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_limit INTEGER;
