@@ -155,7 +155,6 @@ function buildSkillFromWebpage(html, sourceUrl) {
     $('meta[property="og:description"]').attr('content') ||
     '';
 
-  // মূল কনটেন্ট এরিয়া খোঁজার চেষ্টা, না পেলে পুরো body
   const mainCandidates = ['main', 'article', '[role="main"]', '#content', '.content'];
   let $root = null;
   for (const sel of mainCandidates) {
@@ -172,9 +171,9 @@ function buildSkillFromWebpage(html, sourceUrl) {
     .replace(/\n\s*\n\s*\n+/g, '\n\n')
     .trim();
 
-  if (!text || text.length < 50) return null; // অর্থবহ কনটেন্ট পাওয়া যায়নি
+  if (!text || text.length < 50) return null;
 
-  const truncated = text.slice(0, MAX_CONTENT_CHARS - 500); // frontmatter-এর জন্য জায়গা রাখা
+  const truncated = text.slice(0, MAX_CONTENT_CHARS - 500);
 
   const safeName = new URL(sourceUrl).hostname.replace(/^www\./, '').replace(/[^a-z0-9.-]/gi, '-');
 
@@ -226,64 +225,4 @@ router.post('/', async (req, res) => {
 
     const rawText = await fetchRes.text();
 
-    // প্রথমে দেখা হয় এটা proper frontmatter skill file কিনা
-    let parsed = parseSkillFrontmatter(rawText);
-
-    // না হলে, এবং এটা trusted domain হলে, ওয়েবপেজ হিসেবে ধরে অটো-কনভার্ট
-    if (!parsed) {
-      const parsedUrl = new URL(url);
-      if (!isTrustedDomain(parsedUrl.hostname)) {
-        return res.status(400).json({
-          error:
-            "That file doesn't look like a valid skill (missing --- frontmatter with a 'name' field). " +
-            'Automatic webpage-to-skill conversion is only available for trusted reference domains.',
-        });
-      }
-      parsed = buildSkillFromWebpage(rawText, url);
-      if (!parsed) {
-        return res.status(400).json({ error: 'Could not extract meaningful content from that page.' });
-      }
-    } else if (rawText.length > MAX_CONTENT_CHARS) {
-      return res.status(400).json({ error: 'That skill file is too large (max ~20,000 characters).' });
-    }
-
-    if (!isSkillContentSafe(parsed.instructions) || !isSkillContentSafe(parsed.description)) {
-      return res.status(400).json({
-        error:
-          "This skill was rejected. It appears to try to change the assistant's safety rules or request harmful content. " +
-          'Skills may only add extra reference knowledge — they can never override SR Group\'s core rules.',
-      });
-    }
-
-    await query(
-      `INSERT INTO user_skills (user_email, name, description, triggers, instructions, source_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (user_email, name) DO UPDATE
-       SET description = EXCLUDED.description,
-           triggers = EXCLUDED.triggers,
-           instructions = EXCLUDED.instructions,
-           source_url = EXCLUDED.source_url,
-           created_at = now()`,
-      [req.userEmail, parsed.name, parsed.description, parsed.triggers.join(','), parsed.instructions, url]
-    );
-
-    res.json({ ok: true, name: parsed.name, description: parsed.description, triggers: parsed.triggers });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Could not download or save this skill.' });
-  }
-});
-
-/* ---------- skill মুছে ফেলা ---------- */
-router.delete('/:name', async (req, res) => {
-  try {
-    await query('DELETE FROM user_skills WHERE user_email = $1 AND name = $2', [req.userEmail, req.params.name]);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Could not remove this skill.' });
-  }
-});
-
-export default router;
-export { isSkillContentSafe };
+    let parsed = parseSkillFrontmatter(rawTe
