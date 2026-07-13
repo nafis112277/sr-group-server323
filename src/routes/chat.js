@@ -220,7 +220,7 @@ router.post('/conversations/:id/message', async (req, res) => {
     const skillBlock = await getMatchingSkillInstructions(req.userEmail, text);
     const system = baseSystem + skillBlock;
 
-    const result = await callAI(system, history);
+    const result = await callAI(system, history, { webSearch: !!(req.body || {}).webSearch });
 
     if (!result.ok) {
       return res.status(502).json({ error: result.error });
@@ -304,7 +304,7 @@ router.put('/conversations/:id/messages/:messageId', async (req, res) => {
     const skillBlock = await getMatchingSkillInstructions(req.userEmail, newContent);
     const system = baseSystem + skillBlock;
 
-    const result = await callAI(system, history);
+    const result = await callAI(system, history, { webSearch: !!(req.body || {}).webSearch });
     if (!result.ok) {
       return res.status(502).json({ error: result.error });
     }
