@@ -3,6 +3,7 @@ import { query } from '../db.js';
 import { requireUser } from '../auth.js';
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import * as cheerio from 'cheerio';
 
 const router = Router();
 router.use(requireUser);
@@ -12,7 +13,8 @@ router.use(requireUser);
  * সবচেয়ে সাধারণ prompt-injection / harmful-content প্যাটার্নগুলো
  * ধরে ফেলে)। কোনো skill এর instructions/description এ এসব
  * প্যাটার্নের কাছাকাছি কিছু পেলে সেটা সরাসরি reject হয়ে যাবে।
- * এই ফিল্টার সব সোর্স (trusted বা untrusted) — সবার জন্যই প্রযোজ্য।
+ * এই ফিল্টার সব সোর্স (trusted বা untrusted, raw skill ফাইল বা
+ * ওয়েবপেজ থেকে অটো-কনভার্ট করা কনটেন্ট) — সবার জন্যই প্রযোজ্য।
  * ============================================================ */
 const UNSAFE_PATTERNS = [
   /ignore (all|any|previous|prior)\s+(instructions|rules)/i,
@@ -39,7 +41,7 @@ function isSkillContentSafe(text) {
 
 /* ---------- বিশ্বস্ত ডোমেইন allowlist ----------
  * এই ডোমেইনগুলো থেকে fetch করার সময় SSRF/private-IP চেক স্কিপ হবে।
- * (root domain + সব subdomain ম্যাচ করবে, যেমন www.nctb.gov.bd, files.bdjobs.com)
+ * root domain + সব subdomain ম্যাচ করবে (যেমন www.nctb.gov.bd, bn.wikipedia.org)
  */
 const TRUSTED_DOMAINS = [
   'nctb.gov.bd',
@@ -48,6 +50,7 @@ const TRUSTED_DOMAINS = [
   '10minuteschool.com',
   'wikipedia.org',
 ];
+
 function isTrustedDomain(hostname) {
   const host = hostname.toLowerCase();
   return TRUSTED_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
@@ -90,7 +93,6 @@ async function isUrlSafeToFetch(urlStr) {
     return { safe: false, reason: 'URLs with embedded credentials are not allowed.' };
   }
 
-  // বিশ্বস্ত ডোমেইন হলে DNS/private-IP চেক স্কিপ
   if (isTrustedDomain(parsed.hostname)) {
     return { safe: true };
   }
@@ -108,8 +110,10 @@ async function isUrlSafeToFetch(urlStr) {
   return { safe: true };
 }
 
-/* frontmatter-স্টাইল .md ফাইল পার্স করে skill object বানায় */
-function parseSkillFile(rawText) {
+const MAX_CONTENT_CHARS = 20000;
+
+/* frontmatter-স্টাইল .md ফাইল পার্স করে skill object বানায় (আগের মতোই) */
+function parseSkillFrontmatter(rawText) {
   const match = rawText.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
   if (!match) return null;
 
@@ -133,6 +137,52 @@ function parseSkillFile(rawText) {
       ? fields.triggers.split(',').map((t) => t.trim()).filter(Boolean)
       : [],
     instructions: body,
+  };
+}
+
+/* ---------- নতুন: সাধারণ ওয়েবপেজ থেকে টেক্সট বের করে skill বানানো ----------
+ * frontmatter ফরম্যাটে না থাকলে এটা fallback হিসেবে ব্যবহার হয়।
+ * script/style/nav/header/footer বাদ দিয়ে মূল কনটেন্ট বের করা হয়।
+ */
+function buildSkillFromWebpage(html, sourceUrl) {
+  const $ = cheerio.load(html);
+
+  $('script, style, noscript, nav, header, footer, svg, iframe').remove();
+
+  const pageTitle = $('title').first().text().trim() || new URL(sourceUrl).hostname;
+  const metaDescription =
+    $('meta[name="description"]').attr('content') ||
+    $('meta[property="og:description"]').attr('content') ||
+    '';
+
+  // মূল কনটেন্ট এরিয়া খোঁজার চেষ্টা, না পেলে পুরো body
+  const mainCandidates = ['main', 'article', '[role="main"]', '#content', '.content'];
+  let $root = null;
+  for (const sel of mainCandidates) {
+    if ($(sel).length) {
+      $root = $(sel).first();
+      break;
+    }
+  }
+  if (!$root) $root = $('body');
+
+  const text = $root
+    .text()
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n\s*\n+/g, '\n\n')
+    .trim();
+
+  if (!text || text.length < 50) return null; // অর্থবহ কনটেন্ট পাওয়া যায়নি
+
+  const truncated = text.slice(0, MAX_CONTENT_CHARS - 500); // frontmatter-এর জন্য জায়গা রাখা
+
+  const safeName = new URL(sourceUrl).hostname.replace(/^www\./, '').replace(/[^a-z0-9.-]/gi, '-');
+
+  return {
+    name: safeName,
+    description: metaDescription.trim().slice(0, 300) || pageTitle.slice(0, 300),
+    triggers: [],
+    instructions: `# ${pageTitle}\n\nSource: ${sourceUrl}\n\n${truncated}`,
   };
 }
 
@@ -175,15 +225,26 @@ router.post('/', async (req, res) => {
     }
 
     const rawText = await fetchRes.text();
-    if (rawText.length > 20000) {
-      return res.status(400).json({ error: 'That skill file is too large (max ~20,000 characters).' });
-    }
 
-    const parsed = parseSkillFile(rawText);
+    // প্রথমে দেখা হয় এটা proper frontmatter skill file কিনা
+    let parsed = parseSkillFrontmatter(rawText);
+
+    // না হলে, এবং এটা trusted domain হলে, ওয়েবপেজ হিসেবে ধরে অটো-কনভার্ট
     if (!parsed) {
-      return res.status(400).json({
-        error: "That file doesn't look like a valid skill (missing --- frontmatter with a 'name' field).",
-      });
+      const parsedUrl = new URL(url);
+      if (!isTrustedDomain(parsedUrl.hostname)) {
+        return res.status(400).json({
+          error:
+            "That file doesn't look like a valid skill (missing --- frontmatter with a 'name' field). " +
+            'Automatic webpage-to-skill conversion is only available for trusted reference domains.',
+        });
+      }
+      parsed = buildSkillFromWebpage(rawText, url);
+      if (!parsed) {
+        return res.status(400).json({ error: 'Could not extract meaningful content from that page.' });
+      }
+    } else if (rawText.length > MAX_CONTENT_CHARS) {
+      return res.status(400).json({ error: 'That skill file is too large (max ~20,000 characters).' });
     }
 
     if (!isSkillContentSafe(parsed.instructions) || !isSkillContentSafe(parsed.description)) {
