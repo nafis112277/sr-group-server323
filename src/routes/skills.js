@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { requireUser } from '../auth.js';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 
 const router = Router();
 router.use(requireUser);
@@ -32,6 +34,56 @@ const UNSAFE_PATTERNS = [
 function isSkillContentSafe(text) {
   if (!text) return true;
   return !UNSAFE_PATTERNS.some((re) => re.test(text));
+}
+
+/* ---------- SSRF protection: internal/private ঠিকানায় fetch আটকানো ---------- */
+function isPrivateOrReservedIp(ip) {
+  if (net.isIPv4(ip)) {
+    const parts = ip.split('.').map(Number);
+    const [a, b] = parts;
+    if (a === 127) return true;                          // loopback
+    if (a === 10) return true;                            // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true;      // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;               // 192.168.0.0/16
+    if (a === 169 && b === 254) return true;               // link-local / cloud metadata
+    if (a === 0) return true;
+    return false;
+  }
+  if (net.isIPv6(ip)) {
+    const lower = ip.toLowerCase();
+    if (lower === '::1') return true;                      // loopback
+    if (lower.startsWith('fe80:')) return true;             // link-local
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local
+    return false;
+  }
+  return true; // অচেনা format হলে নিরাপদ ধরে না নেওয়াই ভালো
+}
+
+async function isUrlSafeToFetch(urlStr) {
+  let parsed;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    return { safe: false, reason: 'Invalid URL.' };
+  }
+  if (parsed.protocol !== 'https:') {
+    return { safe: false, reason: 'Only https:// URLs are allowed.' };
+  }
+  if (parsed.username || parsed.password) {
+    return { safe: false, reason: 'URLs with embedded credentials are not allowed.' };
+  }
+
+  let addresses;
+  try {
+    addresses = await dns.lookup(parsed.hostname, { all: true });
+  } catch {
+    return { safe: false, reason: 'Could not resolve that hostname.' };
+  }
+  if (addresses.length === 0 || addresses.some((a) => isPrivateOrReservedIp(a.address))) {
+    return { safe: false, reason: 'That host resolves to a private or internal address, which is not allowed.' };
+  }
+
+  return { safe: true };
 }
 
 /* frontmatter-স্টাইল .md ফাইল পার্স করে skill object বানায় */
@@ -77,17 +129,17 @@ router.get('/', async (req, res) => {
   }
 });
 
-/* ---------- নতুন skill ডাউনলোড করা (শুধু raw.githubusercontent.com থেকে) ---------- */
+/* ---------- নতুন skill ডাউনলোড করা (এখন যেকোনো https লিংক থেকে) ---------- */
 router.post('/', async (req, res) => {
   try {
     const { url } = req.body || {};
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ error: 'Provide a skill file URL.' });
     }
-    // শুধু GitHub এর raw content domain থেকে fetch করা হয় — নিজের সার্ভার দিয়ে
-    // ইউজারকে আর্বিট্রারি ইন্টারনাল/লোকাল URL fetch করতে দেওয়া হয় না (SSRF এড়াতে)
-    if (!/^https:\/\/raw\.githubusercontent\.com\//i.test(url)) {
-      return res.status(400).json({ error: 'Only raw.githubusercontent.com links are accepted.' });
+
+    const check = await isUrlSafeToFetch(url);
+    if (!check.safe) {
+      return res.status(400).json({ error: check.reason });
     }
 
     let fetchRes;
