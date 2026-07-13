@@ -123,21 +123,6 @@ router.post('/change-password', requireUser, async (req, res) => {
     res.status(500).json({ error: 'Could not update your password.' });
   }
 });
-
-// কাস্টমারের নিজের "Customize AI" preferences লোড করা
-router.get('/preferences', requireUser, async (req, res) => {
-  try {
-    const user = await queryOne('SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1', [
-      req.userEmail,
-    ]);
-    if (!user) return res.status(404).json({ error: 'Account not found.' });
-    res.json({ customInstructions: user.customInstructions || '' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Could not load your preferences.' });
-  }
-});
-
 // কাস্টমারের নিজের "Customize AI" preferences সেভ করা
 router.post('/preferences', requireUser, async (req, res) => {
   try {
