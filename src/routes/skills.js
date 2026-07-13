@@ -1,0 +1,154 @@
+import { Router } from 'express';
+import { query } from '../db.js';
+import { requireUser } from '../auth.js';
+
+const router = Router();
+router.use(requireUser);
+
+/* ============================================================
+ * নিরাপত্তা ফিল্টার (heuristic — ১০০% গ্যারান্টি না, কিন্তু
+ * সবচেয়ে সাধারণ prompt-injection / harmful-content প্যাটার্নগুলো
+ * ধরে ফেলে)। কোনো skill এর instructions/description এ এসব
+ * প্যাটার্নের কাছাকাছি কিছু পেলে সেটা সরাসরি reject হয়ে যাবে।
+ * ============================================================ */
+const UNSAFE_PATTERNS = [
+  /ignore (all|any|previous|prior)\s+(instructions|rules)/i,
+  /disregard (your|the|all)\s+(rules|guidelines|policy|policies)/i,
+  /you (are|must)\s+now\s+(act as|become|pretend)/i,
+  /jailbreak/i,
+  /\bDAN\b/i,
+  /no (restrictions|limits|filters|safety)/i,
+  /bypass (safety|security|moderation|filters?)/i,
+  /(write|create|generate)\s+(a\s+)?(malware|ransomware|keylogger|virus|trojan|worm)/i,
+  /how to (hack|exploit|attack)\s+(a |the )?(server|network|website|account|system)/i,
+  /(ddos|denial[- ]of[- ]service)\s+attack/i,
+  /steal\s+(passwords|credentials|credit card|personal data)/i,
+  /make\s+(a\s+)?(bomb|explosive|weapon)/i,
+  /child\s+sexual/i,
+  /system\s*prompt\s*:\s*you\s+(are|must)/i,
+  /override\s+(your|the)\s+(system|core)\s+(prompt|instructions)/i,
+];
+
+function isSkillContentSafe(text) {
+  if (!text) return true;
+  return !UNSAFE_PATTERNS.some((re) => re.test(text));
+}
+
+/* frontmatter-স্টাইল .md ফাইল পার্স করে skill object বানায় */
+function parseSkillFile(rawText) {
+  const match = rawText.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+  if (!match) return null;
+
+  const frontmatter = match[1];
+  const body = match[2].trim();
+  const fields = {};
+  frontmatter.split('\n').forEach((line) => {
+    const idx = line.indexOf(':');
+    if (idx === -1) return;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    fields[key] = value;
+  });
+
+  if (!fields.name) return null;
+
+  return {
+    name: fields.name,
+    description: fields.description || '',
+    triggers: fields.triggers
+      ? fields.triggers.split(',').map((t) => t.trim()).filter(Boolean)
+      : [],
+    instructions: body,
+  };
+}
+
+/* ---------- ক্লায়েন্টের নিজের সব skill লিস্ট করা ---------- */
+router.get('/', async (req, res) => {
+  try {
+    const rows = await query(
+      `SELECT name, description, triggers, source_url AS "sourceUrl", created_at AS "createdAt"
+       FROM user_skills WHERE user_email = $1 ORDER BY created_at DESC`,
+      [req.userEmail]
+    );
+    res.json({ skills: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load your skills.' });
+  }
+});
+
+/* ---------- নতুন skill ডাউনলোড করা (শুধু raw.githubusercontent.com থেকে) ---------- */
+router.post('/', async (req, res) => {
+  try {
+    const { url } = req.body || {};
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'Provide a skill file URL.' });
+    }
+    // শুধু GitHub এর raw content domain থেকে fetch করা হয় — নিজের সার্ভার দিয়ে
+    // ইউজারকে আর্বিট্রারি ইন্টারনাল/লোকাল URL fetch করতে দেওয়া হয় না (SSRF এড়াতে)
+    if (!/^https:\/\/raw\.githubusercontent\.com\//i.test(url)) {
+      return res.status(400).json({ error: 'Only raw.githubusercontent.com links are accepted.' });
+    }
+
+    let fetchRes;
+    try {
+      fetchRes = await fetch(url, { redirect: 'error' });
+    } catch (e) {
+      return res.status(400).json({ error: 'Could not reach that URL.' });
+    }
+    if (!fetchRes.ok) {
+      return res.status(400).json({ error: `Could not fetch that file (status ${fetchRes.status}).` });
+    }
+
+    const rawText = await fetchRes.text();
+    if (rawText.length > 20000) {
+      return res.status(400).json({ error: 'That skill file is too large (max ~20,000 characters).' });
+    }
+
+    const parsed = parseSkillFile(rawText);
+    if (!parsed) {
+      return res.status(400).json({
+        error: "That file doesn't look like a valid skill (missing --- frontmatter with a 'name' field).",
+      });
+    }
+
+    if (!isSkillContentSafe(parsed.instructions) || !isSkillContentSafe(parsed.description)) {
+      return res.status(400).json({
+        error:
+          "This skill was rejected. It appears to try to change the assistant's safety rules or request harmful content. " +
+          'Skills may only add extra reference knowledge — they can never override SR Group\'s core rules.',
+      });
+    }
+
+    await query(
+      `INSERT INTO user_skills (user_email, name, description, triggers, instructions, source_url)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (user_email, name) DO UPDATE
+       SET description = EXCLUDED.description,
+           triggers = EXCLUDED.triggers,
+           instructions = EXCLUDED.instructions,
+           source_url = EXCLUDED.source_url,
+           created_at = now()`,
+      [req.userEmail, parsed.name, parsed.description, parsed.triggers.join(','), parsed.instructions, url]
+    );
+
+    res.json({ ok: true, name: parsed.name, description: parsed.description, triggers: parsed.triggers });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not download or save this skill.' });
+  }
+});
+
+/* ---------- skill মুছে ফেলা ---------- */
+router.delete('/:name', async (req, res) => {
+  try {
+    await query('DELETE FROM user_skills WHERE user_email = $1 AND name = $2', [req.userEmail, req.params.name]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not remove this skill.' });
+  }
+});
+
+export default router;
+export { isSkillContentSafe };
