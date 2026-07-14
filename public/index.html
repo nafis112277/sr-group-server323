@@ -636,11 +636,10 @@
       <div class="auth-head">
         <div class="brandmark"><span class="dot"></span> SR Group</div>
         <h1>Admin access</h1>
-        <p>Sign in with your admin account.</p>
+        <p>Enter the admin passcode.</p>
       </div>
       <div id="adminError"></div>
-      <div class="field"><label>Email</label><input id="adminEmail" type="email" placeholder="admin@example.com"></div>
-      <div class="field"><label>Password</label><input id="adminPassword" type="password" placeholder="••••••••"></div>
+      <div class="field"><label>Passcode</label><input id="adminPassword" type="password" placeholder="••••••••"></div>
       <button class="btn-primary" id="adminLoginBtn">Enter dashboard</button>
       <div class="switch-line"><a id="backToLoginFromAdmin">← Back to sign in</a></div>
     </div>
@@ -916,8 +915,6 @@
 </div>
 
 <script>
-/* ================= API helper =================
-   ব্যাকএন্ড এখন এই একই origin থেকে সার্ভ হচ্ছে, তাই relative path যথেষ্ট। */
 async function api(path, { method = 'GET', body, token } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -932,15 +929,15 @@ async function api(path, { method = 'GET', body, token } = {}) {
   return data;
 }
 
-let currentUser = null;   // { name, email }
+let currentUser = null;
 let userToken = null;
 let adminToken = null;
-let conversations = [];   // [{id, title, updatedAt}]
+let conversations = [];
 let currentConvId = null;
-let currentMessages = []; // [{id, role, content, imageUrl}] for the open conversation
+let currentMessages = [];
 let sending = false;
 let forgotEmailInProgress = null;
-let pendingAttachment = null; // { dataUrl, name } — image staged for the next outgoing message
+let pendingAttachment = null;
 
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
@@ -954,7 +951,6 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
-/* ---------------- Startup / session restore ---------------- */
 function init() {
   userToken = localStorage.getItem('srgroup:token');
   const name = localStorage.getItem('srgroup:name');
@@ -973,7 +969,6 @@ function clearSession() {
   localStorage.removeItem('srgroup:email');
 }
 
-/* ---------------- Navigation ---------------- */
 document.getElementById('goSignup').onclick = () => { setError('signupError',''); showScreen('screen-signup'); };
 document.getElementById('goLogin').onclick = () => { setError('loginError',''); showScreen('screen-login'); };
 document.getElementById('goAdminLogin').onclick = () => showScreen('screen-adminLogin');
@@ -990,7 +985,6 @@ document.getElementById('goForgot').onclick = () => {
 };
 document.getElementById('backToLoginFromForgot').onclick = () => showScreen('screen-login');
 
-/* ---------------- Signup ---------------- */
 document.getElementById('signupBtn').onclick = async () => {
   const name = document.getElementById('signupName').value.trim();
   const email = document.getElementById('signupEmail').value.trim().toLowerCase();
@@ -1012,7 +1006,6 @@ document.getElementById('signupBtn').onclick = async () => {
   }
 };
 
-/* ---------------- Login ---------------- */
 document.getElementById('loginBtn').onclick = async () => {
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
   const password = document.getElementById('loginPassword').value;
@@ -1030,7 +1023,6 @@ document.getElementById('loginBtn').onclick = async () => {
   }
 };
 
-/* ---------------- Forgot password ---------------- */
 document.getElementById('forgotFindBtn').onclick = async () => {
   const email = document.getElementById('forgotEmail').value.trim().toLowerCase();
   if (!email) { setError('forgotError', 'Enter your email.'); return; }
@@ -1063,7 +1055,6 @@ document.getElementById('forgotResetBtn').onclick = async () => {
   }
 };
 
-/* ---------------- Chat (multiple conversations per customer) ---------------- */
 function renderConvList() {
   const wrap = document.getElementById('convList');
   wrap.innerHTML = '';
@@ -1078,8 +1069,6 @@ function renderConvList() {
     titleSpan.onclick = () => { switchConversation(c.id); closeSidebarDrawer(); };
     div.appendChild(titleSpan);
 
-    // একাধিক chat থাকলেই ডিলিট বাটন দেখাই — একটামাত্র conversation থাকলে সেটা ডিলিট করতে দিই না,
-    // যাতে ইউজার একেবারে খালি হাতে না পড়ে।
     if (conversations.length > 1) {
       const delBtn = document.createElement('button');
       delBtn.className = 'conv-delete-btn';
@@ -1140,7 +1129,6 @@ async function createNewConversation() {
 }
 document.getElementById('newChatBtn').onclick = async () => { await createNewConversation(); closeSidebarDrawer(); };
 
-/* ---------------- Mobile sidebar drawer ---------------- */
 function openSidebarDrawer() {
   document.getElementById('chatSidebar').classList.add('open');
   document.getElementById('sidebarBackdrop').classList.add('show');
@@ -1169,14 +1157,9 @@ async function enterChat() {
   showScreen('screen-chat');
 }
 
-// প্রতিটা artifact (code block)-এর আসল টেক্সট এখানে id দিয়ে জমা থাকে —
-// HTML attribute-এ কোড embed না করে এভাবে রাখলে quote/special character নিয়ে ঝামেলা হয় না।
 const artifactStore = {};
 let artifactCounter = 0;
 
-// ```lang\ncode\n``` কে একটা ছোট্ট, ক্লিকযোগ্য কার্ডে বদলে দেয় (Claude-এর Artifact কার্ডের মতো),
-// ক্লিক করলে ডানপাশে সাইড প্যানেলে পুরো কোড খুলবে। ![alt](url) থাকলে আসল ছবি দেখায়।
-// XSS এড়াতে সব অংশ escapeHtml দিয়ে যায় — শুধু structure টা HTML হিসেবে বসে।
 function renderMessageHtml(text) {
   const parts = [];
   const fenceRegex = /```(\w*)\n?([\s\S]*?)```/g;
@@ -1208,7 +1191,6 @@ function renderMessageHtml(text) {
           </div>
         </div>`;
       }
-      // markdown ছবি ![alt](url) -> আসল <img> (শুধু http/https লিংক গ্রহণযোগ্য)
       let escaped = escapeHtml(part.value).replace(
         /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
         (m, alt, url) =>
@@ -1224,8 +1206,6 @@ function renderMessageHtml(text) {
     .join('');
 }
 
-// role: 'user' | 'bot' | 'note'.  opts: { id, imageUrl } — id হলো backend message id (edit করার জন্য দরকার),
-// imageUrl হলো ইউজার যদি ছবি আপলোড করে থাকে বা বট যদি ছবি জেনারেট করে থাকে সেটার লিংক।
 function addMessage(role, text, opts = {}) {
   const box = document.getElementById('messages');
 
@@ -1288,7 +1268,6 @@ function addMessage(role, text, opts = {}) {
 
   row.appendChild(bubble);
 
-  // শুধু ইউজারের নিজের পাঠানো টেক্সট মেসেজেই এডিট অপশন — বট রিপ্লাই বা শুধু-ছবি মেসেজে দরকার নেই
   if (role === 'user' && text) {
     const actions = document.createElement('div');
     actions.className = 'msg-actions';
@@ -1301,7 +1280,6 @@ function addMessage(role, text, opts = {}) {
     row.appendChild(actions);
   }
 
-  // বট রিপ্লাইয়ে Copy + Regenerate — দুটোই hover করলে দেখা যায়, .msg-row:hover .msg-actions CSS আগে থেকেই আছে
   if (role === 'bot' && text) {
     const actions = document.createElement('div');
     actions.className = 'msg-actions';
@@ -1328,10 +1306,6 @@ function addMessage(role, text, opts = {}) {
   return { record: msgRecord, row };
 }
 
-/* ---------------- Edit a previously sent user message ----------------
-   Claude-এর মতোই: এডিট করে সেভ করলে ওই মেসেজের পর থেকে সব বাতিল হয়ে নতুন করে বট রিপ্লাই আসবে।
-   ব্যাকএন্ডে PUT /chat/conversations/:id/messages/:messageId থাকতে হবে যেটা মেসেজ আপডেট করে,
-   ওর পরের সবকিছু ডিলিট করে, এবং নতুন assistant reply রিটার্ন করে। */
 function startEditMessage(row, msgRecord) {
   const bubble = row.querySelector('.msg');
   const actions = row.querySelector('.msg-actions');
@@ -1376,7 +1350,6 @@ async function submitEditedMessage(row, msgRecord, newContent, saveBtn) {
     const data = await api(`/chat/conversations/${currentConvId}/messages/${msgRecord.id}`, {
       method: 'PUT', body: { content: newContent }, token: userToken,
     });
-    // এই মেসেজের পর যা যা ছিল সব সরিয়ে, এডিট করা মেসেজ + নতুন বট রিপ্লাই বসাই
     const idx = currentMessages.findIndex((m) => m.id === msgRecord.id);
     const rowsAfter = [...document.getElementById('messages').querySelectorAll('.msg-row, .msg.note')];
     let removing = false;
@@ -1398,7 +1371,6 @@ async function submitEditedMessage(row, msgRecord, newContent, saveBtn) {
   }
 }
 
-/* ---------------- Copy a bot reply to clipboard ---------------- */
 async function copyBotMessage(msgRecord, btn) {
   try {
     await navigator.clipboard.writeText(msgRecord.content);
@@ -1417,12 +1389,6 @@ async function copyBotMessage(msgRecord, btn) {
   setTimeout(() => { btn.textContent = original; }, 1500);
 }
 
-/* ---------------- Regenerate a bot reply ----------------
-   ওই নির্দিষ্ট assistant মেসেজের জন্য নতুন করে reply চাই, আগের user মেসেজ/context অক্ষত রেখে।
-   ব্যাকএন্ডে POST /chat/conversations/:id/messages/:messageId/regenerate থাকতে হবে,
-   যেটা { reply, replyImageUrl? } রিটার্ন করে (edit endpoint-এর মতোই কিন্তু কোনো user content বদলায় না)।
-   নতুন করে পাঠানো মেসেজেও assistantMessageId লাগবে (sendMessage-এ pass করা হয়েছে) — নাহলে
-   পাঠানোর পরপরই "Regenerate" চাপলে id-বিহীন অবস্থায় পড়বে। */
 async function regenerateBotMessage(row, msgRecord, btn) {
   if (!msgRecord.id) {
     alert("This reply can't be regenerated (missing id from server).");
@@ -1444,7 +1410,6 @@ async function regenerateBotMessage(row, msgRecord, btn) {
     msgRecord.content = data.reply;
     msgRecord.imageUrl = data.replyImageUrl || null;
 
-    // বাবল রিফ্রেশ করি — নতুন reply-তেও কোড ব্লক/ছবি থাকতে পারে, তাই আগের মতোই hasRichContent চেক করি
     const oldTextWrap = bubble.querySelector('div:last-child');
     const hasRichContent = data.reply.includes('```') || /!\[[^\]]*\]\(https?:\/\/[^\s)]+\)/.test(data.reply);
     const textWrap = document.createElement('div');
@@ -1471,7 +1436,6 @@ async function regenerateBotMessage(row, msgRecord, btn) {
   sending = false;
 }
 
-/* ---------------- "+" composer menu (photo / skills / web search) ---------------- */
 let webSearchEnabled = false;
 
 function togglePlusMenu(forceState) {
@@ -1494,14 +1458,12 @@ document.getElementById('menuOpenSkills').onclick = () => {
   openAccountModal();
   document.querySelector('.modal-tab-btn[data-modaltab="skills"]').click();
 };
-// web search toggle kore rakhi — menu-i khola thake jate ekbare kaj korle abar khulte na hoy
 document.getElementById('menuWebSearch').onclick = (e) => {
   e.stopPropagation();
   webSearchEnabled = !webSearchEnabled;
   document.getElementById('menuWebSearch').classList.toggle('toggled', webSearchEnabled);
 };
 
-/* ---------------- Photo attach (upload) ---------------- */
 document.getElementById('imageFileInput').onchange = (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
@@ -1559,8 +1521,6 @@ async function sendMessage() {
   showTyping();
 
   try {
-    // image পাঠালে base64 dataUrl সহ পাঠাই — ব্যাকএন্ড এটা আপলোড হ্যান্ডলার/স্টোরেজে সেভ করে
-    // একটা স্থায়ী URL রিটার্ন করবে বলে ধরে নিচ্ছি (data.reply, data.title-এর পাশাপাশি)।
     const body = { content: text };
     if (attachment) body.image = attachment.dataUrl;
     if (webSearchEnabled) body.webSearch = true;
@@ -1570,8 +1530,6 @@ async function sendMessage() {
     });
     hideTyping();
 
-    // just-sent message-e server-er real id boshai — ei id na thakle "Edit" click korle
-    // "missing id from server" error dekhabe, jotokhon na page reload kore purono history load hoy
     if (userEntry && data.userMessageId != null) {
       userEntry.record.id = data.userMessageId;
       userEntry.row.dataset.msgId = data.userMessageId;
@@ -1604,7 +1562,6 @@ document.getElementById('logoutBtn').onclick = () => {
   showScreen('screen-login');
 };
 
-/* ---------------- Account settings modal (Customize AI + Skills + Change password) ---------------- */
 function openAccountModal() {
   document.getElementById('accountModalBackdrop').classList.add('show');
   loadCustomizeText();
@@ -1652,10 +1609,6 @@ document.getElementById('saveCustomizeBtn').onclick = async () => {
     setError('customizeError', err.message);
   }
 };
-
-/* ---------------- Skills (server-side, stored in the database, matched automatically per message) ----------------
-   chat.js নিজেই প্রতিটা মেসেজে user_skills টেবিল থেকে trigger-match করা skill বের করে system prompt-এ জোড়ে,
-   তাই এখানে শুধু CRUD UI — মেসেজ পাঠানোর সময় client থেকে আলাদা করে কিছু পাঠাতে হয় না। */
 
 function renderSkillList() {
   const wrap = document.getElementById('skillList');
@@ -1719,7 +1672,6 @@ document.getElementById('addSkillBtn').onclick = async () => {
   }
 };
 
-// সার্ভার নিজেই URL fetch করে parse করে দেয় (CORS ঝামেলা এড়াতে) — সেভ করে না, ফর্মে ভরে দেয় যাতে রিভিউ করা যায়
 document.getElementById('skillImportBtn').onclick = async () => {
   const url = document.getElementById('skillImportUrl').value.trim();
   setError('skillsError', '');
@@ -1770,16 +1722,14 @@ document.getElementById('changeOwnPasswordBtn').onclick = async () => {
   }
 };
 
-/* ---------------- Admin ---------------- */
-let adminRole = null;   // 'super_admin' | 'viewer'
+let adminRole = null;
 let adminName = null;
 
 document.getElementById('adminLoginBtn').onclick = async () => {
-  const email = document.getElementById('adminEmail').value.trim().toLowerCase();
   const password = document.getElementById('adminPassword').value;
-  if (!email || !password) { setError('adminError', 'Enter your email and password.'); return; }
+  if (!password) { setError('adminError', 'Enter the admin passcode.'); return; }
   try {
-    const data = await api('/admin/login', { method: 'POST', body: { email, password } });
+    const data = await api('/admin/login', { method: 'POST', body: { password } });
     adminToken = data.token;
     adminRole = data.admin ? data.admin.role : 'viewer';
     adminName = data.admin ? data.admin.name : '';
@@ -1788,7 +1738,6 @@ document.getElementById('adminLoginBtn').onclick = async () => {
     document.getElementById('adminWhoami').textContent = adminName + (adminRole === 'super_admin' ? ' · Super admin' : ' · Viewer');
     applyAdminRoleUI();
     showScreen('screen-adminDashboard');
-    // ভিউয়ার হলে settings/admins ট্যাব লুকানো থাকে, তাই সবসময় customers ট্যাবেই ফিরে আসি
     document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
     document.querySelector('.tab-btn[data-tab="customers"]').classList.add('active');
     document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
@@ -1800,8 +1749,6 @@ document.getElementById('adminLoginBtn').onclick = async () => {
 };
 document.getElementById('adminLogoutBtn').onclick = () => { adminToken = null; adminRole = null; adminName = null; showScreen('screen-login'); };
 
-// super_admin-only অংশ (Settings ট্যাব, Admins ট্যাব) viewer-এর কাছে সম্পূর্ণ লুকানো থাকে —
-// শুধু CSS display:none করলেই যথেষ্ট, কারণ সংবেদনশীল অ্যাকশনগুলো ব্যাকএন্ডেও role-check হবে ধরে নিচ্ছি।
 function applyAdminRoleUI() {
   const isSuper = adminRole === 'super_admin';
   document.getElementById('tabBtnSettings').style.display = isSuper ? '' : 'none';
@@ -1823,10 +1770,6 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 
 document.getElementById('analyticsRangeSelect').onchange = () => loadAnalyticsPanel();
 
-/* ---------- Customer list, with per-customer quota column + a safe "reset password" action ----------
-   নোট: আমরা কারও আসল পাসওয়ার্ড admin panel-এ কখনো দেখাই না (backend-ও hash করে রাখে, plaintext ফেরত দেয় না)।
-   এর বদলে admin এক ক্লিকে ওই কাস্টমারের জন্য একটা নতুন temporary password জেনারেট করতে পারে —
-   এটাই "recovery" করার নিরাপদ উপায়। কেন এভাবে করা হলো তার ব্যাখ্যা চ্যাটের শেষে দেওয়া আছে। */
 async function loadCustomerList() {
   const wrap = document.getElementById('customerListWrap');
   wrap.innerHTML = '<div class="empty-state">Loading...</div>';
@@ -1845,7 +1788,6 @@ async function loadCustomerList() {
       const actionColor = u.blocked ? 'var(--accent-glow)' : 'var(--danger)';
       const lastLogin = u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never (signed up only)';
       const quotaValue = (u.dailyLimit !== null && u.dailyLimit !== undefined) ? u.dailyLimit : '';
-      // viewer role শুধু দেখতে পাবে, quota/reset/block কোনোটাই করতে পারবে না
       const quotaCell = isSuper
         ? `<div class="quota-cell">
             <input type="number" min="0" step="1" class="quota-input" placeholder="default"
@@ -1884,8 +1826,6 @@ async function loadCustomerList() {
       };
     });
 
-    // এক ক্লিকে temp password জেনারেট — backend নতুন random password হ্যাশ করে সেভ করবে এবং
-    // এখানে শুধু একবারের জন্য plaintext ফেরত দেবে যাতে admin কাস্টমারকে জানাতে পারে।
     wrap.querySelectorAll('.reset-pw').forEach((el) => {
       el.onclick = async () => {
         if (!confirm(`Generate a new temporary password for ${el.dataset.email}? Their old password will stop working.`)) return;
@@ -1898,13 +1838,11 @@ async function loadCustomerList() {
       };
     });
 
-    // প্রতিটা কাস্টমারের quota আলাদাভাবে সেভ করার বাটন
     wrap.querySelectorAll('.quota-save-btn').forEach((btn) => {
       btn.onclick = async () => {
         const email = btn.dataset.email;
         const input = wrap.querySelector(`.quota-input[data-email="${CSS.escape(email)}"]`);
         const raw = input.value.trim();
-        // খালি রাখলে customer-specific quota মুছে যাবে, তখন সে আবার global default limit ব্যবহার করবে
         const dailyLimit = raw === '' ? null : parseInt(raw, 10);
         if (raw !== '' && (Number.isNaN(dailyLimit) || dailyLimit < 0)) {
           input.style.borderColor = 'var(--danger)';
@@ -2020,7 +1958,6 @@ document.getElementById('saveSettingsBtn').onclick = async () => {
   } catch (e) { console.error(e); }
 };
 
-/* ---------------- My account: change my own admin password ---------------- */
 document.getElementById('myAccountChangePasswordBtn').onclick = async () => {
   const currentPassword = document.getElementById('myAccountCurrentPassword').value;
   const newPassword = document.getElementById('myAccountNewPassword').value;
@@ -2044,11 +1981,6 @@ document.getElementById('myAccountChangePasswordBtn').onclick = async () => {
   }
 };
 
-/* ---------------- Analytics dashboard ----------------
-   ব্যাকএন্ডে GET /admin/analytics?days=N থাকতে হবে, যেটা রিটার্ন করবে:
-   { dailyActiveUsers:[{date,count}], messageVolume:[{date,count}], topQuestions:[{question,count}] }
-   dailyActiveUsers/messageVolume তারিখ অনুযায়ী sorted (পুরাতন থেকে নতুন) ধরে নিচ্ছি। কোনো chart library
-   ছাড়াই সাদামাটা SVG bar chart বানিয়ে নিচ্ছি যাতে বাড়তি dependency লাগে না। */
 function buildBarChartSvg(points, { color = '#4F8CFF', height = 180 } = {}) {
   const width = Math.max(360, points.length * 46);
   const paddingLeft = 34, paddingBottom = 26, paddingTop = 12;
@@ -2064,7 +1996,7 @@ function buildBarChartSvg(points, { color = '#4F8CFF', height = 180 } = {}) {
     const y = paddingTop + (chartH - barH);
     bars += `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(barH, 1)}" rx="3" fill="${color}" opacity="0.88"><title>${escapeHtml(p.date)}: ${p.count}</title></rect>`;
     bars += `<text x="${x + barW / 2}" y="${y - 5}" text-anchor="middle" font-size="10.5" font-family="JetBrains Mono, monospace" fill="#ECEFF4">${p.count}</text>`;
-    const shortDate = (p.date || '').slice(5); // MM-DD
+    const shortDate = (p.date || '').slice(5);
     labels += `<text x="${x + barW / 2}" y="${height - paddingBottom + 15}" text-anchor="middle" font-size="9.5" font-family="JetBrains Mono, monospace" fill="#8C97A8">${escapeHtml(shortDate)}</text>`;
   });
 
@@ -2134,7 +2066,6 @@ async function loadAnalyticsPanel() {
   }
 }
 
-/* ---------------- Admin accounts (super_admin manages other admins) ---------------- */
 async function loadAdminsPanel() {
   const wrap = document.getElementById('adminsList');
   wrap.innerHTML = '<div class="empty-state">Loading...</div>';
@@ -2214,8 +2145,6 @@ document.getElementById('addAdminBtn').onclick = async () => {
   }
 };
 
-// cross-origin URL-e <a download> kaj kore na (browser ignore kore) — tai fetch kore
-// blob banie shei blob URL diye download trigger kori. data: URL hole shorashori download hobe.
 async function downloadImageUrl(url, filenameHint) {
   if (url.startsWith('data:')) {
     const a = document.createElement('a');
@@ -2258,10 +2187,6 @@ function extensionForLang(lang) {
   return LANG_EXTENSIONS[(lang || '').toLowerCase()] || 'txt';
 }
 
-/* ---------------- Artifact side panel: open / close / copy / run ----------------
-   এতদিন শুধু data-artifact-id মনে রাখার কোড ছিল, প্যানেল খোলার ফাংশনটাই ছিল না —
-   তাই কার্ডে ক্লিক করলে কিছুই হতো না। এখন পুরো ফ্লো: click -> panel খোলে -> কোড দেখায়
-   -> Copy বাটনে ক্লিপবোর্ডে কপি হয় -> Run বাটনে (html/js হলে) iframe এ লাইভ প্রিভিউ চলে। */
 let currentOpenArtifactId = null;
 
 function openArtifactPanel(id) {
@@ -2276,7 +2201,6 @@ function openArtifactPanel(id) {
   const previewFrame = document.getElementById('artifactPreviewFrame');
   const codeBody = document.querySelector('.artifact-panel-body');
 
-  // প্রতিবার নতুন কার্ড খুললে কোড-ভিউ থেকেই শুরু হবে, আগের প্রিভিউ অবস্থা রিসেট
   previewFrame.style.display = 'none';
   previewFrame.srcdoc = '';
   codeBody.style.display = 'block';
@@ -2301,7 +2225,6 @@ function closeArtifactPanel() {
   document.getElementById('artifactPreviewFrame').srcdoc = '';
 }
 
-// artifact card এ ক্লিক করলেই প্যানেল খুলবে (event delegation, কারণ কার্ডগুলো ডাইনামিকালি তৈরি হয়)
 document.addEventListener('click', (e) => {
   const card = e.target.closest('.artifact-card');
   if (card && card.dataset.artifactId) openArtifactPanel(card.dataset.artifactId);
@@ -2310,7 +2233,6 @@ document.addEventListener('click', (e) => {
 document.getElementById('artifactCloseBtn').onclick = closeArtifactPanel;
 document.getElementById('artifactBackdrop').onclick = closeArtifactPanel;
 
-// Copy button — clipboard API, permission না থাকলে execCommand fallback
 document.getElementById('artifactCopyBtn').onclick = async () => {
   if (!currentOpenArtifactId) return;
   const art = artifactStore[currentOpenArtifactId];
@@ -2336,7 +2258,6 @@ document.getElementById('artifactCopyBtn').onclick = async () => {
   }, 1500);
 };
 
-// Run button — html/js হলে iframe এ লাইভ প্রিভিউ চালায়, আবার ক্লিক করলে কোড ভিউতে ফেরত
 document.getElementById('artifactRunBtn').onclick = () => {
   if (!currentOpenArtifactId) return;
   const art = artifactStore[currentOpenArtifactId];
