@@ -692,6 +692,9 @@
             <div class="plus-menu-item" id="menuOpenSkills">
               <span class="pmi-icon">🧩</span><span class="pmi-label">Skills</span>
             </div>
+            <div class="plus-menu-item" id="menuCodeSnippet">
+              <span class="pmi-icon">💻</span><span class="pmi-label">Code snippet</span>
+            </div>
             <hr class="plus-menu-divider">
             <div class="plus-menu-item" id="menuWebSearch">
               <span class="pmi-icon">🌐</span><span class="pmi-label">Web search</span><span class="pmi-check">✓</span>
@@ -725,7 +728,36 @@
     <iframe class="artifact-preview-frame" id="artifactPreviewFrame" sandbox="allow-scripts allow-same-origin" title="Code preview"></iframe>
   </div>
 </div>
-
+<div class="modal-backdrop" id="codeModalBackdrop">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>Insert code snippet</h2>
+      <button class="modal-close" id="closeCodeModalBtn">×</button>
+    </div>
+    <div class="settings-field">
+      <label>Language</label>
+      <select id="codeSnippetLang" style="width:100%; background:var(--panel); border:1px solid var(--border-glass); border-radius:8px; padding:9px 10px; color:var(--text-primary); font-size:13px;">
+        <option value="javascript">JavaScript</option>
+        <option value="python">Python</option>
+        <option value="html">HTML</option>
+        <option value="css">CSS</option>
+        <option value="json">JSON</option>
+        <option value="sql">SQL</option>
+        <option value="bash">Bash</option>
+        <option value="java">Java</option>
+        <option value="c">C</option>
+        <option value="cpp">C++</option>
+        <option value="php">PHP</option>
+        <option value="text">Plain text</option>
+      </select>
+    </div>
+    <div class="settings-field">
+      <label>Code</label>
+      <textarea id="codeSnippetInput" style="min-height:220px; font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.5; white-space:pre; tab-size:2;" placeholder="Paste or write your code here..." spellcheck="false"></textarea>
+    </div>
+    <button class="btn-primary" id="insertCodeSnippetBtn">Insert into message</button>
+  </div>
+</div>
 <!-- ACCOUNT SETTINGS MODAL (Customize AI + Skills + Change password) -->
 <div class="modal-backdrop" id="accountModalBackdrop">
   <div class="modal-card">
@@ -1493,7 +1525,31 @@ document.getElementById('menuWebSearch').onclick = (e) => {
   webSearchEnabled = !webSearchEnabled;
   document.getElementById('menuWebSearch').classList.toggle('toggled', webSearchEnabled);
 };
-
+  document.getElementById('menuCodeSnippet').onclick = () => {
+  togglePlusMenu(false);
+  document.getElementById('codeSnippetInput').value = '';
+  document.getElementById('codeModalBackdrop').classList.add('show');
+  setTimeout(() => document.getElementById('codeSnippetInput').focus(), 50);
+};
+document.getElementById('closeCodeModalBtn').onclick = () => {
+  document.getElementById('codeModalBackdrop').classList.remove('show');
+};
+document.getElementById('codeModalBackdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'codeModalBackdrop') document.getElementById('codeModalBackdrop').classList.remove('show');
+});
+document.getElementById('insertCodeSnippetBtn').onclick = () => {
+  const lang = document.getElementById('codeSnippetLang').value;
+  const code = document.getElementById('codeSnippetInput').value;
+  if (!code.trim()) return;
+  const input = document.getElementById('userInput');
+  const fence = '```' + lang + '\n' + code.replace(/\n$/, '') + '\n```';
+  input.value = input.value ? (input.value + '\n' + fence) : fence;
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+  document.getElementById('codeModalBackdrop').classList.remove('show');
+  input.focus();
+};
+ 
 document.getElementById('imageFileInput').onchange = (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
