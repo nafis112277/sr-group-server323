@@ -1525,6 +1525,31 @@ document.getElementById('menuWebSearch').onclick = (e) => {
   webSearchEnabled = !webSearchEnabled;
   document.getElementById('menuWebSearch').classList.toggle('toggled', webSearchEnabled);
 };
+  function detectCodeLanguage(code) {
+  const trimmed = code.trim();
+  if (!trimmed) return null;
+  const rules = [
+    { lang: 'html', test: /<!DOCTYPE html|<html[\s>]|<div[\s>]|<\/html>/i },
+    { lang: 'css', test: /^[\s\S]*\{[\s\S]*:[\s\S]*;[\s\S]*\}/m, extra: /^[.#]?[\w-]+\s*\{/m },
+    { lang: 'python', test: /^\s*(def |import |from |print\(|class \w+.*:)/m },
+    { lang: 'javascript', test: /\b(const|let|var|function|=>|console\.log)\b/ },
+    { lang: 'json', test: /^\s*[\{\[][\s\S]*[\}\]]\s*$/ },
+    { lang: 'sql', test: /\b(SELECT|INSERT INTO|UPDATE|DELETE FROM|CREATE TABLE)\b/i },
+    { lang: 'bash', test: /^\s*(#!\/bin\/(ba)?sh|npm |sudo |cd |ls |echo )/m },
+    { lang: 'java', test: /\b(public class|System\.out\.println|public static void main)\b/ },
+    { lang: 'cpp', test: /#include\s*<.*>|std::/ },
+    { lang: 'c', test: /#include\s*<stdio\.h>|int main\(/ },
+    { lang: 'php', test: /^\s*<\?php/ },
+  ];
+  for (const rule of rules) {
+    if (rule.test.test(trimmed) && (!rule.extra || rule.extra.test(trimmed))) return rule.lang;
+  }
+  return null;
+}
+document.getElementById('codeSnippetInput').addEventListener('input', (e) => {
+  const detected = detectCodeLanguage(e.target.value);
+  if (detected) document.getElementById('codeSnippetLang').value = detected;
+});
   document.getElementById('menuCodeSnippet').onclick = () => {
   togglePlusMenu(false);
   document.getElementById('codeSnippetInput').value = '';
