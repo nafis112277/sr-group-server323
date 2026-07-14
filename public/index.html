@@ -490,6 +490,62 @@
 }
 .artifact-badge.clean{ color:var(--accent-glow); background:rgba(63,225,198,0.13); }
 .artifact-badge.error{ color:var(--danger); background:rgba(255,107,107,0.13); }
+
+  /* ---------- AI clarifying-question dashboard ---------- */
+  @keyframes askDashboardIn{
+    from{ opacity:0; transform:translateY(10px) scale(0.98); }
+    to{ opacity:1; transform:translateY(0) scale(1); }
+  }
+  .msg .ask-dashboard{
+    margin:10px 0; max-width:420px; width:100%;
+    background:var(--panel-solid); border:1px solid var(--border-glass);
+    border-radius:14px; padding:16px 16px 14px;
+    animation:askDashboardIn 0.35s ease both;
+  }
+  .msg .ask-dashboard:first-child{ margin-top:2px; }
+  .msg .ask-dashboard:last-child{ margin-bottom:2px; }
+  .ask-dashboard-header{
+    display:flex; align-items:center; gap:8px;
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px;
+    color:var(--text-primary); margin-bottom:12px;
+  }
+  .ask-question{ margin-bottom:14px; }
+  .ask-question:last-of-type{ margin-bottom:12px; }
+  .ask-question-text{
+    font-size:13.5px; color:var(--text-primary); margin-bottom:8px; line-height:1.45;
+  }
+  .ask-options{ display:flex; flex-wrap:wrap; gap:7px; }
+  .ask-option-btn{
+    background:rgba(255,255,255,0.04); border:1px solid var(--border-glass);
+    color:var(--text-primary); border-radius:9px; padding:7px 13px;
+    font-size:12.5px; cursor:pointer; font-family:'Inter',sans-serif;
+    transition:border-color 0.12s, background 0.12s, transform 0.12s;
+  }
+  .ask-option-btn:hover{ border-color:var(--accent-a); background:rgba(79,140,255,0.08); }
+  .ask-option-btn.selected{
+    background:linear-gradient(135deg, var(--accent-a), var(--accent-b));
+    border-color:transparent; color:#fff;
+  }
+  .ask-option-btn.ask-explain-toggle{
+    color:var(--text-soft); border-style:dashed;
+  }
+  .ask-option-btn.ask-explain-toggle.selected{
+    background:none; border-color:var(--accent-glow); color:var(--accent-glow); border-style:dashed;
+  }
+  .ask-explain-box{ margin-top:8px; }
+  .ask-explain-box textarea{
+    width:100%; min-height:56px; background:rgba(0,0,0,0.2); border:1px solid var(--border-glass);
+    border-radius:8px; padding:9px 11px; color:#fff; font-size:13px; font-family:'Inter',sans-serif;
+    resize:vertical;
+  }
+  .ask-submit-btn{
+    width:100%; margin-top:4px;
+    background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); border:none; border-radius:9px;
+    padding:10px; color:#fff; font-family:'Inter',sans-serif; font-weight:600; font-size:13px; cursor:pointer;
+  }
+  .ask-submit-btn:hover{ filter:brightness(1.08); }
+  .ask-submit-btn:disabled{ opacity:0.5; cursor:default; }
+
   .msg code.inline-code{
     background:rgba(255,255,255,0.08); border-radius:4px; padding:1px 6px;
     font-family:'JetBrains Mono', monospace; font-size:0.9em;
@@ -1251,6 +1307,162 @@ function checkBracketBalance(code) {
   if (issues === 0) return { status: 'clean', label: 'Looks balanced', basic: true };
   return { status: 'error', label: `${issues} possible issue${issues > 1 ? 's' : ''}`, basic: true };
 }
+// ---------- AI clarifying-question dashboard ----------
+// When the assistant wants to ask the user something, instead of plain text it can send a
+// fenced block like:  ```askuser\n{"questions":[{"question":"...","options":["A","B"],"type":"single_select"}]}\n```
+// This gets rendered as an animated card with tappable MCQ-style buttons plus an "Other / explain"
+// free-text fallback for each question, instead of a wall of plain text.
+const askDashboardStore = {};   // id -> { questions: [...] }
+const askAnswersState = {};     // id -> { [qIndex]: { type:'option'|'multi'|'explain', value / values } }
+let askDashboardCounter = 0;
+
+function buildAskDashboardHtml(rawJson) {
+  let parsed;
+  try { parsed = JSON.parse(rawJson); } catch (e) { return null; }
+  const questions = parsed && Array.isArray(parsed.questions) ? parsed.questions : null;
+  if (!questions || questions.length === 0) return null;
+
+  const id = 'ask-' + (++askDashboardCounter);
+  askDashboardStore[id] = { questions };
+  askAnswersState[id] = {};
+
+  const questionsHtml = questions.map((q, qi) => {
+    const options = Array.isArray(q.options) ? q.options : [];
+    const optionsHtml = options.map((opt, oi) =>
+      `<button type="button" class="ask-option-btn" data-ask-id="${id}" data-qidx="${qi}" data-oidx="${oi}">${escapeHtml(String(opt))}</button>`
+    ).join('');
+    return `<div class="ask-question" data-qidx="${qi}">
+      <div class="ask-question-text">${escapeHtml(q.question || '')}</div>
+      <div class="ask-options">
+        ${optionsHtml}
+        <button type="button" class="ask-option-btn ask-explain-toggle" data-ask-id="${id}" data-qidx="${qi}">✎ Other / explain</button>
+      </div>
+      <div class="ask-explain-box" data-ask-id="${id}" data-qidx="${qi}" style="display:none;">
+        <textarea placeholder="Type your own answer..."></textarea>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="ask-dashboard" data-ask-id="${id}">
+    <div class="ask-dashboard-header">🎯 Quick questions</div>
+    ${questionsHtml}
+    <button type="button" class="ask-submit-btn" data-ask-id="${id}">Submit answers</button>
+  </div>`;
+}
+
+function toggleAskOption(askId, qidx, oidx) {
+  const dash = document.querySelector(`.ask-dashboard[data-ask-id="${askId}"]`);
+  if (!dash) return;
+  const qBlock = dash.querySelector(`.ask-question[data-qidx="${qidx}"]`);
+  const optBtns = [...qBlock.querySelectorAll('.ask-option-btn:not(.ask-explain-toggle)')];
+  const explainToggle = qBlock.querySelector('.ask-explain-toggle');
+  const explainBox = qBlock.querySelector('.ask-explain-box');
+  const q = askDashboardStore[askId].questions[qidx];
+  const isMulti = q.type === 'multi_select';
+
+  if (!isMulti) {
+    optBtns.forEach((b, i) => b.classList.toggle('selected', i === oidx));
+    explainToggle.classList.remove('selected');
+    explainBox.style.display = 'none';
+    askAnswersState[askId][qidx] = { type: 'option', value: q.options[oidx] };
+  } else {
+    const btn = optBtns[oidx];
+    btn.classList.toggle('selected');
+    explainToggle.classList.remove('selected');
+    explainBox.style.display = 'none';
+    const selected = optBtns
+      .map((b, i) => (b.classList.contains('selected') ? q.options[i] : null))
+      .filter((v) => v !== null);
+    askAnswersState[askId][qidx] = { type: 'multi', values: selected };
+  }
+}
+
+function toggleAskExplain(askId, qidx) {
+  const dash = document.querySelector(`.ask-dashboard[data-ask-id="${askId}"]`);
+  if (!dash) return;
+  const qBlock = dash.querySelector(`.ask-question[data-qidx="${qidx}"]`);
+  const optBtns = [...qBlock.querySelectorAll('.ask-option-btn:not(.ask-explain-toggle)')];
+  const explainToggle = qBlock.querySelector('.ask-explain-toggle');
+  const explainBox = qBlock.querySelector('.ask-explain-box');
+  const showing = explainBox.style.display !== 'none';
+
+  if (showing) {
+    explainBox.style.display = 'none';
+    explainToggle.classList.remove('selected');
+    delete askAnswersState[askId][qidx];
+  } else {
+    optBtns.forEach((b) => b.classList.remove('selected'));
+    explainToggle.classList.add('selected');
+    explainBox.style.display = 'block';
+    const ta = explainBox.querySelector('textarea');
+    ta.focus();
+    askAnswersState[askId][qidx] = { type: 'explain', value: '' };
+  }
+}
+
+function submitAskDashboard(askId) {
+  const dash = document.querySelector(`.ask-dashboard[data-ask-id="${askId}"]`);
+  if (!dash) return;
+  const data = askDashboardStore[askId];
+  if (!data) return;
+
+  const lines = [];
+  data.questions.forEach((q, qi) => {
+    let answer = '';
+    const state = askAnswersState[askId][qi];
+    if (state && state.type === 'explain') {
+      const ta = dash.querySelector(`.ask-explain-box[data-qidx="${qi}"] textarea`);
+      answer = (ta ? ta.value.trim() : '') || '(no answer given)';
+    } else if (state && state.type === 'multi') {
+      answer = state.values.length ? state.values.join(', ') : '(no answer given)';
+    } else if (state && state.type === 'option') {
+      answer = state.value;
+    } else {
+      answer = '(no answer given)';
+    }
+    lines.push(`${q.question}\n${answer}`);
+  });
+
+  const submitBtn = dash.querySelector('.ask-submit-btn');
+  submitBtn.disabled = true;
+
+  const input = document.getElementById('userInput');
+  input.value = lines.join('\n\n');
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+  sendMessage();
+}
+
+document.addEventListener('click', (e) => {
+  const optBtn = e.target.closest('.ask-option-btn:not(.ask-explain-toggle)');
+  if (optBtn) {
+    toggleAskOption(optBtn.dataset.askId, Number(optBtn.dataset.qidx), Number(optBtn.dataset.oidx));
+    return;
+  }
+  const explainBtn = e.target.closest('.ask-explain-toggle');
+  if (explainBtn) {
+    toggleAskExplain(explainBtn.dataset.askId, Number(explainBtn.dataset.qidx));
+    return;
+  }
+  const submitBtn = e.target.closest('.ask-submit-btn');
+  if (submitBtn) {
+    submitAskDashboard(submitBtn.dataset.askId);
+    return;
+  }
+});
+
+document.addEventListener('input', (e) => {
+  const ta = e.target.closest('.ask-explain-box textarea');
+  if (ta) {
+    const box = e.target.closest('.ask-explain-box');
+    const askId = box.dataset.askId;
+    const qidx = Number(box.dataset.qidx);
+    if (askAnswersState[askId] && askAnswersState[askId][qidx]) {
+      askAnswersState[askId][qidx].value = ta.value;
+    }
+  }
+});
+
 function renderMessageHtml(text) {
   const parts = [];
   const fenceRegex = /```(\w*)\n?([\s\S]*?)```/g;
