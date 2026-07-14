@@ -166,5 +166,27 @@ router.post('/passcode', async (req, res) => {
     res.status(500).json({ error: 'Could not update passcode.' });
   }
 });
+router.post('/change-password', async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Fill in all fields.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password should be at least 6 characters.' });
+    }
+
+    const row = await queryOne('SELECT passcode_hash FROM admin_auth WHERE id = 1');
+    const match = await bcrypt.compare(currentPassword, row.passcode_hash);
+    if (!match) return res.status(401).json({ error: 'Current password is incorrect.' });
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await query('UPDATE admin_auth SET passcode_hash = $1 WHERE id = 1', [newHash]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not update password.' });
+  }
+});
 
 export default router;
