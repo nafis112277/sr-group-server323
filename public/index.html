@@ -1852,12 +1852,114 @@ function extensionForLang(lang) {
   return LANG_EXTENSIONS[(lang || '').toLowerCase()] || 'txt';
 }
 
-// kon artifact card ekhon khola ache tar id mone rakhi, download button e lagbe
+/* ---------------- Artifact side panel: open / close / copy / run ----------------
+   এতদিন শুধু data-artifact-id মনে রাখার কোড ছিল, প্যানেল খোলার ফাংশনটাই ছিল না —
+   তাই কার্ডে ক্লিক করলে কিছুই হতো না। এখন পুরো ফ্লো: click -> panel খোলে -> কোড দেখায়
+   -> Copy বাটনে ক্লিপবোর্ডে কপি হয় -> Run বাটনে (html/js হলে) iframe এ লাইভ প্রিভিউ চলে। */
 let currentOpenArtifactId = null;
+
+function openArtifactPanel(id) {
+  const art = artifactStore[id];
+  if (!art) return;
+  currentOpenArtifactId = id;
+
+  document.getElementById('artifactLangLabel').textContent = art.lang;
+  document.getElementById('artifactCodeContent').textContent = art.code;
+
+  const runBtn = document.getElementById('artifactRunBtn');
+  const previewFrame = document.getElementById('artifactPreviewFrame');
+  const codeBody = document.querySelector('.artifact-panel-body');
+
+  // প্রতিবার নতুন কার্ড খুললে কোড-ভিউ থেকেই শুরু হবে, আগের প্রিভিউ অবস্থা রিসেট
+  previewFrame.style.display = 'none';
+  previewFrame.srcdoc = '';
+  codeBody.style.display = 'block';
+
+  const runnableLangs = ['html', 'htm', 'javascript', 'js'];
+  const isRunnable = runnableLangs.includes((art.lang || '').toLowerCase());
+  runBtn.style.display = isRunnable ? 'flex' : 'none';
+  runBtn.classList.remove('running');
+  runBtn.querySelector('.run-label').textContent = '▶ Run';
+
+  const copyBtn = document.getElementById('artifactCopyBtn');
+  copyBtn.classList.remove('copied');
+  copyBtn.querySelector('.copy-label').textContent = 'Copy';
+
+  document.getElementById('artifactBackdrop').classList.add('show');
+  document.getElementById('artifactPanel').classList.add('show');
+}
+
+function closeArtifactPanel() {
+  document.getElementById('artifactBackdrop').classList.remove('show');
+  document.getElementById('artifactPanel').classList.remove('show');
+  document.getElementById('artifactPreviewFrame').srcdoc = '';
+}
+
+// artifact card এ ক্লিক করলেই প্যানেল খুলবে (event delegation, কারণ কার্ডগুলো ডাইনামিকালি তৈরি হয়)
 document.addEventListener('click', (e) => {
   const card = e.target.closest('.artifact-card');
-  if (card && card.dataset.artifactId) currentOpenArtifactId = card.dataset.artifactId;
+  if (card && card.dataset.artifactId) openArtifactPanel(card.dataset.artifactId);
 });
+
+document.getElementById('artifactCloseBtn').onclick = closeArtifactPanel;
+document.getElementById('artifactBackdrop').onclick = closeArtifactPanel;
+
+// Copy button — clipboard API, permission না থাকলে execCommand fallback
+document.getElementById('artifactCopyBtn').onclick = async () => {
+  if (!currentOpenArtifactId) return;
+  const art = artifactStore[currentOpenArtifactId];
+  if (!art) return;
+  try {
+    await navigator.clipboard.writeText(art.code);
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = art.code;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (err2) { /* ignore */ }
+    ta.remove();
+  }
+  const btn = document.getElementById('artifactCopyBtn');
+  btn.classList.add('copied');
+  btn.querySelector('.copy-label').textContent = 'Copied!';
+  setTimeout(() => {
+    btn.classList.remove('copied');
+    btn.querySelector('.copy-label').textContent = 'Copy';
+  }, 1500);
+};
+
+// Run button — html/js হলে iframe এ লাইভ প্রিভিউ চালায়, আবার ক্লিক করলে কোড ভিউতে ফেরত
+document.getElementById('artifactRunBtn').onclick = () => {
+  if (!currentOpenArtifactId) return;
+  const art = artifactStore[currentOpenArtifactId];
+  if (!art) return;
+
+  const runBtn = document.getElementById('artifactRunBtn');
+  const previewFrame = document.getElementById('artifactPreviewFrame');
+  const codeBody = document.querySelector('.artifact-panel-body');
+  const lang = (art.lang || '').toLowerCase();
+
+  const showingPreview = previewFrame.style.display === 'block';
+  if (showingPreview) {
+    previewFrame.style.display = 'none';
+    codeBody.style.display = 'block';
+    runBtn.classList.remove('running');
+    runBtn.querySelector('.run-label').textContent = '▶ Run';
+    return;
+  }
+
+  let srcdoc = art.code;
+  if (lang === 'javascript' || lang === 'js') {
+    srcdoc = '<!DOCTYPE html><html><body><script>' + art.code + '<' + '/script></body></html>';
+  }
+  previewFrame.srcdoc = srcdoc;
+  previewFrame.style.display = 'block';
+  codeBody.style.display = 'none';
+  runBtn.classList.add('running');
+  runBtn.querySelector('.run-label').textContent = '■ Stop';
+};
 
 document.getElementById('artifactDownloadBtn').onclick = () => {
   if (!currentOpenArtifactId) return;
