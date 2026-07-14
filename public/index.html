@@ -216,11 +216,13 @@
     display:flex; align-items:center; justify-content:center; line-height:1;
   }
   .composer-row{ display:flex; gap:10px; align-items:center; }
-  .composer-row input[type="text"]{
+ .composer-row input[type="text"], .composer-row textarea{
     flex:1; background:var(--panel); border:1px solid var(--border-glass); border-radius:10px;
     padding:13px 15px; color:var(--text-primary); font-size:14.5px;
+    font-family:'Inter',sans-serif; resize:none; max-height:160px; overflow-y:auto;
+    line-height:1.4;
   }
-  .composer-row input[type="text"]:focus{ outline:2px solid var(--accent-a); outline-offset:1px; }
+  .composer-row input[type="text"]:focus, .composer-row textarea:focus{ outline:2px solid var(--accent-a); outline-offset:1px; }
   .composer-row button.send-btn{
     background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); border:none; border-radius:10px;
     color:#fff; padding:0 22px; height:44px; font-weight:600; cursor:pointer;
@@ -696,7 +698,7 @@
             </div>
           </div>
         </div>
-        <input id="userInput" type="text" placeholder="Type a message...">
+        <textarea id="userInput" placeholder="Type a message..." rows="1"></textarea>
         <button class="send-btn" id="sendBtn">Send</button>
       </div>
     </div>
@@ -1546,7 +1548,8 @@ async function sendMessage() {
   renderComposerAttachment();
   const userEntry = addMessage('user', text, { imageUrl: attachment ? attachment.dataUrl : null });
   input.value = '';
-  showTyping();
+    input.style.height = 'auto';
+    showTyping();
 
   try {
     const body = { content: text };
@@ -1581,8 +1584,16 @@ async function sendMessage() {
   input.focus();
 }
 document.getElementById('sendBtn').onclick = sendMessage;
-document.getElementById('userInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
-
+document.getElementById('userInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+document.getElementById('userInput').addEventListener('input', (e) => {
+  e.target.style.height = 'auto';
+  e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+});
 document.getElementById('logoutBtn').onclick = () => {
   clearSession();
   document.getElementById('loginEmail').value = '';
