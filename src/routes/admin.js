@@ -17,7 +17,7 @@ router.post('/login', async (req, res) => {
     const match = await bcrypt.compare(passcode, row.passcode_hash);
     if (!match) return res.status(401).json({ error: 'Wrong passcode.' });
 
-    res.json({ token: signAdminToken() });
+    res.json({ token: signAdminToken(), admin: { name: 'Admin', role: 'super_admin' } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
