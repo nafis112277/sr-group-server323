@@ -155,7 +155,7 @@
   }
   .icon-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
 
-  .chat-main{ flex:1; display:flex; flex-direction:column; height:100vh; min-width:0; }
+  .chat-main{ flex:1; display:flex; flex-direction:column; height:100vh; min-width:0; position:relative; }   .new-msg-btn{     display:none; align-items:center; gap:6px;     position:absolute; left:50%; bottom:96px; transform:translateX(-50%); z-index:20;     background:var(--panel-solid); border:1px solid var(--border-glass); color:var(--text-primary);     border-radius:20px; padding:8px 16px; font-size:12.5px; cursor:pointer;     box-shadow:0 6px 18px rgba(0,0,0,0.35);   }   .new-msg-btn.show{ display:flex; }
   .chat-header{
     display:flex; align-items:center; justify-content:space-between;
     padding:18px 28px; border-bottom:1px solid var(--border-glass);
@@ -676,6 +676,7 @@
       </div>
     </div>
     <div class="messages" id="messages"></div>
+    <button class="new-msg-btn" id="newMsgBtn" type="button">↓ New message</button>
     <div class="composer">
       <div class="composer-attachments" id="composerAttachments"></div>
       <div class="composer-row">
@@ -1109,6 +1110,8 @@ async function switchConversation(id) {
   currentConvId = id;
   currentMessages = [];
   document.getElementById('messages').innerHTML = '';
+  userScrolledUp = false;
+  document.getElementById('newMsgBtn').classList.remove('show');
   try {
     const data = await api(`/chat/conversations/${id}/messages`, { token: userToken });
     const log = data.messages || [];
@@ -1301,11 +1304,28 @@ function addMessage(role, text, opts = {}) {
     row.appendChild(actions);
   }
 box.appendChild(row);
-  box.scrollTop = box.scrollHeight;
-  if (role === 'user') updateEditButtonsVisibility();
+    if (role === 'user' || !userScrolledUp) {
+      scrollMessagesToBottom();
+    } else {
+      document.getElementById('newMsgBtn').classList.add('show');
+    }
+    if (role === 'user') updateEditButtonsVisibility();
   return { record: msgRecord, row };
 }
-
+let userScrolledUp = false;
+  function scrollMessagesToBottom() {
+    const box = document.getElementById('messages');
+    box.scrollTop = box.scrollHeight;
+    userScrolledUp = false;
+    document.getElementById('newMsgBtn').classList.remove('show');
+  }
+  document.getElementById('messages').addEventListener('scroll', () => {
+    const box = document.getElementById('messages');
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    userScrolledUp = !nearBottom;
+    if (nearBottom) document.getElementById('newMsgBtn').classList.remove('show');
+  });
+  document.getElementById('newMsgBtn').onclick = scrollMessagesToBottom;
 function updateEditButtonsVisibility() {
   const userRows = [...document.querySelectorAll('#messages .msg-row.user')];
   userRows.forEach((r, i) => {
