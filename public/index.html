@@ -1729,7 +1729,7 @@ document.getElementById('adminLoginBtn').onclick = async () => {
   const password = document.getElementById('adminPassword').value;
   if (!password) { setError('adminError', 'Enter the admin passcode.'); return; }
   try {
-    const data = await api('/admin/login', { method: 'POST', body: { password } });
+    const data = await api('/admin/login', { method: 'POST', body: { passcode: password } });
     adminToken = data.token;
     adminRole = data.admin ? data.admin.role : 'viewer';
     adminName = data.admin ? data.admin.name : '';
