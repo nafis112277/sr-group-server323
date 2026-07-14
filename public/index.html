@@ -1300,10 +1300,18 @@ function addMessage(role, text, opts = {}) {
 
     row.appendChild(actions);
   }
-
-  box.appendChild(row);
+box.appendChild(row);
   box.scrollTop = box.scrollHeight;
+  if (role === 'user') updateEditButtonsVisibility();
   return { record: msgRecord, row };
+}
+
+function updateEditButtonsVisibility() {
+  const userRows = [...document.querySelectorAll('#messages .msg-row.user')];
+  userRows.forEach((r, i) => {
+    const editBtn = r.querySelector('.msg-actions .msg-action-btn');
+    if (editBtn) editBtn.style.display = (i === userRows.length - 1) ? '' : 'none';
+  });
 }
 
 function startEditMessage(row, msgRecord) {
