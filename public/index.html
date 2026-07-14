@@ -484,6 +484,12 @@
   .artifact-card-sub{
     font-size:11px; color:var(--text-soft); font-family:'JetBrains Mono', monospace; margin-top:2px;
   }
+  .artifact-badge{
+  display:inline-block; margin-left:6px; font-size:10.5px;
+  padding:1px 7px; border-radius:6px; font-family:'Inter',sans-serif;
+}
+.artifact-badge.clean{ color:var(--accent-glow); background:rgba(63,225,198,0.13); }
+.artifact-badge.error{ color:var(--danger); background:rgba(255,107,107,0.13); }
   .msg code.inline-code{
     background:rgba(255,255,255,0.08); border-radius:4px; padding:1px 6px;
     font-family:'JetBrains Mono', monospace; font-size:0.9em;
@@ -1196,7 +1202,55 @@ async function enterChat() {
 
 const artifactStore = {};
 let artifactCounter = 0;
+function checkCodeErrors(lang, code) {
+  const l = (lang || '').toLowerCase();
 
+  if (l === 'json') {
+    try { JSON.parse(code); return { status: 'clean', label: 'No errors' }; }
+    catch (e) { return { status: 'error', label: 'Invalid JSON' }; }
+  }
+
+  if (l === 'javascript' || l === 'js') {
+    try { new Function(code); return { status: 'clean', label: 'No syntax errors' }; }
+    catch (e) { return { status: 'error', label: 'Syntax error' }; }
+  }
+
+  if (l === 'html' || l === 'htm') {
+    const doc = new DOMParser().parseFromString(code, 'text/html');
+    if (doc.querySelector('parsererror')) return { status: 'error', label: 'Markup error' };
+    return { status: 'clean', label: 'No errors' };
+  }
+
+  return checkBracketBalance(code);
+}
+
+function checkBracketBalance(code) {
+  const opens = { '(': ')', '[': ']', '{': '}' };
+  const closes = { ')': '(', ']': '[', '}': '{' };
+  const stack = [];
+  let inString = null;
+  let issues = 0;
+
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    const prev = code[i - 1];
+    if (inString) {
+      if (ch === inString && prev !== '\\') inString = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { inString = ch; continue; }
+    if (ch === '#') { while (i < code.length && code[i] !== '\n') i++; continue; }
+    if (opens[ch]) stack.push(ch);
+    else if (closes[ch]) {
+      if (stack.length === 0 || stack[stack.length - 1] !== closes[ch]) issues++;
+      else stack.pop();
+    }
+  }
+  issues += stack.length;
+
+  if (issues === 0) return { status: 'clean', label: 'Looks balanced', basic: true };
+  return { status: 'error', label: `${issues} possible issue${issues > 1 ? 's' : ''}`, basic: true };
+}
 function renderMessageHtml(text) {
   const parts = [];
   const fenceRegex = /```(\w*)\n?([\s\S]*?)```/g;
@@ -1216,18 +1270,24 @@ function renderMessageHtml(text) {
 
   return parts
     .map((part) => {
-      if (part.type === 'code') {
-        const id = 'artifact-' + (++artifactCounter);
-        artifactStore[id] = { lang: part.lang, code: part.value };
-        const lineCount = part.value.split('\n').length;
-        return `<div class="artifact-card" data-artifact-id="${id}">
-          <div class="artifact-card-icon">&lt;/&gt;</div>
-          <div class="artifact-card-info">
-            <div class="artifact-card-title">${escapeHtml(part.lang)} snippet</div>
-            <div class="artifact-card-sub">${lineCount} line${lineCount === 1 ? '' : 's'} · Click to view</div>
-          </div>
-        </div>`;
-      }
+     if (part.type === 'code') {
+  const id = 'artifact-' + (++artifactCounter);
+  artifactStore[id] = { lang: part.lang, code: part.value };
+  const lineCount = part.value.split('\n').length;
+
+  const check = checkCodeErrors(part.lang, part.value);
+  const badge = check.status
+    ? `<span class="artifact-badge ${check.status}">${check.status === 'clean' ? '✓' : '⚠'} ${escapeHtml(check.label)}${check.basic ? ' · basic check' : ''}</span>`
+    : '';
+
+  return `<div class="artifact-card" data-artifact-id="${id}">
+    <div class="artifact-card-icon">&lt;/&gt;</div>
+    <div class="artifact-card-info">
+      <div class="artifact-card-title">${escapeHtml(part.lang)} snippet</div>
+      <div class="artifact-card-sub">${lineCount} line${lineCount === 1 ? '' : 's'} · Click to view ${badge}</div>
+    </div>
+  </div>`;
+}
       let escaped = escapeHtml(part.value).replace(
         /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
         (m, alt, url) =>
