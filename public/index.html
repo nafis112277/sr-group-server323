@@ -328,6 +328,61 @@
   .settings-field textarea{ min-height:70px; }
   .save-note{ font-size:12px; color:var(--accent-glow); font-family:'JetBrains Mono', monospace; margin-top:8px; }
 
+  /* ---------- Analytics dashboard ---------- */
+  .stats-row{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:22px; }
+  .stat-card{
+    flex:1; min-width:150px; background:var(--panel); border:1px solid var(--border-glass);
+    border-radius:12px; padding:14px 16px;
+  }
+  .stat-card .stat-label{
+    font-family:'JetBrains Mono', monospace; font-size:10.5px; text-transform:uppercase;
+    letter-spacing:0.06em; color:var(--text-soft);
+  }
+  .stat-card .stat-value{ font-family:'Space Grotesk', sans-serif; font-size:26px; font-weight:700; margin-top:6px; }
+  .stat-card .stat-sub{ font-size:11px; color:var(--text-soft); margin-top:2px; }
+  .analytics-range{ display:flex; align-items:center; gap:8px; margin-bottom:18px; }
+  .analytics-range select{
+    background:var(--panel); border:1px solid var(--border-glass); border-radius:8px;
+    padding:7px 10px; color:var(--text-primary); font-size:12.5px; font-family:'Inter',sans-serif;
+  }
+  .chart-block{ margin-bottom:26px; }
+  .chart-block h4{ font-family:'Space Grotesk', sans-serif; font-size:14px; margin:0 0 10px; font-weight:600; }
+  .chart-svg-wrap{
+    background:var(--panel); border:1px solid var(--border-glass); border-radius:12px;
+    padding:16px; overflow-x:auto;
+  }
+  .chart-svg-wrap svg{ display:block; }
+  .top-questions-list{ display:flex; flex-direction:column; gap:6px; }
+  .top-questions-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:9px 12px; background:var(--panel); border:1px solid var(--border-glass); border-radius:8px;
+  }
+  .top-questions-row .tq-text{ font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
+  .top-questions-row .tq-count{
+    font-family:'JetBrains Mono', monospace; font-size:11.5px; color:var(--accent-glow);
+    background:rgba(63,225,198,0.1); border-radius:6px; padding:2px 8px; flex-shrink:0;
+  }
+
+  /* ---------- Admin accounts (role-based) ---------- */
+  .role-badge{
+    font-family:'JetBrains Mono', monospace; font-size:10px; padding:2px 8px; border-radius:6px;
+    border:1px solid var(--border-glass); color:var(--text-soft); text-transform:uppercase; letter-spacing:0.04em;
+  }
+  .role-badge.super{ color:var(--accent-glow); border-color:var(--accent-glow); }
+  .admin-item{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    border:1px solid var(--border-glass); border-radius:10px; padding:11px 14px;
+    background:rgba(255,255,255,0.03); margin-bottom:8px;
+  }
+  .admin-item-info{ min-width:0; }
+  .admin-item-name{ font-weight:600; font-size:13.5px; display:flex; align-items:center; gap:8px; }
+  .admin-item-email{ color:var(--text-soft); font-size:12px; margin-top:2px; }
+  .admin-item-actions{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
+  .role-select{
+    background:var(--panel); border:1px solid var(--border-glass); border-radius:6px;
+    padding:4px 7px; color:var(--text-primary); font-size:11.5px; font-family:'JetBrains Mono',monospace;
+  }
+
   /* ---------- Per-customer quota cell ---------- */
   .quota-cell{ display:flex; align-items:center; gap:6px; }
   .quota-input{
@@ -581,10 +636,11 @@
       <div class="auth-head">
         <div class="brandmark"><span class="dot"></span> SR Group</div>
         <h1>Admin access</h1>
-        <p>Enter the admin passcode.</p>
+        <p>Sign in with your admin account.</p>
       </div>
       <div id="adminError"></div>
-      <div class="field"><label>Passcode</label><input id="adminPasscode" type="password" placeholder="••••••••"></div>
+      <div class="field"><label>Email</label><input id="adminEmail" type="email" placeholder="admin@example.com"></div>
+      <div class="field"><label>Password</label><input id="adminPassword" type="password" placeholder="••••••••"></div>
       <button class="btn-primary" id="adminLoginBtn">Enter dashboard</button>
       <div class="switch-line"><a id="backToLoginFromAdmin">← Back to sign in</a></div>
     </div>
@@ -749,11 +805,17 @@
 <div class="screen" id="screen-adminDashboard">
   <div class="admin-top">
     <div class="brandmark"><span class="dot"></span> SR Group — Admin</div>
-    <button class="logout-btn" id="adminLogoutBtn">Exit admin</button>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span class="who" id="adminWhoami"></span>
+      <button class="logout-btn" id="adminLogoutBtn">Exit admin</button>
+    </div>
   </div>
   <div class="admin-tabs">
     <button class="tab-btn active" data-tab="customers">Customers</button>
-    <button class="tab-btn" data-tab="settings">AI Settings</button>
+    <button class="tab-btn" data-tab="analytics">Analytics</button>
+    <button class="tab-btn" data-tab="myaccount">My account</button>
+    <button class="tab-btn" data-tab="settings" id="tabBtnSettings" style="display:none;">AI Settings</button>
+    <button class="tab-btn" data-tab="admins" id="tabBtnAdmins" style="display:none;">Admins</button>
   </div>
   <div class="admin-body">
     <div class="admin-panel active" id="panel-customers">
@@ -764,6 +826,40 @@
       <h3 id="transcriptTitle" style="font-family:'Space Grotesk',sans-serif;"></h3>
       <div class="transcript" id="transcriptBody"></div>
     </div>
+
+    <div class="admin-panel" id="panel-analytics">
+      <div class="analytics-range">
+        <label style="font-family:'JetBrains Mono',monospace; font-size:10.5px; text-transform:uppercase; color:var(--text-soft);">Range</label>
+        <select id="analyticsRangeSelect">
+          <option value="7">Last 7 days</option>
+          <option value="14" selected>Last 14 days</option>
+          <option value="30">Last 30 days</option>
+        </select>
+      </div>
+      <div id="analyticsContent"><div class="empty-state">Loading...</div></div>
+    </div>
+
+    <div class="admin-panel" id="panel-myaccount">
+      <div class="settings-field" style="max-width:500px;">
+        <p class="hint" style="margin-bottom:16px;">Change the password for your own admin account.</p>
+      </div>
+      <div id="myAccountError"></div>
+      <div class="settings-field">
+        <label>Current password</label>
+        <input id="myAccountCurrentPassword" type="password" placeholder="••••••••">
+      </div>
+      <div class="settings-field">
+        <label>New password</label>
+        <input id="myAccountNewPassword" type="password" placeholder="At least 6 characters">
+      </div>
+      <div class="settings-field">
+        <label>Confirm new password</label>
+        <input id="myAccountConfirmPassword" type="password" placeholder="Type it again">
+      </div>
+      <button class="btn-primary" style="max-width:220px;" id="myAccountChangePasswordBtn">Update password</button>
+      <div class="save-note" id="myAccountSaveNote" style="display:none;">Password updated.</div>
+    </div>
+
     <div class="admin-panel" id="panel-settings">
       <div class="settings-field">
         <label>What SR Group does</label>
@@ -784,25 +880,37 @@
       </div>
       <button class="btn-primary" style="max-width:200px;" id="saveSettingsBtn">Save settings</button>
       <div class="save-note" id="saveNote" style="display:none;">Saved.</div>
+    </div>
 
-      <hr style="border:none; border-top:1px solid var(--border-glass); margin:32px 0;">
+    <div class="admin-panel" id="panel-admins">
+      <p class="hint" style="color:var(--text-soft); font-size:12.5px; margin:0 0 18px;">Super admins can manage AI settings, customer accounts, and other admins. Viewers can see Customers and Analytics only.</p>
+      <div id="adminsError"></div>
+      <div id="adminsList"><div class="empty-state">Loading...</div></div>
 
-      <h3 style="font-family:'Space Grotesk',sans-serif; font-size:16px; margin-bottom:14px;">Change admin passcode</h3>
-      <div id="passcodeError"></div>
+      <hr class="skills-divider">
+
+      <h3 style="font-family:'Space Grotesk',sans-serif; font-size:15px; margin-bottom:14px;">Add a new admin</h3>
       <div class="settings-field">
-        <label>Current passcode</label>
-        <input id="currentPasscode" type="password" placeholder="••••••••">
+        <label>Name</label>
+        <input id="newAdminName" type="text" placeholder="Full name">
       </div>
       <div class="settings-field">
-        <label>New passcode</label>
-        <input id="newPasscode" type="password" placeholder="At least 6 characters">
+        <label>Email</label>
+        <input id="newAdminEmail" type="email" placeholder="admin@example.com">
       </div>
       <div class="settings-field">
-        <label>Confirm new passcode</label>
-        <input id="confirmPasscode" type="password" placeholder="Type it again">
+        <label>Temporary password</label>
+        <input id="newAdminPassword" type="password" placeholder="At least 6 characters">
       </div>
-      <button class="btn-primary" style="max-width:220px;" id="changePasscodeBtn">Update passcode</button>
-      <div class="save-note" id="passcodeSaveNote" style="display:none;">Passcode updated.</div>
+      <div class="settings-field" style="max-width:220px;">
+        <label>Role</label>
+        <select id="newAdminRole" class="role-select" style="width:100%; padding:9px 10px; font-size:13px;">
+          <option value="viewer">Viewer</option>
+          <option value="super_admin">Super admin</option>
+        </select>
+      </div>
+      <button class="btn-primary" style="max-width:200px;" id="addAdminBtn">Add admin</button>
+      <div class="save-note" id="addAdminSaveNote" style="display:none;">Added.</div>
     </div>
   </div>
 </div>
@@ -1663,30 +1771,57 @@ document.getElementById('changeOwnPasswordBtn').onclick = async () => {
 };
 
 /* ---------------- Admin ---------------- */
+let adminRole = null;   // 'super_admin' | 'viewer'
+let adminName = null;
+
 document.getElementById('adminLoginBtn').onclick = async () => {
-  const code = document.getElementById('adminPasscode').value;
+  const email = document.getElementById('adminEmail').value.trim().toLowerCase();
+  const password = document.getElementById('adminPassword').value;
+  if (!email || !password) { setError('adminError', 'Enter your email and password.'); return; }
   try {
-    const data = await api('/admin/login', { method: 'POST', body: { passcode: code } });
+    const data = await api('/admin/login', { method: 'POST', body: { email, password } });
     adminToken = data.token;
+    adminRole = data.admin ? data.admin.role : 'viewer';
+    adminName = data.admin ? data.admin.name : '';
     setError('adminError', '');
-    document.getElementById('adminPasscode').value = '';
+    document.getElementById('adminPassword').value = '';
+    document.getElementById('adminWhoami').textContent = adminName + (adminRole === 'super_admin' ? ' · Super admin' : ' · Viewer');
+    applyAdminRoleUI();
     showScreen('screen-adminDashboard');
+    // ভিউয়ার হলে settings/admins ট্যাব লুকানো থাকে, তাই সবসময় customers ট্যাবেই ফিরে আসি
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelector('.tab-btn[data-tab="customers"]').classList.add('active');
+    document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
+    document.getElementById('panel-customers').classList.add('active');
     loadCustomerList();
   } catch (err) {
     setError('adminError', err.message);
   }
 };
-document.getElementById('adminLogoutBtn').onclick = () => { adminToken = null; showScreen('screen-login'); };
+document.getElementById('adminLogoutBtn').onclick = () => { adminToken = null; adminRole = null; adminName = null; showScreen('screen-login'); };
+
+// super_admin-only অংশ (Settings ট্যাব, Admins ট্যাব) viewer-এর কাছে সম্পূর্ণ লুকানো থাকে —
+// শুধু CSS display:none করলেই যথেষ্ট, কারণ সংবেদনশীল অ্যাকশনগুলো ব্যাকএন্ডেও role-check হবে ধরে নিচ্ছি।
+function applyAdminRoleUI() {
+  const isSuper = adminRole === 'super_admin';
+  document.getElementById('tabBtnSettings').style.display = isSuper ? '' : 'none';
+  document.getElementById('tabBtnAdmins').style.display = isSuper ? '' : 'none';
+}
 
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.onclick = () => {
+    if (btn.style.display === 'none') return;
     document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'settings') loadSettingsPanel();
+    if (btn.dataset.tab === 'analytics') loadAnalyticsPanel();
+    if (btn.dataset.tab === 'admins') loadAdminsPanel();
   };
 });
+
+document.getElementById('analyticsRangeSelect').onchange = () => loadAnalyticsPanel();
 
 /* ---------- Customer list, with per-customer quota column + a safe "reset password" action ----------
    নোট: আমরা কারও আসল পাসওয়ার্ড admin panel-এ কখনো দেখাই না (backend-ও hash করে রাখে, plaintext ফেরত দেয় না)।
@@ -1701,6 +1836,7 @@ async function loadCustomerList() {
     if (customers.length === 0) { wrap.innerHTML = '<div class="empty-state">No customers have signed up yet.</div>'; return; }
 
     let rows = '';
+    const isSuper = adminRole === 'super_admin';
     for (const u of customers) {
       const statusLabel = u.blocked
         ? '<span style="color:var(--danger); font-family:\'JetBrains Mono\',monospace; font-size:11.5px;">Blocked</span>'
@@ -1709,22 +1845,26 @@ async function loadCustomerList() {
       const actionColor = u.blocked ? 'var(--accent-glow)' : 'var(--danger)';
       const lastLogin = u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never (signed up only)';
       const quotaValue = (u.dailyLimit !== null && u.dailyLimit !== undefined) ? u.dailyLimit : '';
+      // viewer role শুধু দেখতে পাবে, quota/reset/block কোনোটাই করতে পারবে না
+      const quotaCell = isSuper
+        ? `<div class="quota-cell">
+            <input type="number" min="0" step="1" class="quota-input" placeholder="default"
+              value="${quotaValue}" data-email="${escapeHtml(u.email)}">
+            <button class="quota-save-btn" data-email="${escapeHtml(u.email)}">Save</button>
+          </div>`
+        : `<span style="font-size:12.5px; color:var(--text-soft);">${quotaValue !== '' ? quotaValue : 'default'}</span>`;
+      const resetCell = isSuper ? `<span class="view-link reset-pw" data-email="${escapeHtml(u.email)}">Reset password</span>` : '';
+      const blockCell = isSuper ? `<span class="view-link block-toggle" style="color:${actionColor};" data-email="${escapeHtml(u.email)}">${actionLabel}</span>` : '';
       rows += `<tr data-email="${escapeHtml(u.email)}">
         <td>${escapeHtml(u.name)}</td>
         <td>${escapeHtml(u.email)}</td>
         <td>${new Date(u.createdAt).toLocaleDateString()}</td>
         <td style="font-size:12px;">${lastLogin}</td>
         <td>${statusLabel}</td>
-        <td>
-          <div class="quota-cell">
-            <input type="number" min="0" step="1" class="quota-input" placeholder="default"
-              value="${quotaValue}" data-email="${escapeHtml(u.email)}">
-            <button class="quota-save-btn" data-email="${escapeHtml(u.email)}">Save</button>
-          </div>
-        </td>
+        <td>${quotaCell}</td>
         <td><span class="view-link" data-email="${escapeHtml(u.email)}" data-name="${escapeHtml(u.name)}">View chat →</span></td>
-        <td><span class="view-link reset-pw" data-email="${escapeHtml(u.email)}">Reset password</span></td>
-        <td><span class="view-link block-toggle" style="color:${actionColor};" data-email="${escapeHtml(u.email)}">${actionLabel}</span></td>
+        <td>${resetCell}</td>
+        <td>${blockCell}</td>
       </tr>`;
     }
     wrap.innerHTML = `<div class="table-scroll"><table><thead><tr>
@@ -1880,27 +2020,197 @@ document.getElementById('saveSettingsBtn').onclick = async () => {
   } catch (e) { console.error(e); }
 };
 
-document.getElementById('changePasscodeBtn').onclick = async () => {
-  const current = document.getElementById('currentPasscode').value;
-  const next = document.getElementById('newPasscode').value;
-  const confirm = document.getElementById('confirmPasscode').value;
-  const errBox = document.getElementById('passcodeError');
-  errBox.innerHTML = '';
+/* ---------------- My account: change my own admin password ---------------- */
+document.getElementById('myAccountChangePasswordBtn').onclick = async () => {
+  const currentPassword = document.getElementById('myAccountCurrentPassword').value;
+  const newPassword = document.getElementById('myAccountNewPassword').value;
+  const confirmPassword = document.getElementById('myAccountConfirmPassword').value;
+  setError('myAccountError', '');
 
-  if (!current || !next || !confirm) { errBox.innerHTML = '<div class="error-note">Fill in all three fields.</div>'; return; }
-  if (next.length < 6) { errBox.innerHTML = '<div class="error-note">New passcode should be at least 6 characters.</div>'; return; }
-  if (next !== confirm) { errBox.innerHTML = "<div class=\"error-note\">New passcode and confirmation don't match.</div>"; return; }
+  if (!currentPassword || !newPassword || !confirmPassword) { setError('myAccountError', 'Fill in all three fields.'); return; }
+  if (newPassword.length < 6) { setError('myAccountError', 'New password should be at least 6 characters.'); return; }
+  if (newPassword !== confirmPassword) { setError('myAccountError', "New password and confirmation don't match."); return; }
 
   try {
-    await api('/admin/passcode', { method: 'POST', body: { current, next }, token: adminToken });
-    document.getElementById('currentPasscode').value = '';
-    document.getElementById('newPasscode').value = '';
-    document.getElementById('confirmPasscode').value = '';
-    const note = document.getElementById('passcodeSaveNote');
+    await api('/admin/change-password', { method: 'POST', body: { currentPassword, newPassword }, token: adminToken });
+    document.getElementById('myAccountCurrentPassword').value = '';
+    document.getElementById('myAccountNewPassword').value = '';
+    document.getElementById('myAccountConfirmPassword').value = '';
+    const note = document.getElementById('myAccountSaveNote');
     note.style.display = 'block';
     setTimeout(() => (note.style.display = 'none'), 2500);
   } catch (err) {
-    errBox.innerHTML = `<div class="error-note">${err.message}</div>`;
+    setError('myAccountError', err.message);
+  }
+};
+
+/* ---------------- Analytics dashboard ----------------
+   ব্যাকএন্ডে GET /admin/analytics?days=N থাকতে হবে, যেটা রিটার্ন করবে:
+   { dailyActiveUsers:[{date,count}], messageVolume:[{date,count}], topQuestions:[{question,count}] }
+   dailyActiveUsers/messageVolume তারিখ অনুযায়ী sorted (পুরাতন থেকে নতুন) ধরে নিচ্ছি। কোনো chart library
+   ছাড়াই সাদামাটা SVG bar chart বানিয়ে নিচ্ছি যাতে বাড়তি dependency লাগে না। */
+function buildBarChartSvg(points, { color = '#4F8CFF', height = 180 } = {}) {
+  const width = Math.max(360, points.length * 46);
+  const paddingLeft = 34, paddingBottom = 26, paddingTop = 12;
+  const chartH = height - paddingTop - paddingBottom;
+  const maxVal = Math.max(1, ...points.map((p) => p.count));
+  const barW = Math.min(28, (width - paddingLeft) / points.length - 8);
+
+  let bars = '';
+  let labels = '';
+  points.forEach((p, i) => {
+    const x = paddingLeft + i * ((width - paddingLeft) / points.length) + 4;
+    const barH = (p.count / maxVal) * chartH;
+    const y = paddingTop + (chartH - barH);
+    bars += `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(barH, 1)}" rx="3" fill="${color}" opacity="0.88"><title>${escapeHtml(p.date)}: ${p.count}</title></rect>`;
+    bars += `<text x="${x + barW / 2}" y="${y - 5}" text-anchor="middle" font-size="10.5" font-family="JetBrains Mono, monospace" fill="#ECEFF4">${p.count}</text>`;
+    const shortDate = (p.date || '').slice(5); // MM-DD
+    labels += `<text x="${x + barW / 2}" y="${height - paddingBottom + 15}" text-anchor="middle" font-size="9.5" font-family="JetBrains Mono, monospace" fill="#8C97A8">${escapeHtml(shortDate)}</text>`;
+  });
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <line x1="${paddingLeft}" y1="${paddingTop + chartH}" x2="${width}" y2="${paddingTop + chartH}" stroke="#8C97A8" stroke-opacity="0.3"/>
+    ${bars}
+    ${labels}
+  </svg>`;
+}
+
+async function loadAnalyticsPanel() {
+  const content = document.getElementById('analyticsContent');
+  content.innerHTML = '<div class="empty-state">Loading...</div>';
+  const days = document.getElementById('analyticsRangeSelect').value;
+  try {
+    const data = await api(`/admin/analytics?days=${days}`, { token: adminToken });
+    const dau = data.dailyActiveUsers || [];
+    const volume = data.messageVolume || [];
+    const topQuestions = data.topQuestions || [];
+
+    const todayDau = dau.length ? dau[dau.length - 1].count : 0;
+    const todayVolume = volume.length ? volume[volume.length - 1].count : 0;
+    const totalVolume = volume.reduce((sum, p) => sum + p.count, 0);
+    const avgDau = dau.length ? Math.round(dau.reduce((s, p) => s + p.count, 0) / dau.length) : 0;
+
+    content.innerHTML = `
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Active users today</div>
+          <div class="stat-value">${todayDau}</div>
+          <div class="stat-sub">avg ${avgDau}/day over range</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Messages today</div>
+          <div class="stat-value">${todayVolume}</div>
+          <div class="stat-sub">${totalVolume} total over range</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Top question asked</div>
+          <div class="stat-value" style="font-size:15px; line-height:1.4;">${topQuestions.length ? escapeHtml(topQuestions[0].question) : '—'}</div>
+          <div class="stat-sub">${topQuestions.length ? topQuestions[0].count + ' times' : ''}</div>
+        </div>
+      </div>
+
+      <div class="chart-block">
+        <h4>Daily active users</h4>
+        <div class="chart-svg-wrap">${dau.length ? buildBarChartSvg(dau, { color: '#4F8CFF' }) : '<div class="empty-state">No data yet.</div>'}</div>
+      </div>
+
+      <div class="chart-block">
+        <h4>Message volume</h4>
+        <div class="chart-svg-wrap">${volume.length ? buildBarChartSvg(volume, { color: '#8B5CF6' }) : '<div class="empty-state">No data yet.</div>'}</div>
+      </div>
+
+      <div class="chart-block">
+        <h4>Top questions</h4>
+        <div class="top-questions-list">
+          ${topQuestions.length
+            ? topQuestions.map((q) => `<div class="top-questions-row"><span class="tq-text">${escapeHtml(q.question)}</span><span class="tq-count">${q.count}×</span></div>`).join('')
+            : '<div class="empty-state">No questions logged yet.</div>'}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = '<div class="empty-state">Couldn\'t load analytics.</div>';
+    console.error(err);
+  }
+}
+
+/* ---------------- Admin accounts (super_admin manages other admins) ---------------- */
+async function loadAdminsPanel() {
+  const wrap = document.getElementById('adminsList');
+  wrap.innerHTML = '<div class="empty-state">Loading...</div>';
+  setError('adminsError', '');
+  try {
+    const data = await api('/admin/admins', { token: adminToken });
+    const admins = data.admins || [];
+    if (admins.length === 0) { wrap.innerHTML = '<div class="empty-state">No admins found.</div>'; return; }
+    wrap.innerHTML = '';
+    admins.forEach((a) => {
+      const item = document.createElement('div');
+      item.className = 'admin-item';
+      const isSelf = a.email === (data.selfEmail || '');
+      item.innerHTML = `
+        <div class="admin-item-info">
+          <div class="admin-item-name">${escapeHtml(a.name)} <span class="role-badge ${a.role === 'super_admin' ? 'super' : ''}">${a.role === 'super_admin' ? 'Super admin' : 'Viewer'}</span>${isSelf ? ' <span style="color:var(--text-soft); font-size:11px;">(you)</span>' : ''}</div>
+          <div class="admin-item-email">${escapeHtml(a.email)}</div>
+        </div>
+        <div class="admin-item-actions">
+          <select class="role-select" data-id="${a.id}" ${isSelf ? 'disabled' : ''}>
+            <option value="viewer" ${a.role === 'viewer' ? 'selected' : ''}>Viewer</option>
+            <option value="super_admin" ${a.role === 'super_admin' ? 'selected' : ''}>Super admin</option>
+          </select>
+          ${isSelf ? '' : `<button class="skill-remove-btn" data-id="${a.id}" type="button">Remove</button>`}
+        </div>`;
+      wrap.appendChild(item);
+    });
+
+    wrap.querySelectorAll('.role-select').forEach((sel) => {
+      if (sel.disabled) return;
+      sel.onchange = async () => {
+        try {
+          await api(`/admin/admins/${sel.dataset.id}/role`, { method: 'POST', body: { role: sel.value }, token: adminToken });
+        } catch (err) {
+          setError('adminsError', err.message);
+          loadAdminsPanel();
+        }
+      };
+    });
+    wrap.querySelectorAll('.skill-remove-btn').forEach((btn) => {
+      btn.onclick = async () => {
+        if (!confirm('Remove this admin account? They will lose access immediately.')) return;
+        try {
+          await api(`/admin/admins/${btn.dataset.id}`, { method: 'DELETE', token: adminToken });
+          loadAdminsPanel();
+        } catch (err) {
+          setError('adminsError', err.message);
+        }
+      };
+    });
+  } catch (err) {
+    wrap.innerHTML = '<div class="empty-state">Couldn\'t load admins.</div>';
+    console.error(err);
+  }
+}
+
+document.getElementById('addAdminBtn').onclick = async () => {
+  const name = document.getElementById('newAdminName').value.trim();
+  const email = document.getElementById('newAdminEmail').value.trim().toLowerCase();
+  const password = document.getElementById('newAdminPassword').value;
+  const role = document.getElementById('newAdminRole').value;
+  setError('adminsError', '');
+  if (!name || !email || !password) { setError('adminsError', 'Fill in name, email, and password.'); return; }
+  if (password.length < 6) { setError('adminsError', 'Password should be at least 6 characters.'); return; }
+  try {
+    await api('/admin/admins', { method: 'POST', body: { name, email, password, role }, token: adminToken });
+    document.getElementById('newAdminName').value = '';
+    document.getElementById('newAdminEmail').value = '';
+    document.getElementById('newAdminPassword').value = '';
+    document.getElementById('newAdminRole').value = 'viewer';
+    const note = document.getElementById('addAdminSaveNote');
+    note.style.display = 'block';
+    setTimeout(() => (note.style.display = 'none'), 2000);
+    loadAdminsPanel();
+  } catch (err) {
+    setError('adminsError', err.message);
   }
 };
 
