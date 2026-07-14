@@ -185,6 +185,7 @@
     font-family:'JetBrains Mono', monospace; padding:2px 4px;
   }
   .msg-action-btn:hover{ color:var(--accent-glow); }
+  .msg-action-btn:disabled{ opacity:0.5; cursor:default; }
   .msg-edit-box{ width:100%; display:flex; flex-direction:column; gap:8px; }
   .msg-edit-box textarea{
     width:100%; min-height:60px; background:rgba(0,0,0,0.2); border:1px solid var(--border-glass);
@@ -1192,6 +1193,28 @@ function addMessage(role, text, opts = {}) {
     row.appendChild(actions);
   }
 
+  // বট রিপ্লাইয়ে Copy + Regenerate — দুটোই hover করলে দেখা যায়, .msg-row:hover .msg-actions CSS আগে থেকেই আছে
+  if (role === 'bot' && text) {
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'msg-action-btn';
+    copyBtn.type = 'button';
+    copyBtn.textContent = '⧉ Copy';
+    copyBtn.onclick = () => copyBotMessage(msgRecord, copyBtn);
+    actions.appendChild(copyBtn);
+
+    const regenBtn = document.createElement('button');
+    regenBtn.className = 'msg-action-btn';
+    regenBtn.type = 'button';
+    regenBtn.textContent = '↻ Regenerate';
+    regenBtn.onclick = () => regenerateBotMessage(row, msgRecord, regenBtn);
+    actions.appendChild(regenBtn);
+
+    row.appendChild(actions);
+  }
+
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;
   return { record: msgRecord, row };
@@ -1256,7 +1279,7 @@ async function submitEditedMessage(row, msgRecord, newContent, saveBtn) {
     currentMessages = currentMessages.slice(0, idx);
     row.remove();
     addMessage('user', newContent, { id: msgRecord.id, imageUrl: msgRecord.imageUrl });
-    if (data.reply) addMessage('bot', data.reply);
+    if (data.reply) addMessage('bot', data.reply, { id: data.assistantMessageId || null });
 
     const conv = conversations.find((c) => c.id === currentConvId);
     if (conv) { conv.updatedAt = new Date().toISOString(); if (data.title) conv.title = data.title; renderConvList(); }
@@ -1265,6 +1288,79 @@ async function submitEditedMessage(row, msgRecord, newContent, saveBtn) {
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save & regenerate';
   }
+}
+
+/* ---------------- Copy a bot reply to clipboard ---------------- */
+async function copyBotMessage(msgRecord, btn) {
+  try {
+    await navigator.clipboard.writeText(msgRecord.content);
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = msgRecord.content;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (err2) { /* ignore */ }
+    ta.remove();
+  }
+  const original = btn.textContent;
+  btn.textContent = '✓ Copied';
+  setTimeout(() => { btn.textContent = original; }, 1500);
+}
+
+/* ---------------- Regenerate a bot reply ----------------
+   ওই নির্দিষ্ট assistant মেসেজের জন্য নতুন করে reply চাই, আগের user মেসেজ/context অক্ষত রেখে।
+   ব্যাকএন্ডে POST /chat/conversations/:id/messages/:messageId/regenerate থাকতে হবে,
+   যেটা { reply, replyImageUrl? } রিটার্ন করে (edit endpoint-এর মতোই কিন্তু কোনো user content বদলায় না)।
+   নতুন করে পাঠানো মেসেজেও assistantMessageId লাগবে (sendMessage-এ pass করা হয়েছে) — নাহলে
+   পাঠানোর পরপরই "Regenerate" চাপলে id-বিহীন অবস্থায় পড়বে। */
+async function regenerateBotMessage(row, msgRecord, btn) {
+  if (!msgRecord.id) {
+    alert("This reply can't be regenerated (missing id from server).");
+    return;
+  }
+  if (sending) return;
+  sending = true;
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = '↻ Regenerating...';
+  const bubble = row.querySelector('.msg');
+  bubble.style.opacity = '0.55';
+
+  try {
+    const data = await api(`/chat/conversations/${currentConvId}/messages/${msgRecord.id}/regenerate`, {
+      method: 'POST', token: userToken,
+    });
+
+    msgRecord.content = data.reply;
+    msgRecord.imageUrl = data.replyImageUrl || null;
+
+    // বাবল রিফ্রেশ করি — নতুন reply-তেও কোড ব্লক/ছবি থাকতে পারে, তাই আগের মতোই hasRichContent চেক করি
+    const oldTextWrap = bubble.querySelector('div:last-child');
+    const hasRichContent = data.reply.includes('```') || /!\[[^\]]*\]\(https?:\/\/[^\s)]+\)/.test(data.reply);
+    const textWrap = document.createElement('div');
+    if (hasRichContent) {
+      textWrap.innerHTML = renderMessageHtml(data.reply);
+    } else {
+      textWrap.textContent = data.reply;
+    }
+    if (oldTextWrap && oldTextWrap.parentElement === bubble) {
+      bubble.replaceChild(textWrap, oldTextWrap);
+    } else {
+      bubble.appendChild(textWrap);
+    }
+
+    const conv = conversations.find((c) => c.id === currentConvId);
+    if (conv) { conv.updatedAt = new Date().toISOString(); renderConvList(); }
+  } catch (err) {
+    alert("Couldn't regenerate this reply: " + err.message);
+  }
+
+  bubble.style.opacity = '';
+  btn.textContent = originalLabel;
+  btn.disabled = false;
+  sending = false;
 }
 
 /* ---------------- "+" composer menu (photo / skills / web search) ---------------- */
@@ -1373,7 +1469,7 @@ async function sendMessage() {
       userEntry.row.dataset.msgId = data.userMessageId;
     }
 
-    addMessage('bot', data.reply, { imageUrl: data.replyImageUrl || null });
+    addMessage('bot', data.reply, { id: data.assistantMessageId || null, imageUrl: data.replyImageUrl || null });
 
     const conv = conversations.find((c) => c.id === currentConvId);
     if (conv) {
