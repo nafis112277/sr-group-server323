@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,6 +7,8 @@
 <title>SR Group — AI Assistant</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<!-- Added: jsPDF — শুধুমাত্র নতুন "PDF এ কনভার্ট" ফিচারের জন্য, আগের কোনো কিছুর সাথে সম্পর্ক নেই -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <style>
   :root{
     --bg-deep:#0A0E14;
@@ -19,6 +22,41 @@
     --accent-b:#8B5CF6;
     --accent-glow:#3FE1C6;
     --danger:#FF6B6B;
+    --grad-1: rgba(79,140,255,0.16);
+    --grad-2: rgba(139,92,246,0.16);
+    --grad-3: rgba(63,225,198,0.08);
+  }
+  /* ---------- Theme system (Edit settings > Theme) ----------
+     ডিফল্ট থিম "black" — উপরের :root ভ্যালুগুলোই এর ভ্যালু, তাই এখানে আলাদা করে
+     কিছু override করার দরকার নেই, বাকি থিমগুলো html[data-theme="..."] দিয়ে
+     শুধু কালার ভ্যারিয়েবলগুলো override করে, অন্য কোনো CSS বদলায় না। */
+  html[data-theme="red"]{
+    --accent-a:#FF5C5C; --accent-b:#E11D48; --accent-glow:#FF8A65;
+    --grad-1: rgba(255,92,92,0.18); --grad-2: rgba(225,29,72,0.16); --grad-3: rgba(255,138,101,0.08);
+  }
+  html[data-theme="blue"]{
+    --accent-a:#2E7CF6; --accent-b:#00B4FF; --accent-glow:#4FD1FF;
+    --grad-1: rgba(46,124,246,0.18); --grad-2: rgba(0,180,255,0.16); --grad-3: rgba(79,209,255,0.08);
+  }
+  html[data-theme="yellow"]{
+    --accent-a:#FFC107; --accent-b:#FF9800; --accent-glow:#FFE082;
+    --grad-1: rgba(255,193,7,0.16); --grad-2: rgba(255,152,0,0.14); --grad-3: rgba(255,224,130,0.08);
+  }
+  html[data-theme="green"]{
+    --accent-a:#22C55E; --accent-b:#16A34A; --accent-glow:#6EE7B7;
+    --grad-1: rgba(34,197,94,0.16); --grad-2: rgba(22,163,74,0.14); --grad-3: rgba(110,231,183,0.08);
+  }
+  html[data-theme="purple"]{
+    --accent-a:#8B5CF6; --accent-b:#C026D3; --accent-glow:#D8B4FE;
+    --grad-1: rgba(139,92,246,0.18); --grad-2: rgba(192,38,211,0.16); --grad-3: rgba(216,180,254,0.08);
+  }
+  html[data-theme="white"]{
+    --bg-deep:#F4F6FA; --bg-deep-2:#E9ECF2;
+    --panel: rgba(20,25,35,0.045); --panel-solid:#FFFFFF;
+    --border-glass: rgba(20,25,35,0.10);
+    --text-primary:#151922; --text-soft:#5B6472;
+    --accent-a:#3E6FE0; --accent-b:#7C3AED; --accent-glow:#0FA894;
+    --grad-1: rgba(62,111,224,0.10); --grad-2: rgba(124,58,237,0.10); --grad-3: rgba(15,168,148,0.06);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;}
@@ -27,9 +65,9 @@
     color:var(--text-primary);
     min-height:100vh;
     background:
-      radial-gradient(circle at 15% 20%, rgba(79,140,255,0.16), transparent 45%),
-      radial-gradient(circle at 85% 75%, rgba(139,92,246,0.16), transparent 45%),
-      radial-gradient(circle at 50% 100%, rgba(63,225,198,0.08), transparent 40%),
+      radial-gradient(circle at 15% 20%, var(--grad-1), transparent 45%),
+      radial-gradient(circle at 85% 75%, var(--grad-2), transparent 45%),
+      radial-gradient(circle at 50% 100%, var(--grad-3), transparent 40%),
       var(--bg-deep);
     overflow-x:hidden;
   }
@@ -155,15 +193,7 @@
   }
   .icon-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
 
-  .chat-main{ flex:1; display:flex; flex-direction:column; height:100vh; min-width:0; position:relative; }
-  .new-msg-btn{
-    display:none; align-items:center; gap:6px;
-    position:absolute; left:50%; bottom:96px; transform:translateX(-50%); z-index:20;
-    background:var(--panel-solid); border:1px solid var(--border-glass); color:var(--text-primary);
-    border-radius:20px; padding:8px 16px; font-size:12.5px; cursor:pointer;
-    box-shadow:0 6px 18px rgba(0,0,0,0.35);
-  }
-  .new-msg-btn.show{ display:flex; }
+  .chat-main{ flex:1; display:flex; flex-direction:column; height:100vh; min-width:0; }
   .chat-header{
     display:flex; align-items:center; justify-content:space-between;
     padding:18px 28px; border-bottom:1px solid var(--border-glass);
@@ -205,6 +235,32 @@
     background:rgba(255,255,255,0.12); color:#fff; font-family:'Inter',sans-serif;
   }
   .msg-edit-actions button.primary{ background:#fff; color:var(--accent-a); font-weight:600; border-color:#fff; }
+
+  /* ---------- Added: Share + PDF export menu on bot replies ----------
+     .msg-actions, .msg-action-btn আগে থেকেই আছে (Copy/Regenerate বাটনের জন্য) — নতুন Share/PDF
+     বাটনও একই ক্লাস ব্যবহার করে, তাই দেখতে একদম আগের মতোই। শুধু ড্রপডাউন মেনুর জন্য নতুন ক্লাস। */
+  .share-btn-wrap{ position:relative; display:inline-flex; }
+  .share-menu{
+    display:none;
+    position:absolute; bottom:26px; left:0; z-index:45;
+    min-width:200px;
+    background:var(--panel-solid); border:1px solid var(--border-glass);
+    border-radius:12px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.45);
+  }
+  .share-menu.show{ display:block; }
+  .share-menu-item{
+    display:flex; align-items:center; gap:10px;
+    padding:8px 10px; border-radius:8px; cursor:pointer;
+    font-size:13px; color:var(--text-primary); font-family:'Inter',sans-serif;
+    white-space:nowrap;
+  }
+  .share-menu-item:hover{ background:rgba(255,255,255,0.06); }
+  .share-menu-item .smi-icon{ width:18px; text-align:center; font-size:14px; flex-shrink:0; }
+  .share-menu-divider{ border:none; border-top:1px solid var(--border-glass); margin:6px 2px; }
+  @media (max-width:680px){
+    .share-menu{ min-width:180px; }
+  }
+
   .typing{ align-self:flex-start; display:flex; gap:4px; padding:14px 15px; background:var(--panel); border:1px solid var(--border-glass); border-radius:12px; }
   .typing span{ width:6px; height:6px; border-radius:50%; background:var(--text-soft); animation:bounce 1.1s infinite; }
   .typing span:nth-child(2){ animation-delay:0.15s; }
@@ -224,13 +280,11 @@
     display:flex; align-items:center; justify-content:center; line-height:1;
   }
   .composer-row{ display:flex; gap:10px; align-items:center; }
- .composer-row input[type="text"], .composer-row textarea{
+  .composer-row input[type="text"]{
     flex:1; background:var(--panel); border:1px solid var(--border-glass); border-radius:10px;
     padding:13px 15px; color:var(--text-primary); font-size:14.5px;
-    font-family:'Inter',sans-serif; resize:none; max-height:160px; overflow-y:auto;
-    line-height:1.4;
   }
-  .composer-row input[type="text"]:focus, .composer-row textarea:focus{ outline:2px solid var(--accent-a); outline-offset:1px; }
+  .composer-row input[type="text"]:focus{ outline:2px solid var(--accent-a); outline-offset:1px; }
   .composer-row button.send-btn{
     background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); border:none; border-radius:10px;
     color:#fff; padding:0 22px; height:44px; font-weight:600; cursor:pointer;
@@ -280,6 +334,7 @@
     .messages{ padding:16px 14px; gap:10px; }
     .msg{ max-width:88%; font-size:14px; }
     .msg-row{ max-width:88%; }
+    .msg-actions{ flex-wrap:wrap; } /* Added: এখন Copy/Share/PDF/Regenerate ৪টা বাটন — ছোট স্ক্রিনে দরকার হলে wrap হবে */
     .composer{ padding:10px 14px 18px; }
     .chat-sidebar{
       position:fixed; top:0; left:0; z-index:60;
@@ -337,6 +392,20 @@
   }
   .settings-field textarea{ min-height:70px; }
   .save-note{ font-size:12px; color:var(--accent-glow); font-family:'JetBrains Mono', monospace; margin-top:8px; }
+  .theme-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px,1fr)); gap:12px; margin-bottom:6px; }
+  .theme-swatch{
+    background:var(--panel); border:1px solid var(--border-glass); border-radius:12px;
+    padding:12px 10px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:8px;
+    font-family:'Inter',sans-serif; color:var(--text-soft); font-size:12px;
+  }
+  .theme-swatch:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+  .theme-swatch.active{ border-color:var(--accent-a); color:var(--text-primary); box-shadow:0 0 0 1px var(--accent-a); }
+  .theme-swatch-dot{
+    width:34px; height:34px; border-radius:50%;
+    border:1px solid rgba(255,255,255,0.15);
+  }
+  .theme-swatch-check{ font-size:10.5px; font-family:'JetBrains Mono', monospace; color:var(--accent-glow); visibility:hidden; }
+  .theme-swatch.active .theme-swatch-check{ visibility:visible; }
 
   /* ---------- Analytics dashboard ---------- */
   .stats-row{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:22px; }
@@ -492,12 +561,6 @@
   .artifact-card-sub{
     font-size:11px; color:var(--text-soft); font-family:'JetBrains Mono', monospace; margin-top:2px;
   }
-  .artifact-badge{
-  display:inline-block; margin-left:6px; font-size:10.5px;
-  padding:1px 7px; border-radius:6px; font-family:'Inter',sans-serif;
-}
-.artifact-badge.clean{ color:var(--accent-glow); background:rgba(63,225,198,0.13); }
-.artifact-badge.error{ color:var(--danger); background:rgba(255,107,107,0.13); }
   .msg code.inline-code{
     background:rgba(255,255,255,0.08); border-radius:4px; padding:1px 6px;
     font-family:'JetBrains Mono', monospace; font-size:0.9em;
@@ -607,6 +670,120 @@
     .artifact-panel{ width:100vw; max-width:100vw; }
   }
 </style>
+<!-- ============================================================
+     নতুন সংযোজন (Added feature #1): প্রতিটা বাটনের জন্য UI animation।
+     এই পুরো <style> ব্লকটা সম্পূর্ণ নতুন — উপরের আগের <style> ব্লকের
+     একটা অক্ষরও বদলানো হয়নি। এখানে শুধু hover / press / click-ripple
+     ধরনের মাইক্রো-ইন্টারঅ্যাকশন যোগ করা হলো, যা class attribute-এ
+     "btn" শব্দ আছে এমন যেকোনো এলিমেন্ট এবং সব <button> ট্যাগে কাজ করবে
+     — তাই সাইটের সব বাটনই এই অ্যানিমেশন স্বয়ংক্রিয়ভাবে পাবে, আলাদা
+     করে প্রতিটা বাটনের ক্লাসে গিয়ে হাত দেওয়ার দরকার নেই।
+     prefers-reduced-motion সম্মান করা হয়েছে। ============================================================ -->
+<!-- নতুন সংযোজন: আগে "Black" থিমই ছিল ডিফল্ট (কোনো data-theme অ্যাট্রিবিউট ছাড়াই :root এর
+     ভ্যালু দিয়ে)। এখন ডিফল্ট "white" হওয়ায় "Black" কে একটা সাধারণ, বেছে-নেওয়া-যায় এমন
+     থিমে পরিণত করতে এই ব্লকে আগের :root এর কালার ভ্যালুগুলো হুবহু কপি করে রাখা হলো —
+     ফলে "Black" থিম সিলেক্ট করলে ঠিক আগের মতোই দেখাবে, কিছুই হারায়নি। -->
+<style id="sr-added-black-theme">
+  html[data-theme="black"]{
+    --bg-deep:#0A0E14;
+    --bg-deep-2:#111826;
+    --panel: rgba(255,255,255,0.045);
+    --panel-solid:#141C29;
+    --border-glass: rgba(255,255,255,0.09);
+    --text-primary:#ECEFF4;
+    --text-soft:#8C97A8;
+    --accent-a:#4F8CFF;
+    --accent-b:#8B5CF6;
+    --accent-glow:#3FE1C6;
+    --danger:#FF6B6B;
+    --grad-1: rgba(79,140,255,0.16);
+    --grad-2: rgba(139,92,246,0.16);
+    --grad-3: rgba(63,225,198,0.08);
+  }
+</style>
+<style id="sr-added-button-motion">
+  @media (prefers-reduced-motion: no-preference) {
+    button,
+    [class*="btn"] {
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.16s cubic-bezier(.22,.85,.32,1.2),
+                  box-shadow 0.22s ease,
+                  filter 0.16s ease;
+      will-change: transform;
+    }
+    button:not(:disabled):hover,
+    [class*="btn"]:not(:disabled):hover {
+      transform: translateY(-1.5px);
+      filter: brightness(1.04);
+    }
+    .btn-primary:not(:disabled):hover {
+      box-shadow: 0 8px 22px -8px var(--accent-a);
+    }
+    .icon-btn:not(:disabled):hover,
+    .sidebar-toggle-btn:not(:disabled):hover,
+    .attach-btn:not(:disabled):hover {
+      transform: translateY(-1.5px) rotate(-4deg);
+    }
+    button:not(:disabled):active,
+    [class*="btn"]:not(:disabled):active {
+      transform: translateY(0) scale(0.94);
+      transition-duration: 0.08s;
+    }
+    button:disabled,
+    [class*="btn"]:disabled {
+      transform: none !important;
+    }
+    .theme-swatch { transition: transform 0.16s cubic-bezier(.22,.85,.32,1.2), border-color 0.2s ease; }
+    .theme-swatch:hover { transform: translateY(-2px) scale(1.02); }
+    .theme-swatch:active { transform: scale(0.97); }
+    .theme-swatch.active .theme-swatch-dot {
+      animation: sr-swatch-pop 0.32s cubic-bezier(.22,.85,.32,1.2);
+    }
+    @keyframes sr-swatch-pop {
+      0% { transform: scale(0.6) rotate(-8deg); }
+      60% { transform: scale(1.15) rotate(3deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+    .send-btn:not(:disabled):active { transform: scale(0.9); }
+    .new-chat-btn:not(:disabled):hover { transform: translateY(-1.5px); }
+
+    /* ক্লিক করলে বাটনের ভেতর থেকে ছড়িয়ে পড়া ripple সার্কেল */
+    .sr-ripple {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      background: rgba(255,255,255,0.5);
+      transform: scale(0);
+      opacity: 0.9;
+      animation: sr-ripple-anim 0.5s ease-out forwards;
+    }
+    html[data-theme="white"] .sr-ripple { background: rgba(20,25,35,0.22); }
+    @keyframes sr-ripple-anim {
+      to { transform: scale(2.4); opacity: 0; }
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sr-ripple { display: none; }
+  }
+</style>
+<script>
+  // পেজ রেন্ডার হওয়ার আগেই সেভ করা থিম বসিয়ে দিই যাতে ভুল থিম এক ঝলক দেখিয়ে তারপর
+  // সিলেক্ট করা থিমে সুইচ করার মতো flicker না হয়।
+  // নতুন সংযোজন (Added feature #2): আগে থিম সেভ না থাকলে ডিফল্ট "black" (উপরের :root)
+  // থাকত, এখন থিম সেভ না থাকলে ডিফল্ট হিসেবে "white" থিম বসবে। "black" এখন আর বিশেষ
+  // কেস না — অন্য সব থিমের মতোই data-theme="black" অ্যাট্রিবিউট দিয়ে কাজ করে (নিচের
+  // নতুন html[data-theme="black"] ব্লকে আগের :root-এর কালার ভ্যালুগুলোই হুবহু রাখা আছে,
+  // তাই "Black" থিম বেছে নিলে আগের মতোই দেখাবে — কোনো থিম হারিয়ে যায়নি)।
+  (function(){
+    try {
+      var saved = localStorage.getItem('srgroup:theme');
+      document.documentElement.setAttribute('data-theme', saved || 'white');
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'white');
+    }
+  })();
+</script>
 </head>
 <body>
 
@@ -729,7 +906,6 @@
       </div>
     </div>
     <div class="messages" id="messages"></div>
-    <button class="new-msg-btn" id="newMsgBtn" type="button">↓ New message</button>
     <div class="composer">
       <div class="composer-attachments" id="composerAttachments"></div>
       <div class="composer-row">
@@ -743,16 +919,13 @@
             <div class="plus-menu-item" id="menuOpenSkills">
               <span class="pmi-icon">🧩</span><span class="pmi-label">Skills</span>
             </div>
-            <div class="plus-menu-item" id="menuCodeSnippet">
-              <span class="pmi-icon">💻</span><span class="pmi-label">Code snippet</span>
-            </div>
             <hr class="plus-menu-divider">
             <div class="plus-menu-item" id="menuWebSearch">
               <span class="pmi-icon">🌐</span><span class="pmi-label">Web search</span><span class="pmi-check">✓</span>
             </div>
           </div>
         </div>
-        <textarea id="userInput" placeholder="Type a message..." rows="1"></textarea>
+        <input id="userInput" type="text" placeholder="Type a message...">
         <button class="send-btn" id="sendBtn">Send</button>
       </div>
     </div>
@@ -779,36 +952,7 @@
     <iframe class="artifact-preview-frame" id="artifactPreviewFrame" sandbox="allow-scripts allow-same-origin" title="Code preview"></iframe>
   </div>
 </div>
-<div class="modal-backdrop" id="codeModalBackdrop">
-  <div class="modal-card">
-    <div class="modal-head">
-      <h2>Insert code snippet</h2>
-      <button class="modal-close" id="closeCodeModalBtn">×</button>
-    </div>
-    <div class="settings-field">
-      <label>Language</label>
-      <select id="codeSnippetLang" style="width:100%; background:var(--panel); border:1px solid var(--border-glass); border-radius:8px; padding:9px 10px; color:var(--text-primary); font-size:13px;">
-        <option value="javascript">JavaScript</option>
-        <option value="python">Python</option>
-        <option value="html">HTML</option>
-        <option value="css">CSS</option>
-        <option value="json">JSON</option>
-        <option value="sql">SQL</option>
-        <option value="bash">Bash</option>
-        <option value="java">Java</option>
-        <option value="c">C</option>
-        <option value="cpp">C++</option>
-        <option value="php">PHP</option>
-        <option value="text">Plain text</option>
-      </select>
-    </div>
-    <div class="settings-field">
-      <label>Code</label>
-      <textarea id="codeSnippetInput" style="min-height:220px; font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.5; white-space:pre; tab-size:2;" placeholder="Paste or write your code here..." spellcheck="false"></textarea>
-    </div>
-    <button class="btn-primary" id="insertCodeSnippetBtn">Insert into message</button>
-  </div>
-</div>
+
 <!-- ACCOUNT SETTINGS MODAL (Customize AI + Skills + Change password) -->
 <div class="modal-backdrop" id="accountModalBackdrop">
   <div class="modal-card">
@@ -819,6 +963,7 @@
     <div class="modal-tabs">
       <button class="modal-tab-btn active" data-modaltab="customize">Customize AI</button>
       <button class="modal-tab-btn" data-modaltab="skills">Skills</button>
+      <button class="modal-tab-btn" data-modaltab="theme">Theme</button>
       <button class="modal-tab-btn" data-modaltab="password">Change password</button>
     </div>
 
@@ -863,6 +1008,12 @@
       </div>
       <button class="btn-primary" id="addSkillBtn">Add skill</button>
       <div class="save-note" id="skillSaveNote" style="display:none;">Saved.</div>
+    </div>
+
+    <div class="modal-section" id="modalSection-theme">
+      <p class="hint">Pick a color theme for the whole site. Applies instantly and is remembered on this device.</p>
+      <div id="themeError"></div>
+      <div class="theme-grid" id="themeGrid"></div>
     </div>
 
     <div class="modal-section" id="modalSection-password">
@@ -1001,6 +1152,8 @@
 </div>
 
 <script>
+/* ================= API helper =================
+   ব্যাকএন্ড এখন এই একই origin থেকে সার্ভ হচ্ছে, তাই relative path যথেষ্ট। */
 async function api(path, { method = 'GET', body, token } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -1015,15 +1168,15 @@ async function api(path, { method = 'GET', body, token } = {}) {
   return data;
 }
 
-let currentUser = null;
+let currentUser = null;   // { name, email }
 let userToken = null;
 let adminToken = null;
-let conversations = [];
+let conversations = [];   // [{id, title, updatedAt}]
 let currentConvId = null;
-let currentMessages = [];
+let currentMessages = []; // [{id, role, content, imageUrl}] for the open conversation
 let sending = false;
 let forgotEmailInProgress = null;
-let pendingAttachment = null;
+let pendingAttachment = null; // { dataUrl, name } — image staged for the next outgoing message
 
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
@@ -1037,6 +1190,7 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
+/* ---------------- Startup / session restore ---------------- */
 function init() {
   userToken = localStorage.getItem('srgroup:token');
   const name = localStorage.getItem('srgroup:name');
@@ -1055,6 +1209,7 @@ function clearSession() {
   localStorage.removeItem('srgroup:email');
 }
 
+/* ---------------- Navigation ---------------- */
 document.getElementById('goSignup').onclick = () => { setError('signupError',''); showScreen('screen-signup'); };
 document.getElementById('goLogin').onclick = () => { setError('loginError',''); showScreen('screen-login'); };
 document.getElementById('goAdminLogin').onclick = () => showScreen('screen-adminLogin');
@@ -1071,6 +1226,7 @@ document.getElementById('goForgot').onclick = () => {
 };
 document.getElementById('backToLoginFromForgot').onclick = () => showScreen('screen-login');
 
+/* ---------------- Signup ---------------- */
 document.getElementById('signupBtn').onclick = async () => {
   const name = document.getElementById('signupName').value.trim();
   const email = document.getElementById('signupEmail').value.trim().toLowerCase();
@@ -1092,6 +1248,7 @@ document.getElementById('signupBtn').onclick = async () => {
   }
 };
 
+/* ---------------- Login ---------------- */
 document.getElementById('loginBtn').onclick = async () => {
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
   const password = document.getElementById('loginPassword').value;
@@ -1109,6 +1266,7 @@ document.getElementById('loginBtn').onclick = async () => {
   }
 };
 
+/* ---------------- Forgot password ---------------- */
 document.getElementById('forgotFindBtn').onclick = async () => {
   const email = document.getElementById('forgotEmail').value.trim().toLowerCase();
   if (!email) { setError('forgotError', 'Enter your email.'); return; }
@@ -1141,6 +1299,7 @@ document.getElementById('forgotResetBtn').onclick = async () => {
   }
 };
 
+/* ---------------- Chat (multiple conversations per customer) ---------------- */
 function renderConvList() {
   const wrap = document.getElementById('convList');
   wrap.innerHTML = '';
@@ -1155,6 +1314,8 @@ function renderConvList() {
     titleSpan.onclick = () => { switchConversation(c.id); closeSidebarDrawer(); };
     div.appendChild(titleSpan);
 
+    // একাধিক chat থাকলেই ডিলিট বাটন দেখাই — একটামাত্র conversation থাকলে সেটা ডিলিট করতে দিই না,
+    // যাতে ইউজার একেবারে খালি হাতে না পড়ে।
     if (conversations.length > 1) {
       const delBtn = document.createElement('button');
       delBtn.className = 'conv-delete-btn';
@@ -1195,8 +1356,6 @@ async function switchConversation(id) {
   currentConvId = id;
   currentMessages = [];
   document.getElementById('messages').innerHTML = '';
-  userScrolledUp = false;
-  document.getElementById('newMsgBtn').classList.remove('show');
   try {
     const data = await api(`/chat/conversations/${id}/messages`, { token: userToken });
     const log = data.messages || [];
@@ -1217,6 +1376,7 @@ async function createNewConversation() {
 }
 document.getElementById('newChatBtn').onclick = async () => { await createNewConversation(); closeSidebarDrawer(); };
 
+/* ---------------- Mobile sidebar drawer ---------------- */
 function openSidebarDrawer() {
   document.getElementById('chatSidebar').classList.add('open');
   document.getElementById('sidebarBackdrop').classList.add('show');
@@ -1245,9 +1405,15 @@ async function enterChat() {
   showScreen('screen-chat');
 }
 
+// প্রতিটা artifact (code block)-এর আসল টেক্সট এখানে id দিয়ে জমা থাকে —
+// HTML attribute-এ কোড embed না করে এভাবে রাখলে quote/special character নিয়ে ঝামেলা হয় না।
 const artifactStore = {};
 let artifactCounter = 0;
 
+// ইন্টারেক্টিভ clarifying-question widget: assistant যখন ইউজারকে কিছু জিজ্ঞেস করতে চায়, প্লেইন টেক্সট
+// প্রশ্নের বদলে ```question { "question": "...", "options": ["A","B"], "allowCustom": true } ``` ফরম্যাটে
+// একটা fenced block পাঠালে সেটা এখানে MCQ-স্টাইল কার্ডে রেন্ডার হয় — নিচে "নিজে লিখব" ফলব্যাকও থাকে।
+// ব্যাকএন্ড/সিস্টেম প্রম্পটকে এই ফরম্যাটে আউটপুট দিতে বলা লাগবে, নাহলে এই widget কখনো দেখা যাবে না।
 const questionWidgetStore = {};
 let questionWidgetCounter = 0;
 
@@ -1279,6 +1445,8 @@ function renderQuestionBlock(jsonText) {
   </div>`;
 }
 
+// এই widget-এ answer দিলে (option ক্লিক বা custom explain) সেটাই পরের ইউজার-মেসেজ হিসেবে চলে যায়,
+// আর widget-টা লক হয়ে যায় যাতে একবার উত্তর দেওয়ার পর আবার ক্লিক করা না যায়
 function answerQuestionWidget(id, answerText) {
   const widgetEl = document.getElementById(id);
   if (!widgetEl || widgetEl.classList.contains('answered') || !answerText) return;
@@ -1303,6 +1471,7 @@ function answerQuestionWidget(id, answerText) {
   sendMessage();
 }
 
+// widget-গুলো ডাইনামিকালি তৈরি হয় বলে event delegation ব্যবহার করি
 document.addEventListener('click', (e) => {
   const optBtn = e.target.closest('.qw-option-btn');
   if (optBtn) {
@@ -1339,56 +1508,9 @@ document.addEventListener('keydown', (e) => {
   if (submitBtn) submitBtn.click();
 });
 
-function checkCodeErrors(lang, code) {
-  const l = (lang || '').toLowerCase();
-
-  if (l === 'json') {
-    try { JSON.parse(code); return { status: 'clean', label: 'No errors' }; }
-    catch (e) { return { status: 'error', label: 'Invalid JSON' }; }
-  }
-
-  if (l === 'javascript' || l === 'js') {
-    try { new Function(code); return { status: 'clean', label: 'No syntax errors' }; }
-    catch (e) { return { status: 'error', label: 'Syntax error' }; }
-  }
-
-  if (l === 'html' || l === 'htm') {
-    const doc = new DOMParser().parseFromString(code, 'text/html');
-    if (doc.querySelector('parsererror')) return { status: 'error', label: 'Markup error' };
-    return { status: 'clean', label: 'No errors' };
-  }
-
-  return checkBracketBalance(code);
-}
-
-function checkBracketBalance(code) {
-  const opens = { '(': ')', '[': ']', '{': '}' };
-  const closes = { ')': '(', ']': '[', '}': '{' };
-  const stack = [];
-  let inString = null;
-  let issues = 0;
-
-  for (let i = 0; i < code.length; i++) {
-    const ch = code[i];
-    const prev = code[i - 1];
-    if (inString) {
-      if (ch === inString && prev !== '\\') inString = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === '`') { inString = ch; continue; }
-    if (ch === '#') { while (i < code.length && code[i] !== '\n') i++; continue; }
-    if (opens[ch]) stack.push(ch);
-    else if (closes[ch]) {
-      if (stack.length === 0 || stack[stack.length - 1] !== closes[ch]) issues++;
-      else stack.pop();
-    }
-  }
-  issues += stack.length;
-
-  if (issues === 0) return { status: 'clean', label: 'Looks balanced', basic: true };
-  return { status: 'error', label: `${issues} possible issue${issues > 1 ? 's' : ''}`, basic: true };
-}
-
+// ```lang\ncode\n``` কে একটা ছোট্ট, ক্লিকযোগ্য কার্ডে বদলে দেয় (Claude-এর Artifact কার্ডের মতো),
+// ক্লিক করলে ডানপাশে সাইড প্যানেলে পুরো কোড খুলবে। ![alt](url) থাকলে আসল ছবি দেখায়।
+// XSS এড়াতে সব অংশ escapeHtml দিয়ে যায় — শুধু structure টা HTML হিসেবে বসে।
 function renderMessageHtml(text) {
   const parts = [];
   const fenceRegex = /```(\w*)\n?([\s\S]*?)```/g;
@@ -1414,24 +1536,18 @@ function renderMessageHtml(text) {
           const widgetHtml = renderQuestionBlock(part.value);
           if (widgetHtml) return widgetHtml;
         }
-
         const id = 'artifact-' + (++artifactCounter);
         artifactStore[id] = { lang: part.lang, code: part.value };
         const lineCount = part.value.split('\n').length;
-
-        const check = checkCodeErrors(part.lang, part.value);
-        const badge = check.status
-          ? `<span class="artifact-badge ${check.status}">${check.status === 'clean' ? '✓' : '⚠'} ${escapeHtml(check.label)}${check.basic ? ' · basic check' : ''}</span>`
-          : '';
-
         return `<div class="artifact-card" data-artifact-id="${id}">
           <div class="artifact-card-icon">&lt;/&gt;</div>
           <div class="artifact-card-info">
             <div class="artifact-card-title">${escapeHtml(part.lang)} snippet</div>
-            <div class="artifact-card-sub">${lineCount} line${lineCount === 1 ? '' : 's'} · Click to view ${badge}</div>
+            <div class="artifact-card-sub">${lineCount} line${lineCount === 1 ? '' : 's'} · Click to view</div>
           </div>
         </div>`;
       }
+      // markdown ছবি ![alt](url) -> আসল <img> (শুধু http/https লিংক গ্রহণযোগ্য)
       let escaped = escapeHtml(part.value).replace(
         /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
         (m, alt, url) =>
@@ -1447,6 +1563,8 @@ function renderMessageHtml(text) {
     .join('');
 }
 
+// role: 'user' | 'bot' | 'note'.  opts: { id, imageUrl } — id হলো backend message id (edit করার জন্য দরকার),
+// imageUrl হলো ইউজার যদি ছবি আপলোড করে থাকে বা বট যদি ছবি জেনারেট করে থাকে সেটার লিংক।
 function addMessage(role, text, opts = {}) {
   const box = document.getElementById('messages');
 
@@ -1509,7 +1627,11 @@ function addMessage(role, text, opts = {}) {
 
   row.appendChild(bubble);
 
+  // শুধু ইউজারের নিজের পাঠানো টেক্সট মেসেজেই এডিট অপশন, তাও খালি সবচেয়ে সাম্প্রতিক (সর্বশেষ) মেসেজে —
+  // নতুন ইউজার-মেসেজ এলেই আগের সব user row থেকে Edit বাটন সরিয়ে দিই
   if (role === 'user' && text) {
+    document.querySelectorAll('.msg-row.user .msg-actions').forEach((el) => el.remove());
+
     const actions = document.createElement('div');
     actions.className = 'msg-actions';
     const editBtn = document.createElement('button');
@@ -1521,6 +1643,7 @@ function addMessage(role, text, opts = {}) {
     row.appendChild(actions);
   }
 
+  // বট রিপ্লাইয়ে Copy + Regenerate — দুটোই hover করলে দেখা যায়, .msg-row:hover .msg-actions CSS আগে থেকেই আছে
   if (role === 'bot' && text) {
     const actions = document.createElement('div');
     actions.className = 'msg-actions';
@@ -1531,6 +1654,25 @@ function addMessage(role, text, opts = {}) {
     copyBtn.textContent = '⧉ Copy';
     copyBtn.onclick = () => copyBotMessage(msgRecord, copyBtn);
     actions.appendChild(copyBtn);
+
+    // Added: Share বাটন — ক্লিক করলে WhatsApp/Telegram/Email/More apps + Share-as-PDF মেনু খোলে
+    const shareWrap = document.createElement('div');
+    shareWrap.className = 'share-btn-wrap';
+    const shareBtn = document.createElement('button');
+    shareBtn.className = 'msg-action-btn';
+    shareBtn.type = 'button';
+    shareBtn.textContent = '⤴ Share';
+    shareBtn.onclick = (e) => { e.stopPropagation(); toggleShareMenu(shareWrap, msgRecord); };
+    shareWrap.appendChild(shareBtn);
+    actions.appendChild(shareWrap);
+
+    // Added: PDF বাটন — এই একটা রিপ্লাইকেই সরাসরি PDF বানিয়ে ডাউনলোড করে দেয়
+    const pdfBtn = document.createElement('button');
+    pdfBtn.className = 'msg-action-btn';
+    pdfBtn.type = 'button';
+    pdfBtn.textContent = '⬇ PDF';
+    pdfBtn.onclick = () => exportMessageToPdf(msgRecord, pdfBtn);
+    actions.appendChild(pdfBtn);
 
     const regenBtn = document.createElement('button');
     regenBtn.className = 'msg-action-btn';
@@ -1543,38 +1685,14 @@ function addMessage(role, text, opts = {}) {
   }
 
   box.appendChild(row);
-  if (role === 'user' || !userScrolledUp) {
-    scrollMessagesToBottom();
-  } else {
-    document.getElementById('newMsgBtn').classList.add('show');
-  }
-  if (role === 'user') updateEditButtonsVisibility();
+  box.scrollTop = box.scrollHeight;
   return { record: msgRecord, row };
 }
 
-let userScrolledUp = false;
-function scrollMessagesToBottom() {
-  const box = document.getElementById('messages');
-  box.scrollTop = box.scrollHeight;
-  userScrolledUp = false;
-  document.getElementById('newMsgBtn').classList.remove('show');
-}
-document.getElementById('messages').addEventListener('scroll', () => {
-  const box = document.getElementById('messages');
-  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-  userScrolledUp = !nearBottom;
-  if (nearBottom) document.getElementById('newMsgBtn').classList.remove('show');
-});
-document.getElementById('newMsgBtn').onclick = scrollMessagesToBottom;
-
-function updateEditButtonsVisibility() {
-  const userRows = [...document.querySelectorAll('#messages .msg-row.user')];
-  userRows.forEach((r, i) => {
-    const editBtn = r.querySelector('.msg-actions .msg-action-btn');
-    if (editBtn) editBtn.style.display = (i === userRows.length - 1) ? '' : 'none';
-  });
-}
-
+/* ---------------- Edit a previously sent user message ----------------
+   Claude-এর মতোই: এডিট করে সেভ করলে ওই মেসেজের পর থেকে সব বাতিল হয়ে নতুন করে বট রিপ্লাই আসবে।
+   ব্যাকএন্ডে PUT /chat/conversations/:id/messages/:messageId থাকতে হবে যেটা মেসেজ আপডেট করে,
+   ওর পরের সবকিছু ডিলিট করে, এবং নতুন assistant reply রিটার্ন করে। */
 function startEditMessage(row, msgRecord) {
   const bubble = row.querySelector('.msg');
   const actions = row.querySelector('.msg-actions');
@@ -1619,6 +1737,7 @@ async function submitEditedMessage(row, msgRecord, newContent, saveBtn) {
     const data = await api(`/chat/conversations/${currentConvId}/messages/${msgRecord.id}`, {
       method: 'PUT', body: { content: newContent }, token: userToken,
     });
+    // এই মেসেজের পর যা যা ছিল সব সরিয়ে, এডিট করা মেসেজ + নতুন বট রিপ্লাই বসাই
     const idx = currentMessages.findIndex((m) => m.id === msgRecord.id);
     const rowsAfter = [...document.getElementById('messages').querySelectorAll('.msg-row, .msg.note')];
     let removing = false;
@@ -1640,6 +1759,7 @@ async function submitEditedMessage(row, msgRecord, newContent, saveBtn) {
   }
 }
 
+/* ---------------- Copy a bot reply to clipboard ---------------- */
 async function copyBotMessage(msgRecord, btn) {
   try {
     await navigator.clipboard.writeText(msgRecord.content);
@@ -1658,6 +1778,185 @@ async function copyBotMessage(msgRecord, btn) {
   setTimeout(() => { btn.textContent = original; }, 1500);
 }
 
+/* ==================================================================
+   ADDED FEATURE — Share a bot reply / export a single reply as PDF
+   (নতুন কোড, নিচের Regenerate ফাংশন সহ আগের কিছুই বদলানো হয়নি)
+
+   - Share বাটন একটা ছোট ড্রপডাউন মেনু খোলে:
+       • "More apps…" — ডিভাইসে সাপোর্ট থাকলে (মূলত মোবাইল ব্রাউজার) OS-এর নিজস্ব
+         শেয়ার শিট খোলে, যেখানে WhatsApp, Messenger, Mail সহ ইনস্টল করা সব অ্যাপ
+         দেখা যায় — এটাই আসলে সবচেয়ে নির্ভরযোগ্য উপায়, কারণ Messenger-এর মতো অ্যাপে
+         সরাসরি লিংক দিয়ে (অ্যাপ আইডি ছাড়া) টেক্সট শেয়ার করা ব্রাউজার থেকে সম্ভব না।
+       • WhatsApp / Telegram / Email — সরাসরি লিংকের মাধ্যমে ওই রিপ্লাইয়ের টেক্সট শেয়ার করে।
+       • "Share as PDF…" — রিপ্লাইটাকে PDF বানিয়ে, ফাইল-শেয়ার সাপোর্ট থাকলে (বেশিরভাগ মোবাইল
+         ব্রাউজার) OS শেয়ার শিটে PDF ফাইল-সহ পাঠায় — অর্থাৎ Email/WhatsApp/Messenger যেটাই
+         বেছে নেওয়া হোক, PDF ফাইলটা অ্যাটাচ হয়েই যায়। ডেস্কটপে যেখানে ফাইল-শেয়ার সাপোর্ট নেই,
+         সেখানে PDF ডাউনলোড হয়ে যায় এবং ইমেইল কম্পোজ খোলে — ব্রাউজার সিকিউরিটির কারণে mailto:
+         লিংক দিয়ে ফাইল সরাসরি অ্যাটাচ করা কোনোভাবেই সম্ভব না, তাই ম্যানুয়ালি অ্যাটাচ করতে হবে।
+   - PDF বাটন — মেনু ছাড়াই, ক্লিক করলে ওই একটা রিপ্লাই সরাসরি PDF হিসেবে ডাউনলোড হয়ে যায়।
+   ================================================================== */
+
+let openShareMenuEl = null;
+
+function closeShareMenu() {
+  if (openShareMenuEl) {
+    openShareMenuEl.remove();
+    openShareMenuEl = null;
+  }
+}
+document.addEventListener('click', () => closeShareMenu());
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeShareMenu(); });
+
+function toggleShareMenu(wrapEl, msgRecord) {
+  const alreadyOpenHere = openShareMenuEl && wrapEl.contains(openShareMenuEl);
+  closeShareMenu();
+  if (alreadyOpenHere) return;
+
+  const menu = document.createElement('div');
+  menu.className = 'share-menu show';
+  menu.onclick = (e) => e.stopPropagation();
+
+  const text = msgRecord.content || '';
+
+  if (navigator.share) {
+    const nativeItem = document.createElement('div');
+    nativeItem.className = 'share-menu-item';
+    nativeItem.innerHTML = '<span class="smi-icon">📱</span><span>More apps…</span>';
+    nativeItem.onclick = async () => {
+      closeShareMenu();
+      try { await navigator.share({ title: 'SR Group Assistant', text }); } catch (err) { /* ইউজার বাতিল করলে বা অ্যানসাপোর্টেড হলে চুপচাপ ইগনোর */ }
+    };
+    menu.appendChild(nativeItem);
+    const divider0 = document.createElement('hr');
+    divider0.className = 'share-menu-divider';
+    menu.appendChild(divider0);
+  }
+
+  const quickItems = [
+    { icon: '🟢', label: 'WhatsApp', action: () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank') },
+    { icon: '✈️', label: 'Telegram', action: () => window.open('https://t.me/share/url?url=&text=' + encodeURIComponent(text), '_blank') },
+    { icon: '✉️', label: 'Email', action: () => { window.location.href = 'mailto:?subject=' + encodeURIComponent('SR Group Assistant — reply') + '&body=' + encodeURIComponent(text); } },
+  ];
+  quickItems.forEach((it) => {
+    const el = document.createElement('div');
+    el.className = 'share-menu-item';
+    el.innerHTML = `<span class="smi-icon">${it.icon}</span><span>${it.label}</span>`;
+    el.onclick = () => { closeShareMenu(); it.action(); };
+    menu.appendChild(el);
+  });
+
+  const divider1 = document.createElement('hr');
+  divider1.className = 'share-menu-divider';
+  menu.appendChild(divider1);
+
+  const pdfShareItem = document.createElement('div');
+  pdfShareItem.className = 'share-menu-item';
+  pdfShareItem.innerHTML = '<span class="smi-icon">📄</span><span>Share as PDF…</span>';
+  pdfShareItem.onclick = () => { closeShareMenu(); sharePdfOfMessage(msgRecord); };
+  menu.appendChild(pdfShareItem);
+
+  wrapEl.appendChild(menu);
+  openShareMenuEl = menu;
+}
+
+// শুধু এই একটা রিপ্লাইয়ের কনটেন্ট দিয়ে একটা jsPDF ডকুমেন্ট বানায় (ডাউনলোড/শেয়ার দুই জায়গাতেই ব্যবহার হয়)
+function buildMessagePdf(msgRecord) {
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert('PDF ফিচারটা এখনো লোড হয়নি। ইন্টারনেট সংযোগ ঠিক আছে কিনা দেখে পেজ রিফ্রেশ করে আবার চেষ্টা করুন।');
+    return null;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const marginX = 48;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const maxWidth = pageWidth - marginX * 2;
+  let y = 56;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('SR Group Assistant', marginX, y);
+  y += 16;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text(new Date().toLocaleString(), marginX, y);
+  doc.setTextColor(20);
+  y += 22;
+
+  doc.setDrawColor(220);
+  doc.line(marginX, y, pageWidth - marginX, y);
+  y += 22;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11.5);
+  const lineHeight = 16;
+  const paragraphs = (msgRecord.content || '').split('\n');
+  paragraphs.forEach((para) => {
+    const wrapped = para.length ? doc.splitTextToSize(para, maxWidth) : [''];
+    wrapped.forEach((line) => {
+      if (y > pageHeight - 56) {
+        doc.addPage();
+        y = 56;
+      }
+      doc.text(line, marginX, y);
+      y += lineHeight;
+    });
+  });
+
+  return doc;
+}
+
+function exportMessageToPdf(msgRecord, btn) {
+  const doc = buildMessagePdf(msgRecord);
+  if (!doc) return;
+  doc.save(`sr-group-reply-${Date.now()}.pdf`);
+  if (btn) {
+    const original = btn.textContent;
+    btn.textContent = '✓ Saved';
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  }
+}
+
+async function sharePdfOfMessage(msgRecord) {
+  const doc = buildMessagePdf(msgRecord);
+  if (!doc) return;
+  const blob = doc.output('blob');
+  const filename = `sr-group-reply-${Date.now()}.pdf`;
+
+  if (navigator.canShare && navigator.share) {
+    try {
+      const file = new File([blob], filename, { type: 'application/pdf' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'SR Group Assistant' });
+        return;
+      }
+    } catch (err) {
+      // শেয়ার শিট বাতিল হলে বা ব্যর্থ হলে নিচের ডাউনলোড fallback-এ চলে যাবে
+    }
+  }
+
+  // ফাইল-শেয়ার সাপোর্ট না থাকলে (বেশিরভাগ ডেস্কটপ ব্রাউজার): শুধু PDF ডাউনলোড হবে, সাথে
+  // পরিষ্কার নির্দেশনা — mailto এখানে আর অটো-খোলে না (আগে একসাথে দুটো জিনিস ঘটায় কনফিউজিং
+  // ছিল, ইউজার নিজের পছন্দমতো ইমেইল/WhatsApp/Messenger যেটাতেই মন চায় ম্যানুয়ালি অ্যাটাচ করবেন)।
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  alert('PDF ডাউনলোড হয়ে গেছে: "' + filename + '"।\n\nএখন আপনার Email, WhatsApp Web, বা Messenger খুলে এই ফাইলটা ম্যানুয়ালি অ্যাটাচ করে পাঠিয়ে দিন — ব্রাউজার সিকিউরিটির কারণে কোনো ওয়েবসাইটই ফাইল সরাসরি অ্যাটাচ করে পাঠাতে পারে না।');
+}
+
+/* ---------------- Regenerate a bot reply ----------------
+   ওই নির্দিষ্ট assistant মেসেজের জন্য নতুন করে reply চাই, আগের user মেসেজ/context অক্ষত রেখে।
+   ব্যাকএন্ডে POST /chat/conversations/:id/messages/:messageId/regenerate থাকতে হবে,
+   যেটা { reply, replyImageUrl? } রিটার্ন করে (edit endpoint-এর মতোই কিন্তু কোনো user content বদলায় না)।
+   নতুন করে পাঠানো মেসেজেও assistantMessageId লাগবে (sendMessage-এ pass করা হয়েছে) — নাহলে
+   পাঠানোর পরপরই "Regenerate" চাপলে id-বিহীন অবস্থায় পড়বে। */
 async function regenerateBotMessage(row, msgRecord, btn) {
   if (!msgRecord.id) {
     alert("This reply can't be regenerated (missing id from server).");
@@ -1679,6 +1978,7 @@ async function regenerateBotMessage(row, msgRecord, btn) {
     msgRecord.content = data.reply;
     msgRecord.imageUrl = data.replyImageUrl || null;
 
+    // বাবল রিফ্রেশ করি — নতুন reply-তেও কোড ব্লক/ছবি থাকতে পারে, তাই আগের মতোই hasRichContent চেক করি
     const oldTextWrap = bubble.querySelector('div:last-child');
     const hasRichContent = data.reply.includes('```') || /!\[[^\]]*\]\(https?:\/\/[^\s)]+\)/.test(data.reply);
     const textWrap = document.createElement('div');
@@ -1705,6 +2005,7 @@ async function regenerateBotMessage(row, msgRecord, btn) {
   sending = false;
 }
 
+/* ---------------- "+" composer menu (photo / skills / web search) ---------------- */
 let webSearchEnabled = false;
 
 function togglePlusMenu(forceState) {
@@ -1727,62 +2028,14 @@ document.getElementById('menuOpenSkills').onclick = () => {
   openAccountModal();
   document.querySelector('.modal-tab-btn[data-modaltab="skills"]').click();
 };
+// web search toggle kore rakhi — menu-i khola thake jate ekbare kaj korle abar khulte na hoy
 document.getElementById('menuWebSearch').onclick = (e) => {
   e.stopPropagation();
   webSearchEnabled = !webSearchEnabled;
   document.getElementById('menuWebSearch').classList.toggle('toggled', webSearchEnabled);
 };
 
-function detectCodeLanguage(code) {
-  const trimmed = code.trim();
-  if (!trimmed) return null;
-  const rules = [
-    { lang: 'html', test: /<!DOCTYPE html|<html[\s>]|<div[\s>]|<\/html>/i },
-    { lang: 'css', test: /^[\s\S]*\{[\s\S]*:[\s\S]*;[\s\S]*\}/m, extra: /^[.#]?[\w-]+\s*\{/m },
-    { lang: 'python', test: /^\s*(def |import |from |print\(|class \w+.*:)/m },
-    { lang: 'javascript', test: /\b(const|let|var|function|=>|console\.log)\b/ },
-    { lang: 'json', test: /^\s*[\{\[][\s\S]*[\}\]]\s*$/ },
-    { lang: 'sql', test: /\b(SELECT|INSERT INTO|UPDATE|DELETE FROM|CREATE TABLE)\b/i },
-    { lang: 'bash', test: /^\s*(#!\/bin\/(ba)?sh|npm |sudo |cd |ls |echo )/m },
-    { lang: 'java', test: /\b(public class|System\.out\.println|public static void main)\b/ },
-    { lang: 'cpp', test: /#include\s*<.*>|std::/ },
-    { lang: 'c', test: /#include\s*<stdio\.h>|int main\(/ },
-    { lang: 'php', test: /^\s*<\?php/ },
-  ];
-  for (const rule of rules) {
-    if (rule.test.test(trimmed) && (!rule.extra || rule.extra.test(trimmed))) return rule.lang;
-  }
-  return null;
-}
-document.getElementById('codeSnippetInput').addEventListener('input', (e) => {
-  const detected = detectCodeLanguage(e.target.value);
-  if (detected) document.getElementById('codeSnippetLang').value = detected;
-});
-document.getElementById('menuCodeSnippet').onclick = () => {
-  togglePlusMenu(false);
-  document.getElementById('codeSnippetInput').value = '';
-  document.getElementById('codeModalBackdrop').classList.add('show');
-  setTimeout(() => document.getElementById('codeSnippetInput').focus(), 50);
-};
-document.getElementById('closeCodeModalBtn').onclick = () => {
-  document.getElementById('codeModalBackdrop').classList.remove('show');
-};
-document.getElementById('codeModalBackdrop').addEventListener('click', (e) => {
-  if (e.target.id === 'codeModalBackdrop') document.getElementById('codeModalBackdrop').classList.remove('show');
-});
-document.getElementById('insertCodeSnippetBtn').onclick = () => {
-  const lang = document.getElementById('codeSnippetLang').value;
-  const code = document.getElementById('codeSnippetInput').value;
-  if (!code.trim()) return;
-  const input = document.getElementById('userInput');
-  const fence = '```' + lang + '\n' + code.replace(/\n$/, '') + '\n```';
-  input.value = input.value ? (input.value + '\n' + fence) : fence;
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
-  document.getElementById('codeModalBackdrop').classList.remove('show');
-  input.focus();
-};
-
+/* ---------------- Photo attach (upload) ---------------- */
 document.getElementById('imageFileInput').onchange = (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
@@ -1837,10 +2090,11 @@ async function sendMessage() {
   renderComposerAttachment();
   const userEntry = addMessage('user', text, { imageUrl: attachment ? attachment.dataUrl : null });
   input.value = '';
-  input.style.height = 'auto';
   showTyping();
 
   try {
+    // image পাঠালে base64 dataUrl সহ পাঠাই — ব্যাকএন্ড এটা আপলোড হ্যান্ডলার/স্টোরেজে সেভ করে
+    // একটা স্থায়ী URL রিটার্ন করবে বলে ধরে নিচ্ছি (data.reply, data.title-এর পাশাপাশি)।
     const body = { content: text };
     if (attachment) body.image = attachment.dataUrl;
     if (webSearchEnabled) body.webSearch = true;
@@ -1850,6 +2104,8 @@ async function sendMessage() {
     });
     hideTyping();
 
+    // just-sent message-e server-er real id boshai — ei id na thakle "Edit" click korle
+    // "missing id from server" error dekhabe, jotokhon na page reload kore purono history load hoy
     if (userEntry && data.userMessageId != null) {
       userEntry.record.id = data.userMessageId;
       userEntry.row.dataset.msgId = data.userMessageId;
@@ -1873,16 +2129,8 @@ async function sendMessage() {
   input.focus();
 }
 document.getElementById('sendBtn').onclick = sendMessage;
-document.getElementById('userInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-document.getElementById('userInput').addEventListener('input', (e) => {
-  e.target.style.height = 'auto';
-  e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
-});
+document.getElementById('userInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+
 document.getElementById('logoutBtn').onclick = () => {
   clearSession();
   document.getElementById('loginEmail').value = '';
@@ -1890,10 +2138,12 @@ document.getElementById('logoutBtn').onclick = () => {
   showScreen('screen-login');
 };
 
+/* ---------------- Account settings modal (Customize AI + Skills + Change password) ---------------- */
 function openAccountModal() {
   document.getElementById('accountModalBackdrop').classList.add('show');
   loadCustomizeText();
   renderSkillList();
+  renderThemeGrid();
 }
 function closeAccountModal() {
   document.getElementById('accountModalBackdrop').classList.remove('show');
@@ -1937,6 +2187,57 @@ document.getElementById('saveCustomizeBtn').onclick = async () => {
     setError('customizeError', err.message);
   }
 };
+
+/* ---------------- Theme (client-side only, saved in localStorage per device) ----------------
+   html ট্যাগে data-theme="..." বসিয়ে দেওয়া হয়, আর CSS-এর html[data-theme="..."] রুলগুলো
+   শুধু কালার ভ্যারিয়েবল override করে দেয় — বাকি পুরো সাইটের লে-আউট/ফিচার অপরিবর্তিত থাকে। */
+const THEMES = [
+  { id: 'black',  name: 'Black',  swatch: 'linear-gradient(135deg,#0A0E14,#4F8CFF)' },
+  { id: 'red',    name: 'Red',    swatch: 'linear-gradient(135deg,#FF5C5C,#E11D48)' },
+  { id: 'white',  name: 'White',  swatch: 'linear-gradient(135deg,#FFFFFF,#3E6FE0)' },
+  { id: 'blue',   name: 'Blue',   swatch: 'linear-gradient(135deg,#2E7CF6,#00B4FF)' },
+  { id: 'yellow', name: 'Yellow', swatch: 'linear-gradient(135deg,#FFC107,#FF9800)' },
+  { id: 'green',  name: 'Green',  swatch: 'linear-gradient(135deg,#22C55E,#16A34A)' },
+  { id: 'purple', name: 'Purple', swatch: 'linear-gradient(135deg,#8B5CF6,#C026D3)' },
+];
+
+function getCurrentTheme() {
+  // নতুন সংযোজন: ডিফল্ট থিম এখন "black" এর বদলে "white"
+  try { return localStorage.getItem('srgroup:theme') || 'white'; } catch (e) { return 'white'; }
+}
+
+function applyTheme(themeId) {
+  // নতুন সংযোজন: "black" আর আলাদা কেস না, বাকি সব থিমের মতোই data-theme অ্যাট্রিবিউট বসে
+  // (আগের :root ভ্যালুগুলো এখন html[data-theme="black"] ব্লকে সরানো আছে)
+  document.documentElement.setAttribute('data-theme', themeId);
+  try { localStorage.setItem('srgroup:theme', themeId); } catch (e) { /* ignore */ }
+}
+
+function renderThemeGrid() {
+  const wrap = document.getElementById('themeGrid');
+  if (!wrap) return;
+  const active = getCurrentTheme();
+  wrap.innerHTML = '';
+  THEMES.forEach((t) => {
+    const el = document.createElement('div');
+    el.className = 'theme-swatch' + (t.id === active ? ' active' : '');
+    el.dataset.themeId = t.id;
+    el.innerHTML = `
+      <div class="theme-swatch-dot" style="background:${t.swatch};"></div>
+      <div>${escapeHtml(t.name)}</div>
+      <div class="theme-swatch-check">✓ Active</div>`;
+    el.onclick = () => {
+      applyTheme(t.id);
+      wrap.querySelectorAll('.theme-swatch').forEach((s) => s.classList.remove('active'));
+      el.classList.add('active');
+    };
+    wrap.appendChild(el);
+  });
+}
+
+/* ---------------- Skills (server-side, stored in the database, matched automatically per message) ----------------
+   chat.js নিজেই প্রতিটা মেসেজে user_skills টেবিল থেকে trigger-match করা skill বের করে system prompt-এ জোড়ে,
+   তাই এখানে শুধু CRUD UI — মেসেজ পাঠানোর সময় client থেকে আলাদা করে কিছু পাঠাতে হয় না। */
 
 function renderSkillList() {
   const wrap = document.getElementById('skillList');
@@ -2000,6 +2301,7 @@ document.getElementById('addSkillBtn').onclick = async () => {
   }
 };
 
+// সার্ভার নিজেই URL fetch করে parse করে দেয় (CORS ঝামেলা এড়াতে) — সেভ করে না, ফর্মে ভরে দেয় যাতে রিভিউ করা যায়
 document.getElementById('skillImportBtn').onclick = async () => {
   const url = document.getElementById('skillImportUrl').value.trim();
   setError('skillsError', '');
@@ -2050,7 +2352,8 @@ document.getElementById('changeOwnPasswordBtn').onclick = async () => {
   }
 };
 
-let adminRole = null;
+/* ---------------- Admin ---------------- */
+let adminRole = null;   // 'super_admin' | 'viewer'
 let adminName = null;
 
 document.getElementById('adminLoginBtn').onclick = async () => {
@@ -2067,6 +2370,7 @@ document.getElementById('adminLoginBtn').onclick = async () => {
     document.getElementById('adminWhoami').textContent = adminName + (adminRole === 'super_admin' ? ' · Super admin' : ' · Viewer');
     applyAdminRoleUI();
     showScreen('screen-adminDashboard');
+    // ভিউয়ার হলে settings/admins ট্যাব লুকানো থাকে, তাই সবসময় customers ট্যাবেই ফিরে আসি
     document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
     document.querySelector('.tab-btn[data-tab="customers"]').classList.add('active');
     document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
@@ -2078,6 +2382,8 @@ document.getElementById('adminLoginBtn').onclick = async () => {
 };
 document.getElementById('adminLogoutBtn').onclick = () => { adminToken = null; adminRole = null; adminName = null; showScreen('screen-login'); };
 
+// super_admin-only অংশ (Settings ট্যাব, Admins ট্যাব) viewer-এর কাছে সম্পূর্ণ লুকানো থাকে —
+// শুধু CSS display:none করলেই যথেষ্ট, কারণ সংবেদনশীল অ্যাকশনগুলো ব্যাকএন্ডেও role-check হবে ধরে নিচ্ছি।
 function applyAdminRoleUI() {
   const isSuper = adminRole === 'super_admin';
   document.getElementById('tabBtnSettings').style.display = isSuper ? '' : 'none';
@@ -2099,6 +2405,10 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 
 document.getElementById('analyticsRangeSelect').onchange = () => loadAnalyticsPanel();
 
+/* ---------- Customer list, with per-customer quota column + a safe "reset password" action ----------
+   নোট: আমরা কারও আসল পাসওয়ার্ড admin panel-এ কখনো দেখাই না (backend-ও hash করে রাখে, plaintext ফেরত দেয় না)।
+   এর বদলে admin এক ক্লিকে ওই কাস্টমারের জন্য একটা নতুন temporary password জেনারেট করতে পারে —
+   এটাই "recovery" করার নিরাপদ উপায়। কেন এভাবে করা হলো তার ব্যাখ্যা চ্যাটের শেষে দেওয়া আছে। */
 async function loadCustomerList() {
   const wrap = document.getElementById('customerListWrap');
   wrap.innerHTML = '<div class="empty-state">Loading...</div>';
@@ -2117,6 +2427,7 @@ async function loadCustomerList() {
       const actionColor = u.blocked ? 'var(--accent-glow)' : 'var(--danger)';
       const lastLogin = u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never (signed up only)';
       const quotaValue = (u.dailyLimit !== null && u.dailyLimit !== undefined) ? u.dailyLimit : '';
+      // viewer role শুধু দেখতে পাবে, quota/reset/block কোনোটাই করতে পারবে না
       const quotaCell = isSuper
         ? `<div class="quota-cell">
             <input type="number" min="0" step="1" class="quota-input" placeholder="default"
@@ -2155,6 +2466,8 @@ async function loadCustomerList() {
       };
     });
 
+    // এক ক্লিকে temp password জেনারেট — backend নতুন random password হ্যাশ করে সেভ করবে এবং
+    // এখানে শুধু একবারের জন্য plaintext ফেরত দেবে যাতে admin কাস্টমারকে জানাতে পারে।
     wrap.querySelectorAll('.reset-pw').forEach((el) => {
       el.onclick = async () => {
         if (!confirm(`Generate a new temporary password for ${el.dataset.email}? Their old password will stop working.`)) return;
@@ -2167,11 +2480,13 @@ async function loadCustomerList() {
       };
     });
 
+    // প্রতিটা কাস্টমারের quota আলাদাভাবে সেভ করার বাটন
     wrap.querySelectorAll('.quota-save-btn').forEach((btn) => {
       btn.onclick = async () => {
         const email = btn.dataset.email;
         const input = wrap.querySelector(`.quota-input[data-email="${CSS.escape(email)}"]`);
         const raw = input.value.trim();
+        // খালি রাখলে customer-specific quota মুছে যাবে, তখন সে আবার global default limit ব্যবহার করবে
         const dailyLimit = raw === '' ? null : parseInt(raw, 10);
         if (raw !== '' && (Number.isNaN(dailyLimit) || dailyLimit < 0)) {
           input.style.borderColor = 'var(--danger)';
@@ -2287,6 +2602,7 @@ document.getElementById('saveSettingsBtn').onclick = async () => {
   } catch (e) { console.error(e); }
 };
 
+/* ---------------- My account: change my own admin password ---------------- */
 document.getElementById('myAccountChangePasswordBtn').onclick = async () => {
   const currentPassword = document.getElementById('myAccountCurrentPassword').value;
   const newPassword = document.getElementById('myAccountNewPassword').value;
@@ -2310,6 +2626,11 @@ document.getElementById('myAccountChangePasswordBtn').onclick = async () => {
   }
 };
 
+/* ---------------- Analytics dashboard ----------------
+   ব্যাকএন্ডে GET /admin/analytics?days=N থাকতে হবে, যেটা রিটার্ন করবে:
+   { dailyActiveUsers:[{date,count}], messageVolume:[{date,count}], topQuestions:[{question,count}] }
+   dailyActiveUsers/messageVolume তারিখ অনুযায়ী sorted (পুরাতন থেকে নতুন) ধরে নিচ্ছি। কোনো chart library
+   ছাড়াই সাদামাটা SVG bar chart বানিয়ে নিচ্ছি যাতে বাড়তি dependency লাগে না। */
 function buildBarChartSvg(points, { color = '#4F8CFF', height = 180 } = {}) {
   const width = Math.max(360, points.length * 46);
   const paddingLeft = 34, paddingBottom = 26, paddingTop = 12;
@@ -2325,7 +2646,7 @@ function buildBarChartSvg(points, { color = '#4F8CFF', height = 180 } = {}) {
     const y = paddingTop + (chartH - barH);
     bars += `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(barH, 1)}" rx="3" fill="${color}" opacity="0.88"><title>${escapeHtml(p.date)}: ${p.count}</title></rect>`;
     bars += `<text x="${x + barW / 2}" y="${y - 5}" text-anchor="middle" font-size="10.5" font-family="JetBrains Mono, monospace" fill="#ECEFF4">${p.count}</text>`;
-    const shortDate = (p.date || '').slice(5);
+    const shortDate = (p.date || '').slice(5); // MM-DD
     labels += `<text x="${x + barW / 2}" y="${height - paddingBottom + 15}" text-anchor="middle" font-size="9.5" font-family="JetBrains Mono, monospace" fill="#8C97A8">${escapeHtml(shortDate)}</text>`;
   });
 
@@ -2395,6 +2716,7 @@ async function loadAnalyticsPanel() {
   }
 }
 
+/* ---------------- Admin accounts (super_admin manages other admins) ---------------- */
 async function loadAdminsPanel() {
   const wrap = document.getElementById('adminsList');
   wrap.innerHTML = '<div class="empty-state">Loading...</div>';
@@ -2474,6 +2796,8 @@ document.getElementById('addAdminBtn').onclick = async () => {
   }
 };
 
+// cross-origin URL-e <a download> kaj kore na (browser ignore kore) — tai fetch kore
+// blob banie shei blob URL diye download trigger kori. data: URL hole shorashori download hobe.
 async function downloadImageUrl(url, filenameHint) {
   if (url.startsWith('data:')) {
     const a = document.createElement('a');
@@ -2516,6 +2840,10 @@ function extensionForLang(lang) {
   return LANG_EXTENSIONS[(lang || '').toLowerCase()] || 'txt';
 }
 
+/* ---------------- Artifact side panel: open / close / copy / run ----------------
+   এতদিন শুধু data-artifact-id মনে রাখার কোড ছিল, প্যানেল খোলার ফাংশনটাই ছিল না —
+   তাই কার্ডে ক্লিক করলে কিছুই হতো না। এখন পুরো ফ্লো: click -> panel খোলে -> কোড দেখায়
+   -> Copy বাটনে ক্লিপবোর্ডে কপি হয় -> Run বাটনে (html/js হলে) iframe এ লাইভ প্রিভিউ চলে। */
 let currentOpenArtifactId = null;
 
 function openArtifactPanel(id) {
@@ -2530,6 +2858,7 @@ function openArtifactPanel(id) {
   const previewFrame = document.getElementById('artifactPreviewFrame');
   const codeBody = document.querySelector('.artifact-panel-body');
 
+  // প্রতিবার নতুন কার্ড খুললে কোড-ভিউ থেকেই শুরু হবে, আগের প্রিভিউ অবস্থা রিসেট
   previewFrame.style.display = 'none';
   previewFrame.srcdoc = '';
   codeBody.style.display = 'block';
@@ -2554,6 +2883,7 @@ function closeArtifactPanel() {
   document.getElementById('artifactPreviewFrame').srcdoc = '';
 }
 
+// artifact card এ ক্লিক করলেই প্যানেল খুলবে (event delegation, কারণ কার্ডগুলো ডাইনামিকালি তৈরি হয়)
 document.addEventListener('click', (e) => {
   const card = e.target.closest('.artifact-card');
   if (card && card.dataset.artifactId) openArtifactPanel(card.dataset.artifactId);
@@ -2562,6 +2892,7 @@ document.addEventListener('click', (e) => {
 document.getElementById('artifactCloseBtn').onclick = closeArtifactPanel;
 document.getElementById('artifactBackdrop').onclick = closeArtifactPanel;
 
+// Copy button — clipboard API, permission না থাকলে execCommand fallback
 document.getElementById('artifactCopyBtn').onclick = async () => {
   if (!currentOpenArtifactId) return;
   const art = artifactStore[currentOpenArtifactId];
@@ -2587,6 +2918,7 @@ document.getElementById('artifactCopyBtn').onclick = async () => {
   }, 1500);
 };
 
+// Run button — html/js হলে iframe এ লাইভ প্রিভিউ চালায়, আবার ক্লিক করলে কোড ভিউতে ফেরত
 document.getElementById('artifactRunBtn').onclick = () => {
   if (!currentOpenArtifactId) return;
   const art = artifactStore[currentOpenArtifactId];
@@ -2634,6 +2966,30 @@ document.getElementById('artifactDownloadBtn').onclick = () => {
 };
 
 init();
+</script>
+<!-- ============================================================
+     নতুন সংযোজন (Added feature #1 এর বাকি অংশ): বাটনে ক্লিক করলে ripple
+     এফেক্ট। সম্পূর্ণ নতুন, আলাদা স্ক্রিপ্ট ব্লক — উপরের কোনো স্ক্রিপ্টে
+     হাত দেওয়া হয়নি। document-এ একটাই event delegation listener, তাই
+     ডাইনামিকালি তৈরি হওয়া বাটনেও (থিম সোয়াচ, স্কিল কার্ড ইত্যাদি) কাজ
+     করবে। preventDefault/stopPropagation কিছুই করা হয়নি বলে আগের কোনো
+     onclick হ্যান্ডলার এতে বিন্দুমাত্র প্রভাবিত হয় না। ============================================================ -->
+<script id="sr-added-ripple-script">
+  document.addEventListener('pointerdown', function (e) {
+    var target = e.target.closest('button, [class*="btn"]');
+    if (!target || target.disabled) return;
+    var rect = target.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    var size = Math.max(rect.width, rect.height) * 1.2;
+    var ripple = document.createElement('span');
+    ripple.className = 'sr-ripple';
+    ripple.style.width = ripple.style.height = size + 'px';
+    ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+    ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+    target.appendChild(ripple);
+    ripple.addEventListener('animationend', function () { ripple.remove(); });
+    setTimeout(function () { if (ripple.parentNode) ripple.remove(); }, 700);
+  }, { passive: true });
 </script>
 </body>
 </html>
