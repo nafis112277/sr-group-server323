@@ -1,12 +1,11 @@
 import pg from 'pg';
-
+import bcrypt from 'bcryptjs';
 const { Pool } = pg;
 
 if (!process.env.DATABASE_URL) {
   console.warn('[SR Group] সতর্কতা: .env-এ DATABASE_URL নেই। Neon থেকে connection string বসান, নাহলে সার্ভার ডাটাবেসে কানেক্ট করতে পারবে না।');
 }
 
-// Neon-সহ বেশিরভাগ hosted Postgres SSL লাগে
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('localhost')
@@ -28,12 +27,18 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       last_login_at TIMESTAMPTZ
     );
-
     CREATE TABLE IF NOT EXISTS admin_auth (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       passcode_hash TEXT NOT NULL
     );
-
+    CREATE TABLE IF NOT EXISTS admins (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'viewer',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS ai_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       description TEXT NOT NULL DEFAULT '',
@@ -41,7 +46,6 @@ export async function initDb() {
       facts TEXT NOT NULL DEFAULT '',
       daily_limit INTEGER NOT NULL DEFAULT 40
     );
-
     CREATE TABLE IF NOT EXISTS conversations (
       id SERIAL PRIMARY KEY,
       user_email TEXT NOT NULL,
@@ -49,7 +53,6 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
-
     CREATE TABLE IF NOT EXISTS messages (
       id SERIAL PRIMARY KEY,
       conversation_id INTEGER NOT NULL REFERENCES conversations(id),
@@ -57,7 +60,6 @@ export async function initDb() {
       content TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
-
     CREATE TABLE IF NOT EXISTS user_skills (
       id SERIAL PRIMARY KEY,
       user_email TEXT NOT NULL,
@@ -68,31 +70,45 @@ export async function initDb() {
       enabled BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
-
     CREATE INDEX IF NOT EXISTS idx_conversations_email ON conversations(user_email);
     CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_user_skills_email ON user_skills(user_email);
 
-    -- আগে থেকে চলা ডাটাবেসে নতুন কলামগুলো নিরাপদে যোগ করে (already-running প্রজেক্টের জন্য মাইগ্রেশন)
     ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_limit INTEGER;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_instructions TEXT NOT NULL DEFAULT '';
     ALTER TABLE ai_settings ADD COLUMN IF NOT EXISTS daily_limit INTEGER NOT NULL DEFAULT 40;
     ALTER TABLE user_skills ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE;
     ALTER TABLE user_skills ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
-
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS images JSONB;
     CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
   `);
+
+  // প্রথমবার deploy-এর সময় admins table খালি থাকলে, .env-এর ADMIN_EMAIL/ADMIN_PASSWORD
+  // দিয়ে একটা super_admin auto-create করে — psql/terminal-এ ঢুকতে হয় না
+  const existingAdminCount = await pool.query('SELECT COUNT(*)::int AS count FROM admins');
+  if (existingAdminCount.rows[0].count === 0) {
+    const bootstrapEmail = process.env.ADMIN_EMAIL;
+    const bootstrapPassword = process.env.ADMIN_PASSWORD;
+    if (bootstrapEmail && bootstrapPassword) {
+      const hash = await bcrypt.hash(bootstrapPassword, 10);
+      await pool.query(
+        `INSERT INTO admins (name, email, password_hash, role) VALUES ($1, $2, $3, 'super_admin')
+         ON CONFLICT (email) DO NOTHING`,
+        ['Admin', bootstrapEmail.toLowerCase().trim(), hash]
+      );
+      console.log(`[SR Group] প্রথম super admin তৈরি হয়েছে: ${bootstrapEmail}`);
+    } else {
+      console.warn('[SR Group] সতর্কতা: admins table খালি, কিন্তু ADMIN_EMAIL/ADMIN_PASSWORD env var সেট করা নেই — কেউ অ্যাডমিন হিসেবে লগইন করতে পারবে না।');
+    }
+  }
 }
 
-// ছোট হেল্পার — pg-এর query() সরাসরি ব্যবহার করা যায়, কিন্তু এভাবে কল-সাইট পরিষ্কার থাকে
 export async function query(text, params) {
   const result = await pool.query(text, params);
   return result.rows;
 }
-
 export async function queryOne(text, params) {
   const rows = await query(text, params);
   return rows[0] || null;
 }
-
 export default pool;
