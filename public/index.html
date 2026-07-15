@@ -155,7 +155,15 @@
   }
   .icon-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
 
-  .chat-main{ flex:1; display:flex; flex-direction:column; height:100vh; min-width:0; position:relative; }   .new-msg-btn{     display:none; align-items:center; gap:6px;     position:absolute; left:50%; bottom:96px; transform:translateX(-50%); z-index:20;     background:var(--panel-solid); border:1px solid var(--border-glass); color:var(--text-primary);     border-radius:20px; padding:8px 16px; font-size:12.5px; cursor:pointer;     box-shadow:0 6px 18px rgba(0,0,0,0.35);   }   .new-msg-btn.show{ display:flex; }
+  .chat-main{ flex:1; display:flex; flex-direction:column; height:100vh; min-width:0; position:relative; }
+  .new-msg-btn{
+    display:none; align-items:center; gap:6px;
+    position:absolute; left:50%; bottom:96px; transform:translateX(-50%); z-index:20;
+    background:var(--panel-solid); border:1px solid var(--border-glass); color:var(--text-primary);
+    border-radius:20px; padding:8px 16px; font-size:12.5px; cursor:pointer;
+    box-shadow:0 6px 18px rgba(0,0,0,0.35);
+  }
+  .new-msg-btn.show{ display:flex; }
   .chat-header{
     display:flex; align-items:center; justify-content:space-between;
     padding:18px 28px; border-bottom:1px solid var(--border-glass);
@@ -490,62 +498,6 @@
 }
 .artifact-badge.clean{ color:var(--accent-glow); background:rgba(63,225,198,0.13); }
 .artifact-badge.error{ color:var(--danger); background:rgba(255,107,107,0.13); }
-
-  /* ---------- AI clarifying-question dashboard ---------- */
-  @keyframes askDashboardIn{
-    from{ opacity:0; transform:translateY(10px) scale(0.98); }
-    to{ opacity:1; transform:translateY(0) scale(1); }
-  }
-  .msg .ask-dashboard{
-    margin:10px 0; max-width:420px; width:100%;
-    background:var(--panel-solid); border:1px solid var(--border-glass);
-    border-radius:14px; padding:16px 16px 14px;
-    animation:askDashboardIn 0.35s ease both;
-  }
-  .msg .ask-dashboard:first-child{ margin-top:2px; }
-  .msg .ask-dashboard:last-child{ margin-bottom:2px; }
-  .ask-dashboard-header{
-    display:flex; align-items:center; gap:8px;
-    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px;
-    color:var(--text-primary); margin-bottom:12px;
-  }
-  .ask-question{ margin-bottom:14px; }
-  .ask-question:last-of-type{ margin-bottom:12px; }
-  .ask-question-text{
-    font-size:13.5px; color:var(--text-primary); margin-bottom:8px; line-height:1.45;
-  }
-  .ask-options{ display:flex; flex-wrap:wrap; gap:7px; }
-  .ask-option-btn{
-    background:rgba(255,255,255,0.04); border:1px solid var(--border-glass);
-    color:var(--text-primary); border-radius:9px; padding:7px 13px;
-    font-size:12.5px; cursor:pointer; font-family:'Inter',sans-serif;
-    transition:border-color 0.12s, background 0.12s, transform 0.12s;
-  }
-  .ask-option-btn:hover{ border-color:var(--accent-a); background:rgba(79,140,255,0.08); }
-  .ask-option-btn.selected{
-    background:linear-gradient(135deg, var(--accent-a), var(--accent-b));
-    border-color:transparent; color:#fff;
-  }
-  .ask-option-btn.ask-explain-toggle{
-    color:var(--text-soft); border-style:dashed;
-  }
-  .ask-option-btn.ask-explain-toggle.selected{
-    background:none; border-color:var(--accent-glow); color:var(--accent-glow); border-style:dashed;
-  }
-  .ask-explain-box{ margin-top:8px; }
-  .ask-explain-box textarea{
-    width:100%; min-height:56px; background:rgba(0,0,0,0.2); border:1px solid var(--border-glass);
-    border-radius:8px; padding:9px 11px; color:#fff; font-size:13px; font-family:'Inter',sans-serif;
-    resize:vertical;
-  }
-  .ask-submit-btn{
-    width:100%; margin-top:4px;
-    background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); border:none; border-radius:9px;
-    padding:10px; color:#fff; font-family:'Inter',sans-serif; font-weight:600; font-size:13px; cursor:pointer;
-  }
-  .ask-submit-btn:hover{ filter:brightness(1.08); }
-  .ask-submit-btn:disabled{ opacity:0.5; cursor:default; }
-
   .msg code.inline-code{
     background:rgba(255,255,255,0.08); border-radius:4px; padding:1px 6px;
     font-family:'JetBrains Mono', monospace; font-size:0.9em;
@@ -563,6 +515,42 @@
     font-size:14px; text-decoration:none; cursor:pointer;
   }
   .msg-image-download:hover{ border-color:var(--accent-a); background:rgba(10,14,20,0.9); }
+
+  /* ---------- Interactive clarifying-question widget ---------- */
+  @keyframes qwFadeIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+  .question-widget{
+    margin:6px 0 2px; padding:14px 16px; border-radius:12px;
+    background:rgba(255,255,255,0.04); border:1px solid var(--border-glass);
+    animation:qwFadeIn 0.28s ease; max-width:100%;
+  }
+  .question-widget .qw-question{ font-weight:600; font-size:14px; margin-bottom:12px; line-height:1.5; }
+  .question-widget .qw-options{ display:flex; flex-direction:column; gap:8px; margin-bottom:4px; }
+  .question-widget .qw-option-btn{
+    text-align:left; background:rgba(255,255,255,0.04); border:1px solid var(--border-glass);
+    color:var(--text-primary); border-radius:9px; padding:10px 13px; font-size:13.5px; cursor:pointer;
+    font-family:'Inter',sans-serif; transition:border-color 0.12s, background 0.12s;
+  }
+  .question-widget .qw-option-btn:hover{ border-color:var(--accent-a); background:rgba(79,140,255,0.08); }
+  .question-widget .qw-option-btn.selected{ border-color:var(--accent-glow); background:rgba(63,225,198,0.1); color:var(--accent-glow); }
+  .question-widget .qw-option-btn:disabled{ cursor:default; opacity:0.55; }
+  .qw-explain-toggle{
+    background:none; border:none; color:var(--text-soft); font-size:12px; cursor:pointer;
+    text-decoration:underline; padding:6px 0 0; font-family:'Inter',sans-serif;
+  }
+  .qw-explain-toggle:hover{ color:var(--accent-glow); }
+  .question-widget .qw-custom-row{ display:flex; gap:8px; margin-top:8px; }
+  .question-widget .qw-custom-row input{
+    flex:1; background:rgba(0,0,0,0.2); border:1px solid var(--border-glass); border-radius:8px;
+    padding:8px 11px; color:var(--text-primary); font-size:13px; font-family:'Inter',sans-serif;
+  }
+  .question-widget .qw-custom-submit{
+    background:var(--panel); border:1px solid var(--border-glass); color:var(--text-primary);
+    border-radius:8px; padding:0 14px; font-size:12.5px; cursor:pointer; font-family:'Inter',sans-serif;
+  }
+  .question-widget .qw-custom-submit:hover{ border-color:var(--accent-a); }
+  .question-widget .qw-answered-note{
+    font-size:11.5px; color:var(--accent-glow); font-family:'JetBrains Mono', monospace; margin-top:10px;
+  }
 
   /* ---------- Artifact side panel ---------- */
   .artifact-backdrop{
@@ -700,10 +688,11 @@
       <div class="auth-head">
         <div class="brandmark"><span class="dot"></span> SR Group</div>
         <h1>Admin access</h1>
-        <p>Enter the admin passcode.</p>
+        <p>Sign in with your admin account.</p>
       </div>
       <div id="adminError"></div>
-      <div class="field"><label>Passcode</label><input id="adminPassword" type="password" placeholder="••••••••"></div>
+      <div class="field"><label>Email</label><input id="adminEmail" type="email" placeholder="admin@example.com"></div>
+      <div class="field"><label>Password</label><input id="adminPassword" type="password" placeholder="••••••••"></div>
       <button class="btn-primary" id="adminLoginBtn">Enter dashboard</button>
       <div class="switch-line"><a id="backToLoginFromAdmin">← Back to sign in</a></div>
     </div>
@@ -1258,6 +1247,98 @@ async function enterChat() {
 
 const artifactStore = {};
 let artifactCounter = 0;
+
+const questionWidgetStore = {};
+let questionWidgetCounter = 0;
+
+function renderQuestionBlock(jsonText) {
+  let data;
+  try { data = JSON.parse(jsonText); } catch (e) { return null; }
+  if (!data || typeof data.question !== 'string' || !Array.isArray(data.options) || data.options.length === 0) return null;
+
+  const id = 'qw-' + (++questionWidgetCounter);
+  questionWidgetStore[id] = data;
+
+  const optionsHtml = data.options
+    .map((opt, i) => `<button type="button" class="qw-option-btn" data-qwid="${id}" data-optindex="${i}">${escapeHtml(String(opt))}</button>`)
+    .join('');
+
+  const allowCustom = data.allowCustom !== false;
+  const customHtml = allowCustom
+    ? `<button type="button" class="qw-explain-toggle" data-qwid="${id}">✎ None of these — explain in your own words</button>
+       <div class="qw-custom-row" id="${id}-custom-row" style="display:none;">
+         <input type="text" id="${id}-custom-input" placeholder="Type your own answer...">
+         <button type="button" class="qw-custom-submit" data-qwid="${id}">Send</button>
+       </div>`
+    : '';
+
+  return `<div class="question-widget" id="${id}">
+    <div class="qw-question">${escapeHtml(data.question)}</div>
+    <div class="qw-options">${optionsHtml}</div>
+    ${customHtml}
+  </div>`;
+}
+
+function answerQuestionWidget(id, answerText) {
+  const widgetEl = document.getElementById(id);
+  if (!widgetEl || widgetEl.classList.contains('answered') || !answerText) return;
+  widgetEl.classList.add('answered');
+
+  widgetEl.querySelectorAll('.qw-option-btn').forEach((b) => {
+    b.disabled = true;
+    if (b.textContent === answerText) b.classList.add('selected');
+  });
+  const toggle = widgetEl.querySelector('.qw-explain-toggle');
+  if (toggle) toggle.style.display = 'none';
+  const customRow = widgetEl.querySelector('.qw-custom-row');
+  if (customRow) customRow.style.display = 'none';
+
+  const note = document.createElement('div');
+  note.className = 'qw-answered-note';
+  note.textContent = '✓ Answered: ' + answerText;
+  widgetEl.appendChild(note);
+
+  const input = document.getElementById('userInput');
+  input.value = answerText;
+  sendMessage();
+}
+
+document.addEventListener('click', (e) => {
+  const optBtn = e.target.closest('.qw-option-btn');
+  if (optBtn) {
+    const data = questionWidgetStore[optBtn.dataset.qwid];
+    const answer = data ? data.options[optBtn.dataset.optindex] : optBtn.textContent;
+    answerQuestionWidget(optBtn.dataset.qwid, String(answer));
+    return;
+  }
+  const toggleBtn = e.target.closest('.qw-explain-toggle');
+  if (toggleBtn) {
+    const row = document.getElementById(toggleBtn.dataset.qwid + '-custom-row');
+    if (row) {
+      row.style.display = 'flex';
+      toggleBtn.style.display = 'none';
+      const input = document.getElementById(toggleBtn.dataset.qwid + '-custom-input');
+      if (input) input.focus();
+    }
+    return;
+  }
+  const submitBtn = e.target.closest('.qw-custom-submit');
+  if (submitBtn) {
+    const input = document.getElementById(submitBtn.dataset.qwid + '-custom-input');
+    const val = input ? input.value.trim() : '';
+    if (val) answerQuestionWidget(submitBtn.dataset.qwid, val);
+    return;
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const input = e.target.closest('.qw-custom-row input');
+  if (!input) return;
+  const row = input.closest('.qw-custom-row');
+  const submitBtn = row ? row.querySelector('.qw-custom-submit') : null;
+  if (submitBtn) submitBtn.click();
+});
+
 function checkCodeErrors(lang, code) {
   const l = (lang || '').toLowerCase();
 
@@ -1307,161 +1388,6 @@ function checkBracketBalance(code) {
   if (issues === 0) return { status: 'clean', label: 'Looks balanced', basic: true };
   return { status: 'error', label: `${issues} possible issue${issues > 1 ? 's' : ''}`, basic: true };
 }
-// ---------- AI clarifying-question dashboard ----------
-// When the assistant wants to ask the user something, instead of plain text it can send a
-// fenced block like:  ```askuser\n{"questions":[{"question":"...","options":["A","B"],"type":"single_select"}]}\n```
-// This gets rendered as an animated card with tappable MCQ-style buttons plus an "Other / explain"
-// free-text fallback for each question, instead of a wall of plain text.
-const askDashboardStore = {};   // id -> { questions: [...] }
-const askAnswersState = {};     // id -> { [qIndex]: { type:'option'|'multi'|'explain', value / values } }
-let askDashboardCounter = 0;
-
-function buildAskDashboardHtml(rawJson) {
-  let parsed;
-  try { parsed = JSON.parse(rawJson); } catch (e) { return null; }
-  const questions = parsed && Array.isArray(parsed.questions) ? parsed.questions : null;
-  if (!questions || questions.length === 0) return null;
-
-  const id = 'ask-' + (++askDashboardCounter);
-  askDashboardStore[id] = { questions };
-  askAnswersState[id] = {};
-
-  const questionsHtml = questions.map((q, qi) => {
-    const options = Array.isArray(q.options) ? q.options : [];
-    const optionsHtml = options.map((opt, oi) =>
-      `<button type="button" class="ask-option-btn" data-ask-id="${id}" data-qidx="${qi}" data-oidx="${oi}">${escapeHtml(String(opt))}</button>`
-    ).join('');
-    return `<div class="ask-question" data-qidx="${qi}">
-      <div class="ask-question-text">${escapeHtml(q.question || '')}</div>
-      <div class="ask-options">
-        ${optionsHtml}
-        <button type="button" class="ask-option-btn ask-explain-toggle" data-ask-id="${id}" data-qidx="${qi}">✎ Other / explain</button>
-      </div>
-      <div class="ask-explain-box" data-ask-id="${id}" data-qidx="${qi}" style="display:none;">
-        <textarea placeholder="Type your own answer..."></textarea>
-      </div>
-    </div>`;
-  }).join('');
-
-  return `<div class="ask-dashboard" data-ask-id="${id}">
-    <div class="ask-dashboard-header">🎯 Quick questions</div>
-    ${questionsHtml}
-    <button type="button" class="ask-submit-btn" data-ask-id="${id}">Submit answers</button>
-  </div>`;
-}
-
-function toggleAskOption(askId, qidx, oidx) {
-  const dash = document.querySelector(`.ask-dashboard[data-ask-id="${askId}"]`);
-  if (!dash) return;
-  const qBlock = dash.querySelector(`.ask-question[data-qidx="${qidx}"]`);
-  const optBtns = [...qBlock.querySelectorAll('.ask-option-btn:not(.ask-explain-toggle)')];
-  const explainToggle = qBlock.querySelector('.ask-explain-toggle');
-  const explainBox = qBlock.querySelector('.ask-explain-box');
-  const q = askDashboardStore[askId].questions[qidx];
-  const isMulti = q.type === 'multi_select';
-
-  if (!isMulti) {
-    optBtns.forEach((b, i) => b.classList.toggle('selected', i === oidx));
-    explainToggle.classList.remove('selected');
-    explainBox.style.display = 'none';
-    askAnswersState[askId][qidx] = { type: 'option', value: q.options[oidx] };
-  } else {
-    const btn = optBtns[oidx];
-    btn.classList.toggle('selected');
-    explainToggle.classList.remove('selected');
-    explainBox.style.display = 'none';
-    const selected = optBtns
-      .map((b, i) => (b.classList.contains('selected') ? q.options[i] : null))
-      .filter((v) => v !== null);
-    askAnswersState[askId][qidx] = { type: 'multi', values: selected };
-  }
-}
-
-function toggleAskExplain(askId, qidx) {
-  const dash = document.querySelector(`.ask-dashboard[data-ask-id="${askId}"]`);
-  if (!dash) return;
-  const qBlock = dash.querySelector(`.ask-question[data-qidx="${qidx}"]`);
-  const optBtns = [...qBlock.querySelectorAll('.ask-option-btn:not(.ask-explain-toggle)')];
-  const explainToggle = qBlock.querySelector('.ask-explain-toggle');
-  const explainBox = qBlock.querySelector('.ask-explain-box');
-  const showing = explainBox.style.display !== 'none';
-
-  if (showing) {
-    explainBox.style.display = 'none';
-    explainToggle.classList.remove('selected');
-    delete askAnswersState[askId][qidx];
-  } else {
-    optBtns.forEach((b) => b.classList.remove('selected'));
-    explainToggle.classList.add('selected');
-    explainBox.style.display = 'block';
-    const ta = explainBox.querySelector('textarea');
-    ta.focus();
-    askAnswersState[askId][qidx] = { type: 'explain', value: '' };
-  }
-}
-
-function submitAskDashboard(askId) {
-  const dash = document.querySelector(`.ask-dashboard[data-ask-id="${askId}"]`);
-  if (!dash) return;
-  const data = askDashboardStore[askId];
-  if (!data) return;
-
-  const lines = [];
-  data.questions.forEach((q, qi) => {
-    let answer = '';
-    const state = askAnswersState[askId][qi];
-    if (state && state.type === 'explain') {
-      const ta = dash.querySelector(`.ask-explain-box[data-qidx="${qi}"] textarea`);
-      answer = (ta ? ta.value.trim() : '') || '(no answer given)';
-    } else if (state && state.type === 'multi') {
-      answer = state.values.length ? state.values.join(', ') : '(no answer given)';
-    } else if (state && state.type === 'option') {
-      answer = state.value;
-    } else {
-      answer = '(no answer given)';
-    }
-    lines.push(`${q.question}\n${answer}`);
-  });
-
-  const submitBtn = dash.querySelector('.ask-submit-btn');
-  submitBtn.disabled = true;
-
-  const input = document.getElementById('userInput');
-  input.value = lines.join('\n\n');
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
-  sendMessage();
-}
-
-document.addEventListener('click', (e) => {
-  const optBtn = e.target.closest('.ask-option-btn:not(.ask-explain-toggle)');
-  if (optBtn) {
-    toggleAskOption(optBtn.dataset.askId, Number(optBtn.dataset.qidx), Number(optBtn.dataset.oidx));
-    return;
-  }
-  const explainBtn = e.target.closest('.ask-explain-toggle');
-  if (explainBtn) {
-    toggleAskExplain(explainBtn.dataset.askId, Number(explainBtn.dataset.qidx));
-    return;
-  }
-  const submitBtn = e.target.closest('.ask-submit-btn');
-  if (submitBtn) {
-    submitAskDashboard(submitBtn.dataset.askId);
-    return;
-  }
-});
-
-document.addEventListener('input', (e) => {
-  const ta = e.target.closest('.ask-explain-box textarea');
-  if (ta) {
-    const box = e.target.closest('.ask-explain-box');
-    const askId = box.dataset.askId;
-    const qidx = Number(box.dataset.qidx);
-    if (askAnswersState[askId] && askAnswersState[askId][qidx]) {
-      askAnswersState[askId][qidx].value = ta.value;
-    }
-  }
-});
 
 function renderMessageHtml(text) {
   const parts = [];
@@ -1482,24 +1408,30 @@ function renderMessageHtml(text) {
 
   return parts
     .map((part) => {
-     if (part.type === 'code') {
-  const id = 'artifact-' + (++artifactCounter);
-  artifactStore[id] = { lang: part.lang, code: part.value };
-  const lineCount = part.value.split('\n').length;
+      if (part.type === 'code') {
+        // lang "question" হলে আগে MCQ widget হিসেবে রেন্ডারের চেষ্টা করি, JSON ভাঙা থাকলে সাধারণ কোড কার্ডে fallback করি
+        if ((part.lang || '').toLowerCase() === 'question') {
+          const widgetHtml = renderQuestionBlock(part.value);
+          if (widgetHtml) return widgetHtml;
+        }
 
-  const check = checkCodeErrors(part.lang, part.value);
-  const badge = check.status
-    ? `<span class="artifact-badge ${check.status}">${check.status === 'clean' ? '✓' : '⚠'} ${escapeHtml(check.label)}${check.basic ? ' · basic check' : ''}</span>`
-    : '';
+        const id = 'artifact-' + (++artifactCounter);
+        artifactStore[id] = { lang: part.lang, code: part.value };
+        const lineCount = part.value.split('\n').length;
 
-  return `<div class="artifact-card" data-artifact-id="${id}">
-    <div class="artifact-card-icon">&lt;/&gt;</div>
-    <div class="artifact-card-info">
-      <div class="artifact-card-title">${escapeHtml(part.lang)} snippet</div>
-      <div class="artifact-card-sub">${lineCount} line${lineCount === 1 ? '' : 's'} · Click to view ${badge}</div>
-    </div>
-  </div>`;
-}
+        const check = checkCodeErrors(part.lang, part.value);
+        const badge = check.status
+          ? `<span class="artifact-badge ${check.status}">${check.status === 'clean' ? '✓' : '⚠'} ${escapeHtml(check.label)}${check.basic ? ' · basic check' : ''}</span>`
+          : '';
+
+        return `<div class="artifact-card" data-artifact-id="${id}">
+          <div class="artifact-card-icon">&lt;/&gt;</div>
+          <div class="artifact-card-info">
+            <div class="artifact-card-title">${escapeHtml(part.lang)} snippet</div>
+            <div class="artifact-card-sub">${lineCount} line${lineCount === 1 ? '' : 's'} · Click to view ${badge}</div>
+          </div>
+        </div>`;
+      }
       let escaped = escapeHtml(part.value).replace(
         /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
         (m, alt, url) =>
@@ -1609,29 +1541,32 @@ function addMessage(role, text, opts = {}) {
 
     row.appendChild(actions);
   }
-box.appendChild(row);
-    if (role === 'user' || !userScrolledUp) {
-      scrollMessagesToBottom();
-    } else {
-      document.getElementById('newMsgBtn').classList.add('show');
-    }
-    if (role === 'user') updateEditButtonsVisibility();
+
+  box.appendChild(row);
+  if (role === 'user' || !userScrolledUp) {
+    scrollMessagesToBottom();
+  } else {
+    document.getElementById('newMsgBtn').classList.add('show');
+  }
+  if (role === 'user') updateEditButtonsVisibility();
   return { record: msgRecord, row };
 }
+
 let userScrolledUp = false;
-  function scrollMessagesToBottom() {
-    const box = document.getElementById('messages');
-    box.scrollTop = box.scrollHeight;
-    userScrolledUp = false;
-    document.getElementById('newMsgBtn').classList.remove('show');
-  }
-  document.getElementById('messages').addEventListener('scroll', () => {
-    const box = document.getElementById('messages');
-    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-    userScrolledUp = !nearBottom;
-    if (nearBottom) document.getElementById('newMsgBtn').classList.remove('show');
-  });
-  document.getElementById('newMsgBtn').onclick = scrollMessagesToBottom;
+function scrollMessagesToBottom() {
+  const box = document.getElementById('messages');
+  box.scrollTop = box.scrollHeight;
+  userScrolledUp = false;
+  document.getElementById('newMsgBtn').classList.remove('show');
+}
+document.getElementById('messages').addEventListener('scroll', () => {
+  const box = document.getElementById('messages');
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  userScrolledUp = !nearBottom;
+  if (nearBottom) document.getElementById('newMsgBtn').classList.remove('show');
+});
+document.getElementById('newMsgBtn').onclick = scrollMessagesToBottom;
+
 function updateEditButtonsVisibility() {
   const userRows = [...document.querySelectorAll('#messages .msg-row.user')];
   userRows.forEach((r, i) => {
@@ -1797,7 +1732,8 @@ document.getElementById('menuWebSearch').onclick = (e) => {
   webSearchEnabled = !webSearchEnabled;
   document.getElementById('menuWebSearch').classList.toggle('toggled', webSearchEnabled);
 };
-  function detectCodeLanguage(code) {
+
+function detectCodeLanguage(code) {
   const trimmed = code.trim();
   if (!trimmed) return null;
   const rules = [
@@ -1822,7 +1758,7 @@ document.getElementById('codeSnippetInput').addEventListener('input', (e) => {
   const detected = detectCodeLanguage(e.target.value);
   if (detected) document.getElementById('codeSnippetLang').value = detected;
 });
-  document.getElementById('menuCodeSnippet').onclick = () => {
+document.getElementById('menuCodeSnippet').onclick = () => {
   togglePlusMenu(false);
   document.getElementById('codeSnippetInput').value = '';
   document.getElementById('codeModalBackdrop').classList.add('show');
@@ -1846,7 +1782,7 @@ document.getElementById('insertCodeSnippetBtn').onclick = () => {
   document.getElementById('codeModalBackdrop').classList.remove('show');
   input.focus();
 };
- 
+
 document.getElementById('imageFileInput').onchange = (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
@@ -1901,8 +1837,8 @@ async function sendMessage() {
   renderComposerAttachment();
   const userEntry = addMessage('user', text, { imageUrl: attachment ? attachment.dataUrl : null });
   input.value = '';
-    input.style.height = 'auto';
-    showTyping();
+  input.style.height = 'auto';
+  showTyping();
 
   try {
     const body = { content: text };
@@ -2118,10 +2054,11 @@ let adminRole = null;
 let adminName = null;
 
 document.getElementById('adminLoginBtn').onclick = async () => {
+  const email = document.getElementById('adminEmail').value.trim().toLowerCase();
   const password = document.getElementById('adminPassword').value;
-  if (!password) { setError('adminError', 'Enter the admin passcode.'); return; }
+  if (!email || !password) { setError('adminError', 'Enter your email and password.'); return; }
   try {
-    const data = await api('/admin/login', { method: 'POST', body: { passcode: password } });
+    const data = await api('/admin/login', { method: 'POST', body: { email, password } });
     adminToken = data.token;
     adminRole = data.admin ? data.admin.role : 'viewer';
     adminName = data.admin ? data.admin.name : '';
