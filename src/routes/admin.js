@@ -1,23 +1,26 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { query, queryOne } from '../db.js';
-import { signAdminToken, requireAdmin } from '../auth.js';
+import { signAdminToken, requireAdmin, requireSuperAdmin } from '../auth.js';
 import { getSettings, setSettings } from '../settings.js';
 
 const router = Router();
 
+// ---- Login: email + password ----
 router.post('/login', async (req, res) => {
   try {
-    const { passcode } = req.body || {};
-    if (!passcode) return res.status(400).json({ error: 'Enter the admin passcode.' });
+    const { email: rawEmail, password } = req.body || {};
+    const email = (rawEmail || '').trim().toLowerCase();
+    if (!email || !password) return res.status(400).json({ error: 'Enter your email and password.' });
 
-    const row = await queryOne('SELECT passcode_hash FROM admin_auth WHERE id = 1');
-    if (!row) return res.status(500).json({ error: 'Admin account not initialized yet.' });
+    const admin = await queryOne('SELECT * FROM admins WHERE email = $1', [email]);
+    if (!admin) return res.status(404).json({ error: 'No admin account found with that email.' });
 
-    const match = await bcrypt.compare(passcode, row.passcode_hash);
-    if (!match) return res.status(401).json({ error: 'Wrong passcode.' });
+    const match = await bcrypt.compare(password, admin.password_hash);
+    if (!match) return res.status(401).json({ error: 'Incorrect password.' });
 
-    res.json({ token: signAdminToken(), admin: { name: 'Admin', role: 'super_admin' } });
+    const token = signAdminToken(admin);
+    res.json({ token, admin: { name: admin.name, email: admin.email, role: admin.role } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
@@ -41,7 +44,7 @@ router.get('/customers', async (req, res) => {
   }
 });
 
-router.post('/customers/:email/block', async (req, res) => {
+router.post('/customers/:email/block', requireSuperAdmin, async (req, res) => {
   try {
     const email = req.params.email.toLowerCase();
     const user = await queryOne('SELECT blocked FROM users WHERE email = $1', [email]);
@@ -55,8 +58,7 @@ router.post('/customers/:email/block', async (req, res) => {
   }
 });
 
-// প্রতিটা কাস্টমারের জন্য আলাদা daily message limit সেট করা — খালি/null দিলে সে আবার global default ব্যবহার করবে
-router.post('/customers/:email/quota', async (req, res) => {
+router.post('/customers/:email/quota', requireSuperAdmin, async (req, res) => {
   try {
     const email = req.params.email.toLowerCase();
     let { dailyLimit } = req.body || {};
@@ -77,28 +79,24 @@ router.post('/customers/:email/quota', async (req, res) => {
     res.json({ ok: true, dailyLimit });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Could not update this customer\'s limit.' });
+    res.status(500).json({ error: "Could not update this customer's limit." });
   }
 });
 
-// অ্যাডমিন থেকে সরাসরি কাস্টমারের পাসওয়ার্ড রিসেট করা — একটা নতুন random temporary password
-// জেনারেট করে, হ্যাশ করে সেভ করে, আর plaintext-টা একবারের জন্য ফেরত দেয় যাতে admin কাস্টমারকে জানাতে পারে
-router.post('/customers/:email/reset-password', async (req, res) => {
+router.post('/customers/:email/reset-password', requireSuperAdmin, async (req, res) => {
   try {
     const email = req.params.email.toLowerCase();
-
     const user = await queryOne('SELECT id FROM users WHERE email = $1', [email]);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
 
     const tempPassword = Math.random().toString(36).slice(-5) + Math.random().toString(36).slice(-5);
-
     const newHash = await bcrypt.hash(tempPassword, 10);
     await query('UPDATE users SET password_hash = $1 WHERE email = $2', [newHash, email]);
 
     res.json({ ok: true, tempPassword });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Could not reset this customer\'s password.' });
+    res.status(500).json({ error: "Could not reset this customer's password." });
   }
 });
 
@@ -128,7 +126,7 @@ router.get('/conversations/:id/messages', async (req, res) => {
   }
 });
 
-router.get('/settings', async (req, res) => {
+router.get('/settings', requireSuperAdmin, async (req, res) => {
   try {
     res.json(await getSettings());
   } catch (err) {
@@ -137,7 +135,7 @@ router.get('/settings', async (req, res) => {
   }
 });
 
-router.post('/settings', async (req, res) => {
+router.post('/settings', requireSuperAdmin, async (req, res) => {
   try {
     const { desc, tone, facts, dailyLimit } = req.body || {};
     await setSettings({ desc, tone, facts, dailyLimit });
@@ -148,24 +146,7 @@ router.post('/settings', async (req, res) => {
   }
 });
 
-router.post('/passcode', async (req, res) => {
-  try {
-    const { current, next } = req.body || {};
-    if (!current || !next) return res.status(400).json({ error: 'Fill in all fields.' });
-    if (next.length < 6) return res.status(400).json({ error: 'New passcode should be at least 6 characters.' });
-
-    const row = await queryOne('SELECT passcode_hash FROM admin_auth WHERE id = 1');
-    const match = await bcrypt.compare(current, row.passcode_hash);
-    if (!match) return res.status(401).json({ error: 'Current passcode is incorrect.' });
-
-    const newHash = await bcrypt.hash(next, 10);
-    await query('UPDATE admin_auth SET passcode_hash = $1 WHERE id = 1', [newHash]);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Could not update passcode.' });
-  }
-});
+// ---- নিজের password change (My account tab) ----
 router.post('/change-password', async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body || {};
@@ -176,16 +157,140 @@ router.post('/change-password', async (req, res) => {
       return res.status(400).json({ error: 'New password should be at least 6 characters.' });
     }
 
-    const row = await queryOne('SELECT passcode_hash FROM admin_auth WHERE id = 1');
-    const match = await bcrypt.compare(currentPassword, row.passcode_hash);
+    const admin = await queryOne('SELECT password_hash FROM admins WHERE id = $1', [req.adminId]);
+    if (!admin) return res.status(404).json({ error: 'Admin account not found.' });
+
+    const match = await bcrypt.compare(currentPassword, admin.password_hash);
     if (!match) return res.status(401).json({ error: 'Current password is incorrect.' });
 
     const newHash = await bcrypt.hash(newPassword, 10);
-    await query('UPDATE admin_auth SET passcode_hash = $1 WHERE id = 1', [newHash]);
+    await query('UPDATE admins SET password_hash = $1 WHERE id = $2', [newHash, req.adminId]);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not update password.' });
+  }
+});
+
+// ---- Admins CRUD (super admin only) ----
+router.get('/admins', requireSuperAdmin, async (req, res) => {
+  try {
+    const admin = await queryOne('SELECT email FROM admins WHERE id = $1', [req.adminId]);
+    const rows = await query(
+      'SELECT id, name, email, role, created_at AS "createdAt" FROM admins ORDER BY created_at ASC'
+    );
+    res.json({ admins: rows, selfEmail: admin ? admin.email : '' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load admins.' });
+  }
+});
+
+router.post('/admins', requireSuperAdmin, async (req, res) => {
+  try {
+    const { name, email: rawEmail, password, role } = req.body || {};
+    const email = (rawEmail || '').trim().toLowerCase();
+    if (!name || !email || !password) return res.status(400).json({ error: 'Fill in name, email, and password.' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password should be at least 6 characters.' });
+    const finalRole = role === 'super_admin' ? 'super_admin' : 'viewer';
+
+    const existing = await queryOne('SELECT id FROM admins WHERE email = $1', [email]);
+    if (existing) return res.status(409).json({ error: 'An admin with this email already exists.' });
+
+    const hash = await bcrypt.hash(password, 10);
+    await query('INSERT INTO admins (name, email, password_hash, role) VALUES ($1, $2, $3, $4)', [
+      name, email, hash, finalRole,
+    ]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not add this admin.' });
+  }
+});
+
+router.post('/admins/:id/role', requireSuperAdmin, async (req, res) => {
+  try {
+    const { role } = req.body || {};
+    const finalRole = role === 'super_admin' ? 'super_admin' : 'viewer';
+    const id = parseInt(req.params.id, 10);
+
+    if (id === req.adminId) return res.status(400).json({ error: "You can't change your own role." });
+
+    const target = await queryOne('SELECT id FROM admins WHERE id = $1', [id]);
+    if (!target) return res.status(404).json({ error: 'Admin not found.' });
+
+    await query('UPDATE admins SET role = $1 WHERE id = $2', [finalRole, id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not update this admin's role." });
+  }
+});
+
+router.delete('/admins/:id', requireSuperAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (id === req.adminId) return res.status(400).json({ error: "You can't remove your own account." });
+
+    const target = await queryOne('SELECT id FROM admins WHERE id = $1', [id]);
+    if (!target) return res.status(404).json({ error: 'Admin not found.' });
+
+    await query('DELETE FROM admins WHERE id = $1', [id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not remove this admin.' });
+  }
+});
+
+// ---- Analytics (both roles can view) ----
+router.get('/analytics', async (req, res) => {
+  try {
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 14));
+
+    const dauRows = await query(
+      `SELECT to_char(d::date, 'YYYY-MM-DD') AS date,
+              COALESCE(cnt.count, 0)::int AS count
+       FROM generate_series(current_date - ($1::int - 1), current_date, interval '1 day') d
+       LEFT JOIN (
+         SELECT date_trunc('day', m.created_at)::date AS day, COUNT(DISTINCT c.user_email)::int AS count
+         FROM messages m JOIN conversations c ON c.id = m.conversation_id
+         WHERE m.role = 'user' AND m.created_at >= current_date - ($1::int - 1)
+         GROUP BY 1
+       ) cnt ON cnt.day = d::date
+       ORDER BY d`,
+      [days]
+    );
+
+    const volumeRows = await query(
+      `SELECT to_char(d::date, 'YYYY-MM-DD') AS date,
+              COALESCE(cnt.count, 0)::int AS count
+       FROM generate_series(current_date - ($1::int - 1), current_date, interval '1 day') d
+       LEFT JOIN (
+         SELECT date_trunc('day', created_at)::date AS day, COUNT(*)::int AS count
+         FROM messages
+         WHERE role = 'user' AND created_at >= current_date - ($1::int - 1)
+         GROUP BY 1
+       ) cnt ON cnt.day = d::date
+       ORDER BY d`,
+      [days]
+    );
+
+    const topQuestions = await query(
+      `SELECT content AS question, COUNT(*)::int AS count
+       FROM messages
+       WHERE role = 'user' AND content <> '' AND created_at >= current_date - ($1::int - 1)
+       GROUP BY content
+       HAVING COUNT(*) > 1
+       ORDER BY count DESC
+       LIMIT 8`,
+      [days]
+    );
+
+    res.json({ dailyActiveUsers: dauRows, messageVolume: volumeRows, topQuestions });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load analytics.' });
   }
 });
 
