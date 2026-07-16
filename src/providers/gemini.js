@@ -17,6 +17,7 @@ function isQuotaOrKeyError(status) {
 export async function callGemini(systemPrompt, history, options = {}) {
   const { webSearch = false } = options;
   if (apiKeys.length === 0) {
+    console.error('[Gemini] No API key configured (GEMINI_API_KEY / GEMINI_API_KEYS missing).');
     return { ok: false, error: 'Gemini is not configured (no GEMINI_API_KEY / GEMINI_API_KEYS).' };
   }
 
@@ -114,6 +115,7 @@ export async function callGemini(systemPrompt, history, options = {}) {
           }
 
           if (text || images.length) {
+            console.log(`[Gemini] ✓ Success — text length: ${text.length}, images: ${images.length}`);
             return {
               ok: true,
               text,
@@ -123,18 +125,24 @@ export async function callGemini(systemPrompt, history, options = {}) {
           }
         }
         lastError = 'The AI did not return a reply.';
+        console.warn('[Gemini] Response OK but no usable text/image parts found.');
         continue;
       }
       lastError = (data && data.error && data.error.message) || `Gemini returned an error (status ${response.status}).`;
+      console.error(`[Gemini] API error (status ${response.status}):`, lastError);
       if (isQuotaOrKeyError(response.status) && attempt < apiKeys.length - 1) {
+        console.warn('[Gemini] Quota/key error — trying next key...');
         continue;
       }
       if (!isQuotaOrKeyError(response.status)) {
+        console.error('[Gemini] Non-retryable error — giving up, falling back to next provider.');
         return { ok: false, error: lastError };
       }
     } catch (err) {
+      console.error('[Gemini] Network/fetch error:', err.message);
       lastError = 'Could not reach Gemini.';
     }
   }
+  console.error('[Gemini] All API keys exhausted, giving up:', lastError);
   return { ok: false, error: lastError };
 }
