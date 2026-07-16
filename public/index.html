@@ -661,12 +661,13 @@
   .artifact-preview-frame{
     flex:1; width:100%; height:100%; min-height:0; border:none; background:#fff; display:none;
   }
-  .artifact-panel-body{
+.artifact-panel-body{
     flex:1; overflow:auto; margin:0; padding:18px 20px;
     font-family:'JetBrains Mono', monospace; font-size:13px; line-height:1.65;
     color:#D6E2F0; white-space:pre;
+    background:#0B1220;
   }
-  @media (max-width:680px){
+    @media (max-width:680px){
     .artifact-panel{ width:100vw; max-width:100vw; }
   }
 </style>
@@ -1016,6 +1017,18 @@
       <p class="hint">Pick a color theme for the whole site. Applies instantly and is remembered on this device.</p>
       <div id="themeError"></div>
       <div class="theme-grid" id="themeGrid"></div>
+<hr class="skills-divider">
+<div class="settings-field">
+  <label>Custom background color</label>
+  <input id="customBgColor" type="color" value="#0A0E14" style="width:70px; height:38px; padding:2px; cursor:pointer; border:1px solid var(--border-glass); border-radius:8px; background:none;">
+  <div class="quota-hint">Nijer pochonder color diye chat-er background set korte parben — upore-r theme override korbe.</div>
+</div>
+<div class="settings-field">
+  <label>Ba background image URL (optional)</label>
+  <input id="customBgImageUrl" type="text" placeholder="https://example.com/image.jpg">
+</div>
+<button class="btn-primary" id="applyCustomBgBtn" style="max-width:220px; display:inline-block;">Apply custom background</button>
+<button class="icon-btn" id="resetCustomBgBtn" style="margin-left:8px;">Reset to theme</button>
     </div>
 
     <div class="modal-section" id="modalSection-password">
@@ -1194,6 +1207,7 @@ function escapeHtml(str) {
 
 /* ---------------- Startup / session restore ---------------- */
 function init() {
+  applyCustomBg();
   userToken = localStorage.getItem('srgroup:token');
   const name = localStorage.getItem('srgroup:name');
   const email = localStorage.getItem('srgroup:email');
@@ -1860,7 +1874,7 @@ function toggleShareMenu(wrapEl, msgRecord) {
   pdfShareItem.className = 'share-menu-item';
   pdfShareItem.innerHTML = '<span class="smi-icon">📄</span><span>Share as PDF…</span>';
 pdfShareItem.onclick = () => { closeShareMenu(); sharePdfOfMessage(msgRecord); };
-menu.appendChild(pdfShareItem);   // <- eta indent kore rakho baki gulor moto
+menu.appendChild(pdfShareItem);  
     wrapEl.appendChild(menu);
   openShareMenuEl = menu;
 }
@@ -2149,6 +2163,40 @@ function openAccountModal() {
   loadCustomizeText();
   renderSkillList();
   renderThemeGrid();
+  initCustomBgControls();
+}
+/* ---------------- Custom background (client-side, overrides theme) ---------------- */
+function getCustomBg() {
+  try { return JSON.parse(localStorage.getItem('srgroup:customBg') || 'null'); } catch (e) { return null; }
+}
+function applyCustomBg() {
+  const bg = getCustomBg();
+  if (!bg || !bg.value) { document.body.style.background = ''; return; }
+  if (bg.type === 'image') {
+    document.body.style.background = `url('${bg.value}') center / cover no-repeat fixed`;
+  } else {
+    document.body.style.background = bg.value;
+  }
+}
+function initCustomBgControls() {
+  const colorInput = document.getElementById('customBgColor');
+  const urlInput = document.getElementById('customBgImageUrl');
+  const saved = getCustomBg();
+  if (saved) {
+    if (saved.type === 'color') colorInput.value = saved.value;
+    if (saved.type === 'image') urlInput.value = saved.value;
+  }
+  document.getElementById('applyCustomBgBtn').onclick = () => {
+    const imageUrl = urlInput.value.trim();
+    const bg = imageUrl ? { type: 'image', value: imageUrl } : { type: 'color', value: colorInput.value };
+    localStorage.setItem('srgroup:customBg', JSON.stringify(bg));
+    applyCustomBg();
+  };
+  document.getElementById('resetCustomBgBtn').onclick = () => {
+    localStorage.removeItem('srgroup:customBg');
+    urlInput.value = '';
+    applyCustomBg();
+  };
 }
 function closeAccountModal() {
   document.getElementById('accountModalBackdrop').classList.remove('show');
