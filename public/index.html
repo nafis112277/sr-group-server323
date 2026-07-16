@@ -763,9 +763,11 @@
       to { transform: scale(2.4); opacity: 0; }
     }
   }
-  @media (prefers-reduced-motion: reduce) {
+ @media (prefers-reduced-motion: reduce) {
     .sr-ripple { display: none; }
   }
+
+  .share-btn-wrap { overflow: visible !important; }
 </style>
 <script>
   // পেজ রেন্ডার হওয়ার আগেই সেভ করা থিম বসিয়ে দিই যাতে ভুল থিম এক ঝলক দেখিয়ে তারপর
