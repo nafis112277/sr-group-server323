@@ -1875,20 +1875,19 @@ function toggleShareMenu(wrapEl, msgRecord) {
     el.onclick = () => { closeShareMenu(); it.action(); };
     menu.appendChild(el);
   });
-
   const divider1 = document.createElement('hr');
   divider1.className = 'share-menu-divider';
   menu.appendChild(divider1);
-
   const pdfShareItem = document.createElement('div');
   pdfShareItem.className = 'share-menu-item';
   pdfShareItem.innerHTML = '<span class="smi-icon">📄</span><span>Share as PDF…</span>';
   pdfShareItem.onclick = () => { closeShareMenu(); sharePdfOfMessage(msgRecord); };
   menu.appendChild(pdfShareItem);
-
   wrapEl.appendChild(menu);
   openShareMenuEl = menu;
 }
+// শুধু এই একটা রিপ্লাইয়ের কনটেন্ট দিয়ে একটা jsPDF ডকুমেন্ট বানায় (ডাউনলোড/শেয়ার দুই জায়গাতেই ব্যবহার হয়)
+function buildMessagePdf(msgRecord) {
 
 // শুধু এই একটা রিপ্লাইয়ের কনটেন্ট দিয়ে একটা jsPDF ডকুমেন্ট বানায় (ডাউনলোড/শেয়ার দুই জায়গাতেই ব্যবহার হয়)
 function buildMessagePdf(msgRecord) {
