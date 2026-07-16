@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -217,6 +216,7 @@
   .msg-row.user{ align-self:flex-end; align-items:flex-end; }
   .msg-row.bot{ align-self:flex-start; align-items:flex-start; }
   .msg-actions{ display:flex; gap:8px; margin-top:4px; opacity:0; transition:opacity 0.12s; }
+  .msg-actions.menu-open{ opacity:1 !important; }
   .msg-row:hover .msg-actions{ opacity:1; }
   .msg-action-btn{
     background:none; border:none; color:var(--text-soft); font-size:11px; cursor:pointer;
@@ -1800,6 +1800,8 @@ let openShareMenuEl = null;
 
 function closeShareMenu() {
   if (openShareMenuEl) {
+    const actionsEl = openShareMenuEl.closest('.msg-actions');
+    if (actionsEl) actionsEl.classList.remove('menu-open');
     openShareMenuEl.remove();
     openShareMenuEl = null;
   }
@@ -1811,6 +1813,9 @@ function toggleShareMenu(wrapEl, msgRecord) {
   const alreadyOpenHere = openShareMenuEl && wrapEl.contains(openShareMenuEl);
   closeShareMenu();
   if (alreadyOpenHere) return;
+
+  const actionsEl = wrapEl.closest('.msg-actions');
+  if (actionsEl) actionsEl.classList.add('menu-open');
 
   const menu = document.createElement('div');
   menu.className = 'share-menu show';
@@ -1824,7 +1829,7 @@ function toggleShareMenu(wrapEl, msgRecord) {
     nativeItem.innerHTML = '<span class="smi-icon">📱</span><span>More apps…</span>';
     nativeItem.onclick = async () => {
       closeShareMenu();
-      try { await navigator.share({ title: 'SR Group Assistant', text }); } catch (err) { /* ইউজার বাতিল করলে বা অ্যানসাপোর্টেড হলে চুপচাপ ইগনোর */ }
+      try { await navigator.share({ title: 'SR Group Assistant', text }); } catch (err) { /* ignore */ }
     };
     menu.appendChild(nativeItem);
     const divider0 = document.createElement('hr');
@@ -1832,6 +1837,32 @@ function toggleShareMenu(wrapEl, msgRecord) {
     menu.appendChild(divider0);
   }
 
+  const quickItems = [
+    { icon: '🟢', label: 'WhatsApp', action: () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank') },
+    { icon: '✈️', label: 'Telegram', action: () => window.open('https://t.me/share/url?url=&text=' + encodeURIComponent(text), '_blank') },
+    { icon: '✉️', label: 'Email', action: () => { window.location.href = 'mailto:?subject=' + encodeURIComponent('SR Group Assistant — reply') + '&body=' + encodeURIComponent(text); } },
+  ];
+  quickItems.forEach((it) => {
+    const el = document.createElement('div');
+    el.className = 'share-menu-item';
+    el.innerHTML = `<span class="smi-icon">${it.icon}</span><span>${it.label}</span>`;
+    el.onclick = () => { closeShareMenu(); it.action(); };
+    menu.appendChild(el);
+  });
+
+  const divider1 = document.createElement('hr');
+  divider1.className = 'share-menu-divider';
+  menu.appendChild(divider1);
+
+  const pdfShareItem = document.createElement('div');
+  pdfShareItem.className = 'share-menu-item';
+  pdfShareItem.innerHTML = '<span class="smi-icon">📄</span><span>Share as PDF…</span>';
+  pdfShareItem.onclick = () => { closeShareMenu(); sharePdfOfMessage(msgRecord); };
+  menu.appendChild(pdfShareItem);
+
+  wrapEl.appendChild(menu);
+  openShareMenuEl = menu;
+}
   const quickItems = [
     { icon: '🟢', label: 'WhatsApp', action: () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank') },
     { icon: '✈️', label: 'Telegram', action: () => window.open('https://t.me/share/url?url=&text=' + encodeURIComponent(text), '_blank') },
