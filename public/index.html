@@ -1857,39 +1857,12 @@ function toggleShareMenu(wrapEl, msgRecord) {
   const pdfShareItem = document.createElement('div');
   pdfShareItem.className = 'share-menu-item';
   pdfShareItem.innerHTML = '<span class="smi-icon">📄</span><span>Share as PDF…</span>';
-  pdfShareItem.onclick = () => { closeShareMenu(); sharePdfOfMessage(msgRecord); };
-  menu.appendChild(pdfShareItem);
-
-  wrapEl.appendChild(menu);
+pdfShareItem.onclick = () => { closeShareMenu(); sharePdfOfMessage(msgRecord); };
+menu.appendChild(pdfShareItem);   // <- eta indent kore rakho baki gulor moto
+    wrapEl.appendChild(menu);
   openShareMenuEl = menu;
 }
-  const quickItems = [
-    { icon: '🟢', label: 'WhatsApp', action: () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank') },
-    { icon: '✈️', label: 'Telegram', action: () => window.open('https://t.me/share/url?url=&text=' + encodeURIComponent(text), '_blank') },
-    { icon: '✉️', label: 'Email', action: () => { window.location.href = 'mailto:?subject=' + encodeURIComponent('SR Group Assistant — reply') + '&body=' + encodeURIComponent(text); } },
-  ];
-  quickItems.forEach((it) => {
-    const el = document.createElement('div');
-    el.className = 'share-menu-item';
-    el.innerHTML = `<span class="smi-icon">${it.icon}</span><span>${it.label}</span>`;
-    el.onclick = () => { closeShareMenu(); it.action(); };
-    menu.appendChild(el);
-  });
-  const divider1 = document.createElement('hr');
-  divider1.className = 'share-menu-divider';
-  menu.appendChild(divider1);
-  const pdfShareItem = document.createElement('div');
-  pdfShareItem.className = 'share-menu-item';
-  pdfShareItem.innerHTML = '<span class="smi-icon">📄</span><span>Share as PDF…</span>';
-  pdfShareItem.onclick = () => { closeShareMenu(); sharePdfOfMessage(msgRecord); };
-  menu.appendChild(pdfShareItem);
-  wrapEl.appendChild(menu);
-  openShareMenuEl = menu;
-}
-// শুধু এই একটা রিপ্লাইয়ের কনটেন্ট দিয়ে একটা jsPDF ডকুমেন্ট বানায় (ডাউনলোড/শেয়ার দুই জায়গাতেই ব্যবহার হয়)
-function buildMessagePdf(msgRecord) {
-
-// শুধু এই একটা রিপ্লাইয়ের কনটেন্ট দিয়ে একটা jsPDF ডকুমেন্ট বানায় (ডাউনলোড/শেয়ার দুই জায়গাতেই ব্যবহার হয়)
+ // শুধু এই একটা রিপ্লাইয়ের কনটেন্ট দিয়ে একটা jsPDF ডকুমেন্ট বানায় (ডাউনলোড/শেয়ার দুই জায়গাতেই ব্যবহার হয়)
 function buildMessagePdf(msgRecord) {
   if (!window.jspdf || !window.jspdf.jsPDF) {
     alert('PDF ফিচারটা এখনো লোড হয়নি। ইন্টারনেট সংযোগ ঠিক আছে কিনা দেখে পেজ রিফ্রেশ করে আবার চেষ্টা করুন।');
