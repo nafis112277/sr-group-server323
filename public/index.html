@@ -295,6 +295,14 @@
     display:flex; align-items:center; justify-content:center;
   }
   .attach-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+.attach-btn.recording{
+    background:var(--danger); color:#fff; border-color:var(--danger);
+    animation: sr-mic-pulse 1.2s infinite;
+  }
+  @keyframes sr-mic-pulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(255,107,107,0.5); }
+    50%{ box-shadow:0 0 0 8px rgba(255,107,107,0); }
+  }
 
   /* ---------- Composer "+" dropdown menu (Claude-style) ---------- */
   .plus-menu-wrap{ position:relative; }
@@ -932,6 +940,8 @@
             </div>
           </div>
         </div>
+<button class="attach-btn" id="micBtn" type="button" title="Voice input">🎤</button>
+        <input id="userInput" type="text" placeholder="Type a message...">
         <input id="userInput" type="text" placeholder="Type a message...">
         <button class="send-btn" id="sendBtn">Send</button>
       </div>
@@ -3129,6 +3139,70 @@ document.getElementById('testChatSendBtn').onclick = sendTestChatMessage;
 document.getElementById('testChatInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendTestChatMessage();
 });
+/* ---------------- Voice input (Web Speech API) ---------------- */
+(function setupVoiceInput() {
+  const micBtn = document.getElementById('micBtn');
+  const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognitionCtor) {
+    // Browser support na thakle button-ta lukiye rakhi, jate confusion na hoy
+    micBtn.style.display = 'none';
+    return;
+  }
+
+  const recognition = new SpeechRecognitionCtor();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = navigator.language || 'en-US';
+
+  let isRecording = false;
+  let baseText = '';
+
+  micBtn.onclick = () => {
+    if (isRecording) {
+      recognition.stop();
+      return;
+    }
+    const input = document.getElementById('userInput');
+    baseText = input.value ? input.value + ' ' : '';
+    try {
+      recognition.start();
+    } catch (e) {
+      // already started ইত্যাদি edge case — চুপচাপ ইগনোর
+    }
+  };
+
+  recognition.onstart = () => {
+    isRecording = true;
+    micBtn.classList.add('recording');
+    micBtn.textContent = '⏹';
+  };
+
+  recognition.onresult = (event) => {
+    const input = document.getElementById('userInput');
+    let transcript = '';
+    for (let i = 0; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    input.value = baseText + transcript;
+  };
+
+  recognition.onerror = (event) => {
+    if (event.error === 'no-speech') return; // চুপচাপ, কিছু না বলে থামলে এলার্ট দরকার নেই
+    if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+      alert('Voice input use korte microphone permission dorkar. Browser-er address bar-er pashe mic icon-e click kore permission dao.');
+    }
+  };
+
+  recognition.onend = () => {
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    micBtn.textContent = '🎤';
+    document.getElementById('userInput').focus();
+  };
+})();
+
+init();
 
 init();
 </script>
