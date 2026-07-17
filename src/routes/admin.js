@@ -4,10 +4,8 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { query, queryOne } from '../db.js';
 import { signAdminToken, requireAdmin, requireSuperAdmin } from '../auth.js';
-import { getSettings, setSettings } from '../settings.js';
 
 const router = Router();
-
 // ---- Login: email + password ----
 router.post('/login', async (req, res) => {
   try {
