@@ -1058,14 +1058,31 @@
 
 <!-- ADMIN DASHBOARD -->
 <div class="screen" id="screen-adminDashboard">
-  <div class="admin-top">
+<div class="admin-top">
     <div class="brandmark"><span class="dot"></span> SR Group — Admin</div>
     <div style="display:flex; align-items:center; gap:12px;">
       <span class="who" id="adminWhoami"></span>
+      <button class="icon-btn" id="openTestChatBtn" title="Test the assistant">💬 Test chat</button>
       <button class="logout-btn" id="adminLogoutBtn">Exit admin</button>
     </div>
   </div>
-  <div class="admin-tabs">
+
+  <!-- ADMIN TEST CHAT MODAL -->
+  <div class="modal-backdrop" id="testChatModalBackdrop">
+    <div class="modal-card" style="max-width:520px; display:flex; flex-direction:column; height:70vh; max-height:640px;">
+      <div class="modal-head">
+        <h2>Test the assistant</h2>
+        <button class="modal-close" id="closeTestChatModalBtn">×</button>
+      </div>
+      <p class="hint" style="margin-top:-8px;">This is a private preview using the current AI Settings — it doesn't save to any customer's chat history and doesn't count against anyone's daily limit.</p>
+      <div id="testChatMessages" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:6px 2px; margin-bottom:10px;"></div>
+      <div style="display:flex; gap:8px;">
+        <input id="testChatInput" type="text" placeholder="Type a test message..." style="flex:1; background:var(--panel); border:1px solid var(--border-glass); border-radius:10px; padding:11px 13px; color:var(--text-primary); font-size:14px;">
+        <button class="btn-primary" id="testChatSendBtn" style="width:auto; margin-top:0; padding:0 18px;">Send</button>
+      </div>
+    </div>
+  </div>
+    <div class="admin-tabs">
     <button class="tab-btn active" data-tab="customers">Customers</button>
     <button class="tab-btn" data-tab="analytics">Analytics</button>
     <button class="tab-btn" data-tab="myaccount">My account</button>
@@ -3043,6 +3060,75 @@ document.getElementById('artifactDownloadBtn').onclick = () => {
   a.remove();
   URL.revokeObjectURL(url);
 };
+
+/* ---------------- Admin: Test chat (preview only, nothing saved) ---------------- */
+let testChatHistory = [];
+
+function openTestChatModal() {
+  document.getElementById('testChatModalBackdrop').classList.add('show');
+  document.getElementById('testChatInput').focus();
+}
+function closeTestChatModal() {
+  document.getElementById('testChatModalBackdrop').classList.remove('show');
+}
+document.getElementById('openTestChatBtn').onclick = openTestChatModal;
+document.getElementById('closeTestChatModalBtn').onclick = closeTestChatModal;
+document.getElementById('testChatModalBackdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'testChatModalBackdrop') closeTestChatModal();
+});
+
+function addTestChatMessage(role, text) {
+  const box = document.getElementById('testChatMessages');
+  const row = document.createElement('div');
+  row.style.alignSelf = role === 'user' ? 'flex-end' : 'flex-start';
+  row.style.maxWidth = '80%';
+  row.style.padding = '10px 13px';
+  row.style.borderRadius = '10px';
+  row.style.fontSize = '13.5px';
+  row.style.whiteSpace = 'pre-wrap';
+  if (role === 'user') {
+    row.style.background = 'linear-gradient(135deg, var(--accent-a), var(--accent-b))';
+    row.style.color = '#fff';
+  } else {
+    row.style.background = 'var(--panel)';
+    row.style.border = '1px solid var(--border-glass)';
+  }
+  row.textContent = text;
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendTestChatMessage() {
+  const input = document.getElementById('testChatInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  input.disabled = true;
+  document.getElementById('testChatSendBtn').disabled = true;
+  addTestChatMessage('user', text);
+
+  try {
+    const data = await api('/admin/test-chat', {
+      method: 'POST',
+      body: { content: text, history: testChatHistory },
+      token: adminToken,
+    });
+    testChatHistory.push({ role: 'user', content: text });
+    testChatHistory.push({ role: 'assistant', content: data.reply });
+    addTestChatMessage('bot', data.reply);
+  } catch (err) {
+    addTestChatMessage('bot', "Couldn't get a reply: " + err.message);
+  }
+
+  input.disabled = false;
+  document.getElementById('testChatSendBtn').disabled = false;
+  input.focus();
+}
+document.getElementById('testChatSendBtn').onclick = sendTestChatMessage;
+document.getElementById('testChatInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendTestChatMessage();
+});
 
 init();
 </script>
