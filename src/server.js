@@ -13,7 +13,7 @@ import skillsRoutes from './routes/skills.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 // প্রথমবার চালু হলে টেবিল বানানো + অ্যাডমিন পাসকোড ও AI settings-এর ডিফল্ট রো বসানো
 async function seed() {
   await initDb();
