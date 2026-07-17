@@ -1,3 +1,5 @@
+import { getSettings, setSettings, buildSystemPrompt } from '../settings.js';
+import { callAI } from '../ai.js';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { query, queryOne } from '../db.js';
@@ -29,7 +31,29 @@ router.post('/login', async (req, res) => {
 
 // এর নিচের সব রুটে admin token লাগবে
 router.use(requireAdmin);
+// Admin panel theke shorashori assistant test korar jonno — kono conversation save hoy na,
+// kono customer quota-o count hoy na, shudhu current AI settings diye ekbar reply dey.
+router.post('/test-chat', async (req, res) => {
+  try {
+    const { content, history } = req.body || {};
+    const text = (content || '').trim();
+    if (!text) return res.status(400).json({ error: 'Message is empty.' });
 
+    const settings = await getSettings();
+    const system = buildSystemPrompt(settings, '');
+
+    const safeHistory = Array.isArray(history) ? history.slice(-20) : [];
+    const fullHistory = [...safeHistory, { role: 'user', content: text }];
+
+    const result = await callAI(system, fullHistory, {});
+    if (!result.ok) return res.status(502).json({ error: result.error });
+
+    res.json({ reply: result.text || '' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Test chat failed.' });
+  }
+});
 router.get('/customers', async (req, res) => {
   try {
     const rows = await query(
