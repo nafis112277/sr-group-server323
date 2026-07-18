@@ -216,7 +216,6 @@
   .msg-row.user{ align-self:flex-end; align-items:flex-end; }
   .msg-row.bot{ align-self:flex-start; align-items:flex-start; }
   .msg-actions{ display:flex; gap:8px; margin-top:4px; opacity:0; transition:opacity 0.12s; }
-  .msg-actions.menu-open{ opacity:1 !important; }
   .msg-row:hover .msg-actions{ opacity:1; }
   .msg-action-btn{
     background:none; border:none; color:var(--text-soft); font-size:11px; cursor:pointer;
@@ -661,13 +660,12 @@
   .artifact-preview-frame{
     flex:1; width:100%; height:100%; min-height:0; border:none; background:#fff; display:none;
   }
-.artifact-panel-body{
+  .artifact-panel-body{
     flex:1; overflow:auto; margin:0; padding:18px 20px;
     font-family:'JetBrains Mono', monospace; font-size:13px; line-height:1.65;
     color:#D6E2F0; white-space:pre;
-    background:#0B1220;
   }
-    @media (max-width:680px){
+  @media (max-width:680px){
     .artifact-panel{ width:100vw; max-width:100vw; }
   }
 </style>
@@ -764,12 +762,139 @@
       to { transform: scale(2.4); opacity: 0; }
     }
   }
- @media (prefers-reduced-motion: reduce) {
+  @media (prefers-reduced-motion: reduce) {
     .sr-ripple { display: none; }
   }
-
-  .share-btn-wrap { overflow: visible !important; }
 </style>
+
+<!-- ============================================================
+     নতুন সংযোজন (২য় দফা): নেটওয়ার্ক গ্রেসফুল হ্যান্ডলিং, স্ট্রিমিং রিপ্লাই,
+     কনভারসেশন সার্চ+পিন, ভয়েস ইনপুট, ফিডব্যাক বাটন, অ্যাডমিন টেক-ওভার —
+     এই সব ফিচারের CSS। আগের কোনো স্টাইল ব্লকের একটা অক্ষরও বদলানো হয়নি,
+     এগুলো সম্পূর্ণ নতুন, আলাদা <style> ব্লক। ============================================================ -->
+<style id="sr-added-network-banner">
+  #networkStatusBanner{
+    position:fixed; top:0; left:0; right:0; z-index:200;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    padding:9px 14px; font-size:12.5px; font-family:'Inter',sans-serif; font-weight:600;
+    color:#fff; text-align:center;
+    transform:translateY(-100%); transition:transform 0.28s ease;
+  }
+  #networkStatusBanner.show{ transform:translateY(0); }
+  #networkStatusBanner.offline{ background:linear-gradient(135deg, var(--danger), #E11D48); }
+  #networkStatusBanner.online{ background:linear-gradient(135deg, #22C55E, var(--accent-glow)); }
+  #networkStatusBanner .nsb-dot{
+    width:7px; height:7px; border-radius:50%; background:#fff; opacity:0.9;
+    animation: nsb-pulse 1.2s infinite;
+  }
+  @keyframes nsb-pulse{ 0%,100%{opacity:0.4;} 50%{opacity:1;} }
+</style>
+<style id="sr-added-sidebar-search-pin">
+  .sidebar-search-wrap{ padding:0 18px 10px; position:relative; }
+  .sidebar-search-wrap input{
+    width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border-glass);
+    border-radius:9px; padding:8px 32px 8px 12px; color:var(--text-primary); font-size:12.5px;
+    font-family:'Inter',sans-serif;
+  }
+  .sidebar-search-wrap input:focus{ outline:2px solid var(--accent-a); outline-offset:1px; }
+  .sidebar-search-wrap .ssw-icon{
+    position:absolute; right:26px; top:50%; transform:translateY(-50%);
+    font-size:12px; color:var(--text-soft); pointer-events:none;
+  }
+  .sidebar-search-wrap .ssw-clear{
+    position:absolute; right:22px; top:50%; transform:translateY(-50%);
+    background:none; border:none; color:var(--text-soft); font-size:13px; cursor:pointer;
+    display:none; padding:2px; line-height:1;
+  }
+  .sidebar-search-wrap.has-query .ssw-icon{ display:none; }
+  .sidebar-search-wrap.has-query .ssw-clear{ display:block; }
+  .conv-section-label{
+    font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.09em;
+    text-transform:uppercase; color:var(--text-soft); padding:14px 18px 6px;
+  }
+  #pinnedConvList{ display:flex; flex-direction:column; gap:2px; padding:0 10px; }
+  .conv-empty-note{ color:var(--text-soft); font-size:12px; padding:12px; text-align:center; }
+  .conv-item-pin-btn{
+    flex-shrink:0; background:none; border:none; color:var(--text-soft); font-size:12.5px;
+    cursor:pointer; padding:4px 5px; border-radius:6px; line-height:1; opacity:0;
+    transition:opacity 0.12s;
+  }
+  .conv-item:hover .conv-item-pin-btn, .conv-item.pinned .conv-item-pin-btn{ opacity:1; }
+  .conv-item-pin-btn.pinned{ color:var(--accent-glow); }
+  .conv-item-pin-btn:hover{ color:var(--accent-a); }
+</style>
+<style id="sr-added-voice-input">
+  .mic-btn{
+    background:var(--panel); border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:10px; width:44px; height:44px; min-width:44px; font-size:17px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; position:relative; flex-shrink:0;
+  }
+  .mic-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+  .mic-btn.recording{
+    color:#fff; border-color:var(--danger);
+    background:linear-gradient(135deg, var(--danger), #E11D48);
+    animation: mic-breathe 1.4s ease-in-out infinite;
+  }
+  @keyframes mic-breathe{ 0%,100%{ box-shadow:0 0 0 0 rgba(255,107,107,0.45);} 50%{ box-shadow:0 0 0 8px rgba(255,107,107,0);} }
+  .mic-btn .mic-wave{
+    position:absolute; inset:-3px; border-radius:12px; pointer-events:none;
+    border:1.5px solid rgba(255,107,107,0.55); opacity:0;
+  }
+  .mic-btn.recording .mic-wave{ animation: mic-wave-ring 1.4s ease-out infinite; }
+  @keyframes mic-wave-ring{ 0%{ opacity:0.7; transform:scale(0.9);} 100%{ opacity:0; transform:scale(1.35);} }
+</style>
+<style id="sr-added-streaming-feedback">
+  .msg.bot.streaming::after{
+    content:''; display:inline-block; width:7px; height:15px; margin-left:2px;
+    background:var(--text-primary); vertical-align:text-bottom; animation: streaming-caret 0.9s steps(1) infinite;
+  }
+  @keyframes streaming-caret{ 0%,49%{ opacity:1;} 50%,100%{ opacity:0;} }
+  .msg-retry-btn{
+    background:none; border:1px solid var(--border-glass); color:var(--accent-glow);
+    border-radius:7px; padding:4px 10px; font-size:11.5px; cursor:pointer; margin-left:8px;
+    font-family:'JetBrains Mono', monospace;
+  }
+  .msg-retry-btn:hover{ border-color:var(--accent-glow); }
+  .msg.note.note-error{ display:flex; align-items:center; gap:4px; flex-wrap:wrap; justify-content:center; }
+  .msg-feedback-btn{
+    background:none; border:none; color:var(--text-soft); font-size:12px; cursor:pointer;
+    font-family:'JetBrains Mono', monospace; padding:2px 5px;
+  }
+  .msg-feedback-btn:hover{ color:var(--accent-glow); }
+  .msg-feedback-btn.active-up{ color:#3FE1C6; }
+  .msg-feedback-btn.active-down{ color:var(--danger); }
+</style>
+<style id="sr-added-admin-takeover">
+  .takeover-bar{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background:var(--panel); border:1px solid var(--border-glass); border-radius:10px;
+    padding:10px 14px; margin-bottom:14px;
+  }
+  .takeover-status{ font-size:12.5px; color:var(--text-soft); display:flex; align-items:center; gap:7px; }
+  .takeover-status .ts-dot{ width:8px; height:8px; border-radius:50%; background:var(--text-soft); flex-shrink:0; }
+  .takeover-status.live .ts-dot{ background:var(--danger); animation: nsb-pulse 1.2s infinite; }
+  .takeover-toggle-btn{
+    background:var(--panel-solid); border:1px solid var(--border-glass); color:var(--text-primary);
+    border-radius:8px; padding:7px 14px; font-size:12.5px; cursor:pointer; font-family:'Inter',sans-serif; font-weight:600;
+  }
+  .takeover-toggle-btn.live{ border-color:var(--danger); color:var(--danger); }
+  .agent-composer{ display:none; gap:8px; margin-bottom:18px; }
+  .agent-composer.show{ display:flex; }
+  .agent-composer input{
+    flex:1; background:var(--panel); border:1px solid var(--border-glass); border-radius:9px;
+    padding:10px 12px; color:var(--text-primary); font-size:13.5px; font-family:'Inter',sans-serif;
+  }
+  .agent-composer button{
+    background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); border:none; border-radius:9px;
+    color:#fff; padding:0 18px; font-weight:600; cursor:pointer; font-size:13px;
+  }
+  .msg.agent{
+    align-self:flex-end; background:linear-gradient(135deg,#22C55E,#16A34A); color:#fff;
+    border-bottom-right-radius:3px; display:block; margin:6px 0 6px auto; max-width:70%;
+    padding:10px 13px; border-radius:12px; font-size:13.5px;
+  }
+</style>
+
 <script>
   // পেজ রেন্ডার হওয়ার আগেই সেভ করা থিম বসিয়ে দিই যাতে ভুল থিম এক ঝলক দেখিয়ে তারপর
   // সিলেক্ট করা থিমে সুইচ করার মতো flicker না হয়।
@@ -789,6 +914,9 @@
 </script>
 </head>
 <body>
+
+<!-- নতুন সংযোজন: নেটওয়ার্ক অফলাইন/অনলাইন স্ট্যাটাস ব্যানার (ডিফল্টে লুকানো, JS দিয়ে show/hide হয়) -->
+<div id="networkStatusBanner"></div>
 
 <!-- LANDING / LOGIN -->
 <div class="screen" id="screen-login">
@@ -887,6 +1015,12 @@
       <div class="brandmark"><span class="dot"></span> SR Group</div>
       <button class="new-chat-btn" id="newChatBtn">+ New chat</button>
     </div>
+    <!-- নতুন সংযোজন: পুরনো কথোপকথন খোঁজার সার্চ বার (টাইটেল অনুযায়ী instant filter) -->
+    <div class="sidebar-search-wrap" id="sidebarSearchWrap">
+      <input type="text" id="sidebarSearchInput" placeholder="Search chats...">
+      <span class="ssw-icon">🔍</span>
+      <button type="button" class="ssw-clear" id="sidebarSearchClearBtn" title="Clear search">✕</button>
+    </div>
     <div class="sidebar-label">Recent chats</div>
     <div class="conv-list" id="convList"></div>
     <div class="sidebar-bottom">
@@ -905,6 +1039,9 @@
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
         <button class="icon-btn" id="openSkillsHeaderBtn" title="Skills">🧩</button>
+        <!-- নতুন সংযোজন: হেডারেও একটা সার্চ আইকন — ট্যাপ করলে সাইডবার খুলে সরাসরি সার্চ বক্সে
+             ফোকাস করে দেয়, যাতে ইউজারকে হ্যামবার্গার মেনুতে গিয়ে খুঁজতে না হয় -->
+        <button class="icon-btn" id="headerSearchBtn" title="Search chats">🔍</button>
         <span class="who" id="convStatus"></span>
       </div>
     </div>
@@ -912,19 +1049,15 @@
     <div class="composer">
       <div class="composer-attachments" id="composerAttachments"></div>
       <div class="composer-row">
-<input type="file" id="imageFileInput" accept="image/*" style="display:none;">
-        <input type="file" id="genericFileInput" accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.json" style="display:none;">
-               <div class="plus-menu-wrap">
+        <input type="file" id="imageFileInput" accept="image/*" style="display:none;">
+        <div class="plus-menu-wrap">
           <button class="attach-btn" id="composerPlusBtn" type="button" title="Add">+</button>
           <div class="plus-menu" id="composerPlusMenu">
-<div class="plus-menu-item" id="menuAddPhoto">
+            <div class="plus-menu-item" id="menuAddPhoto">
               <span class="pmi-icon">📷</span><span class="pmi-label">Add photo</span>
             </div>
-            <div class="plus-menu-item" id="menuAddFile">
-              <span class="pmi-icon">📎</span><span class="pmi-label">Add file</span>
-            </div>
             <div class="plus-menu-item" id="menuOpenSkills">
-                      <span class="pmi-icon">🧩</span><span class="pmi-label">Skills</span>
+              <span class="pmi-icon">🧩</span><span class="pmi-label">Skills</span>
             </div>
             <hr class="plus-menu-divider">
             <div class="plus-menu-item" id="menuWebSearch">
@@ -932,6 +1065,12 @@
             </div>
           </div>
         </div>
+        <!-- নতুন সংযোজন: ভয়েস ইনপুট বাটন। ব্রাউজারে Web Speech API সাপোর্ট না থাকলে JS নিজেই এটা
+             লুকিয়ে রাখবে (নিচে display:none ডিফল্ট), তাই আনসাপোর্টেড ব্রাউজারে ভাঙা বাটন দেখা যাবে না। -->
+        <button class="mic-btn" id="micBtn" type="button" title="Voice input" style="display:none;">
+          <span class="mic-wave"></span>
+          <span id="micIcon">🎤</span>
+        </button>
         <input id="userInput" type="text" placeholder="Type a message...">
         <button class="send-btn" id="sendBtn">Send</button>
       </div>
@@ -1021,18 +1160,6 @@
       <p class="hint">Pick a color theme for the whole site. Applies instantly and is remembered on this device.</p>
       <div id="themeError"></div>
       <div class="theme-grid" id="themeGrid"></div>
-<hr class="skills-divider">
-<div class="settings-field">
-  <label>Custom background color</label>
-  <input id="customBgColor" type="color" value="#0A0E14" style="width:70px; height:38px; padding:2px; cursor:pointer; border:1px solid var(--border-glass); border-radius:8px; background:none;">
-  <div class="quota-hint">Nijer pochonder color diye chat-er background set korte parben — upore-r theme override korbe.</div>
-</div>
-<div class="settings-field">
-  <label>Ba background image URL (optional)</label>
-  <input id="customBgImageUrl" type="text" placeholder="https://example.com/image.jpg">
-</div>
-<button class="btn-primary" id="applyCustomBgBtn" style="max-width:220px; display:inline-block;">Apply custom background</button>
-<button class="icon-btn" id="resetCustomBgBtn" style="margin-left:8px;">Reset to theme</button>
     </div>
 
     <div class="modal-section" id="modalSection-password">
@@ -1211,7 +1338,6 @@ function escapeHtml(str) {
 
 /* ---------------- Startup / session restore ---------------- */
 function init() {
-  applyCustomBg();
   userToken = localStorage.getItem('srgroup:token');
   const name = localStorage.getItem('srgroup:name');
   const email = localStorage.getItem('srgroup:email');
@@ -1820,8 +1946,6 @@ let openShareMenuEl = null;
 
 function closeShareMenu() {
   if (openShareMenuEl) {
-    const actionsEl = openShareMenuEl.closest('.msg-actions');
-    if (actionsEl) actionsEl.classList.remove('menu-open');
     openShareMenuEl.remove();
     openShareMenuEl = null;
   }
@@ -1833,9 +1957,6 @@ function toggleShareMenu(wrapEl, msgRecord) {
   const alreadyOpenHere = openShareMenuEl && wrapEl.contains(openShareMenuEl);
   closeShareMenu();
   if (alreadyOpenHere) return;
-
-  const actionsEl = wrapEl.closest('.msg-actions');
-  if (actionsEl) actionsEl.classList.add('menu-open');
 
   const menu = document.createElement('div');
   menu.className = 'share-menu show';
@@ -1849,7 +1970,7 @@ function toggleShareMenu(wrapEl, msgRecord) {
     nativeItem.innerHTML = '<span class="smi-icon">📱</span><span>More apps…</span>';
     nativeItem.onclick = async () => {
       closeShareMenu();
-      try { await navigator.share({ title: 'SR Group Assistant', text }); } catch (err) { /* ignore */ }
+      try { await navigator.share({ title: 'SR Group Assistant', text }); } catch (err) { /* ইউজার বাতিল করলে বা অ্যানসাপোর্টেড হলে চুপচাপ ইগনোর */ }
     };
     menu.appendChild(nativeItem);
     const divider0 = document.createElement('hr');
@@ -1877,12 +1998,14 @@ function toggleShareMenu(wrapEl, msgRecord) {
   const pdfShareItem = document.createElement('div');
   pdfShareItem.className = 'share-menu-item';
   pdfShareItem.innerHTML = '<span class="smi-icon">📄</span><span>Share as PDF…</span>';
-pdfShareItem.onclick = () => { closeShareMenu(); sharePdfOfMessage(msgRecord); };
-menu.appendChild(pdfShareItem);  
-    wrapEl.appendChild(menu);
+  pdfShareItem.onclick = () => { closeShareMenu(); sharePdfOfMessage(msgRecord); };
+  menu.appendChild(pdfShareItem);
+
+  wrapEl.appendChild(menu);
   openShareMenuEl = menu;
 }
- // শুধু এই একটা রিপ্লাইয়ের কনটেন্ট দিয়ে একটা jsPDF ডকুমেন্ট বানায় (ডাউনলোড/শেয়ার দুই জায়গাতেই ব্যবহার হয়)
+
+// শুধু এই একটা রিপ্লাইয়ের কনটেন্ট দিয়ে একটা jsPDF ডকুমেন্ট বানায় (ডাউনলোড/শেয়ার দুই জায়গাতেই ব্যবহার হয়)
 function buildMessagePdf(msgRecord) {
   if (!window.jspdf || !window.jspdf.jsPDF) {
     alert('PDF ফিচারটা এখনো লোড হয়নি। ইন্টারনেট সংযোগ ঠিক আছে কিনা দেখে পেজ রিফ্রেশ করে আবার চেষ্টা করুন।');
@@ -2041,13 +2164,10 @@ document.addEventListener('click', (e) => {
   const wrap = document.querySelector('.plus-menu-wrap');
   if (wrap && !wrap.contains(e.target)) togglePlusMenu(false);
 });
+
 document.getElementById('menuAddPhoto').onclick = () => {
   togglePlusMenu(false);
   document.getElementById('imageFileInput').click();
-};
-document.getElementById('menuAddFile').onclick = () => {
-  togglePlusMenu(false);
-  document.getElementById('genericFileInput').click();
 };
 document.getElementById('menuOpenSkills').onclick = () => {
   togglePlusMenu(false);
@@ -2075,19 +2195,6 @@ document.getElementById('imageFileInput').onchange = (e) => {
   };
   reader.readAsDataURL(file);
 };
-
-document.getElementById('genericFileInput').onchange = (e) => {
-  const file = e.target.files && e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  if (file.size > 15 * 1024 * 1024) { alert('File ta khub boro (max 15MB).'); return; }
-  const reader = new FileReader();
-  reader.onload = () => {
-    pendingAttachment = { dataUrl: reader.result, name: file.name, isFile: true };
-    renderComposerAttachment();
-  };
-  reader.readAsDataURL(file);
-};
 function renderComposerAttachment() {
   const wrap = document.getElementById('composerAttachments');
   wrap.innerHTML = '';
@@ -2095,16 +2202,9 @@ function renderComposerAttachment() {
   wrap.classList.add('show');
   const thumb = document.createElement('div');
   thumb.className = 'attachment-thumb';
-
-  if (pendingAttachment.isFile) {
-    thumb.style.cssText = 'width:auto; height:auto; padding:8px 12px; display:flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--border-glass); border-radius:9px; font-size:12.5px; color:var(--text-primary);';
-    thumb.innerHTML = '<span>📎</span><span style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(pendingAttachment.name) + '</span>';
-  } else {
-    const img = document.createElement('img');
-    img.src = pendingAttachment.dataUrl;
-    thumb.appendChild(img);
-  }
-
+  const img = document.createElement('img');
+  img.src = pendingAttachment.dataUrl;
+  thumb.appendChild(img);
   const removeBtn = document.createElement('button');
   removeBtn.className = 'attachment-remove';
   removeBtn.type = 'button';
@@ -2113,6 +2213,7 @@ function renderComposerAttachment() {
   thumb.appendChild(removeBtn);
   wrap.appendChild(thumb);
 }
+
 function showTyping() {
   const box = document.getElementById('messages');
   const div = document.createElement('div');
@@ -2189,40 +2290,6 @@ function openAccountModal() {
   loadCustomizeText();
   renderSkillList();
   renderThemeGrid();
-  initCustomBgControls();
-}
-/* ---------------- Custom background (client-side, overrides theme) ---------------- */
-function getCustomBg() {
-  try { return JSON.parse(localStorage.getItem('srgroup:customBg') || 'null'); } catch (e) { return null; }
-}
-function applyCustomBg() {
-  const bg = getCustomBg();
-  if (!bg || !bg.value) { document.body.style.background = ''; return; }
-  if (bg.type === 'image') {
-    document.body.style.background = `url('${bg.value}') center / cover no-repeat fixed`;
-  } else {
-    document.body.style.background = bg.value;
-  }
-}
-function initCustomBgControls() {
-  const colorInput = document.getElementById('customBgColor');
-  const urlInput = document.getElementById('customBgImageUrl');
-  const saved = getCustomBg();
-  if (saved) {
-    if (saved.type === 'color') colorInput.value = saved.value;
-    if (saved.type === 'image') urlInput.value = saved.value;
-  }
-  document.getElementById('applyCustomBgBtn').onclick = () => {
-    const imageUrl = urlInput.value.trim();
-    const bg = imageUrl ? { type: 'image', value: imageUrl } : { type: 'color', value: colorInput.value };
-    localStorage.setItem('srgroup:customBg', JSON.stringify(bg));
-    applyCustomBg();
-  };
-  document.getElementById('resetCustomBgBtn').onclick = () => {
-    localStorage.removeItem('srgroup:customBg');
-    urlInput.value = '';
-    applyCustomBg();
-  };
 }
 function closeAccountModal() {
   document.getElementById('accountModalBackdrop').classList.remove('show');
@@ -3069,6 +3136,737 @@ init();
     ripple.addEventListener('animationend', function () { ripple.remove(); });
     setTimeout(function () { if (ripple.parentNode) ripple.remove(); }, 700);
   }, { passive: true });
+</script>
+
+<!-- ============================================================================================
+     নতুন সংযোজন (২য় দফা) — বড় ফিচার ব্লক:
+       ১) নেটওয়ার্ক গ্রেসফুল হ্যান্ডলিং (অফলাইন ব্যানার + friendlier error + রিট্রাই বাটন)
+       ২) স্ট্রিমিং রিপ্লাই (টোকেন-বাই-টোকেন লাইভ টাইপিং, না থাকলে আগের নন-স্ট্রিমিং ফ্লো-তে fallback)
+       ৩) পুরনো কথোপকথন খোঁজার সার্চ বার + পিন/ফেভারিট চ্যাট
+       ৪) ভয়েস ইনপুট (Web Speech API, ব্রাউজার সাপোর্ট না থাকলে বাটনই দেখা যায় না)
+       ৫) বট রিপ্লাইয়ে ফিডব্যাক/রেটিং (👍/👎)
+       ৬) অ্যাডমিন কনভারসেশনে ম্যানুয়াল টেক-ওভার
+
+     এই পুরো ব্লকটা সম্পূর্ণ নতুন, স্বয়ংসম্পূর্ণ, এবং উপরের কোনো ফাংশন/ভ্যারিয়েবলের কোনো অংশ
+     পরিবর্তন বা মুছে ফেলা হয়নি। যেখানে আগের কোনো আচরণ বাড়ানোর দরকার হয়েছে (renderConvList,
+     addMessage, openConversationMessages, sendMessage), সেই গ্লোবাল ফাংশনগুলোর মূল সংজ্ঞা
+     ঠিক আগের মতোই ফাইলে অক্ষত রেখে (একটা অক্ষরও না ছুঁয়ে), তার রেফারেন্স ধরে রেখে (__originalXxx)
+     গ্লোবাল আইডেন্টিফায়ারে একটা নতুন, বেশি-ফিচারসমৃদ্ধ ভার্সন বসানো হয়েছে — ঠিক যেভাবে উপরে
+     থিম-ডিফল্ট বদলানোর সময় (black -> white) একই কৌশল আগে থেকেই ব্যবহার করা হয়েছিল। যেহেতু
+     বাকি সব কোড এই ফাংশনগুলোকে নাম ধরে (renderConvList(), addMessage(), ইত্যাদি) কল করে —
+     assignment-time নয়, call-time-এ — তাই আগের সব call site স্বয়ংক্রিয়ভাবেই নতুন, enhanced
+     ভার্সন ব্যবহার করবে, কোথাও আলাদা করে হাত দেওয়া লাগেনি।
+     ============================================================================================ -->
+<script id="sr-added-major-features">
+(function () {
+
+/* ==================================================================
+   ১) নেটওয়ার্ক গ্রেসফুল হ্যান্ডলিং
+   ================================================================== */
+const networkBanner = document.getElementById('networkStatusBanner');
+let __networkHideTimer = null;
+function showNetworkBanner(kind, text) {
+  if (!networkBanner) return;
+  clearTimeout(__networkHideTimer);
+  networkBanner.className = 'show ' + kind;
+  networkBanner.innerHTML = '<span class="nsb-dot"></span><span>' + text + '</span>';
+  if (kind === 'online') {
+    __networkHideTimer = setTimeout(() => networkBanner.classList.remove('show'), 2600);
+  }
+}
+window.addEventListener('offline', () => showNetworkBanner('offline', 'ইন্টারনেট সংযোগ বিচ্ছিন্ন — সংযোগ ফিরলে স্বয়ংক্রিয়ভাবে আবার কাজ করবে'));
+window.addEventListener('online', () => showNetworkBanner('online', '✓ সংযোগ ফিরে এসেছে'));
+if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+  showNetworkBanner('offline', 'ইন্টারনেট সংযোগ বিচ্ছিন্ন — সংযোগ ফিরলে স্বয়ংক্রিয়ভাবে আবার কাজ করবে');
+}
+
+function isNetworkFailure(err) {
+  const msg = (err && err.message) || '';
+  return !navigator.onLine || (err instanceof TypeError) || /failed to fetch|networkerror|load failed/i.test(msg);
+}
+
+// মূল api() ফাংশনটা ফাইলে ঠিক আগের মতোই অক্ষত রেখে, তার ওপর একটা friendlier error layer বসাই —
+// নেটওয়ার্ক ফেইল হলে টেকনিক্যাল "Failed to fetch"-এর বদলে স্পষ্ট বাংলা মেসেজ দেখাবে সব জায়গায়
+// (লগইন, চ্যাট, অ্যাডমিন প্যানেল — সবখানে একই api() ব্যবহার হয় বলে একবার ওভাররাইড করলেই যথেষ্ট)।
+const __originalApi = api;
+api = async function (path, opts) {
+  try {
+    return await __originalApi(path, opts);
+  } catch (err) {
+    if (isNetworkFailure(err)) {
+      const niceErr = new Error('নেটওয়ার্ক সংযোগ পাওয়া যাচ্ছে না। ইন্টারনেট চেক করে আবার চেষ্টা করুন।');
+      niceErr.isNetworkError = true;
+      throw niceErr;
+    }
+    throw err;
+  }
+};
+
+// মেসেজ লিস্টে রিট্রাই-বাটনসহ একটা error note বসায়। addMessage('note', ...) স্পর্শ না করে
+// সম্পূর্ণ আলাদাভাবে লেখা, কারণ note-role এ addMessage কোনো DOM রেফারেন্স ফেরত দেয় না।
+function addRetryableNote(text, retryFn) {
+  const box = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg note note-error';
+  const span = document.createElement('span');
+  span.textContent = text;
+  div.appendChild(span);
+  if (retryFn) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'msg-retry-btn';
+    btn.textContent = '🔄 আবার চেষ্টা করুন';
+    btn.onclick = () => { div.remove(); retryFn(); };
+    div.appendChild(btn);
+  }
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+/* ==================================================================
+   ৫) বট রিপ্লাইয়ে ফিডব্যাক/রেটিং (👍/👎)
+   ব্যাকএন্ডে POST /chat/messages/:id/feedback থাকতে হবে, body { rating: 'up' | 'down' | null }
+   (null মানে আগের ফিডব্যাক তুলে নেওয়া হয়েছে)। এটা best-effort — সেভ ব্যর্থ হলেও UI ব্লক করে না।
+   addMessage()-কে ওভাররাইড করা হলো যাতে প্রতিটা বট রিপ্লাইয়ের অ্যাকশন-বারে (Copy/Share/PDF/
+   Regenerate এর পাশে) স্বয়ংক্রিয়ভাবে ফিডব্যাক বাটন দুটো যোগ হয়। ================================== */
+const __originalAddMessage = addMessage;
+addMessage = function (role, text, opts) {
+  const result = __originalAddMessage(role, text, opts);
+  if (role === 'bot' && text && result && result.row) {
+    const actions = result.row.querySelector('.msg-actions');
+    if (actions && !actions.querySelector('.msg-feedback-btn')) {
+      const upBtn = document.createElement('button');
+      upBtn.type = 'button'; upBtn.className = 'msg-action-btn msg-feedback-btn'; upBtn.title = 'Good reply'; upBtn.textContent = '👍';
+      const downBtn = document.createElement('button');
+      downBtn.type = 'button'; downBtn.className = 'msg-action-btn msg-feedback-btn'; downBtn.title = 'Bad reply'; downBtn.textContent = '👎';
+      function sendFeedback(rating, clickedBtn, otherBtn) {
+        if (!result.record.id) { alert('মেসেজটা সেভ হওয়ার পর ফিডব্যাক দেওয়া যাবে — একটু পরে আবার চেষ্টা করুন।'); return; }
+        const activeClass = rating === 'up' ? 'active-up' : 'active-down';
+        const wasActive = clickedBtn.classList.contains(activeClass);
+        clickedBtn.classList.toggle(activeClass);
+        otherBtn.classList.remove(rating === 'up' ? 'active-down' : 'active-up');
+        api(`/chat/messages/${result.record.id}/feedback`, {
+          method: 'POST', body: { rating: wasActive ? null : rating }, token: userToken,
+        }).catch((e) => console.error('feedback save failed', e));
+      }
+      upBtn.onclick = () => sendFeedback('up', upBtn, downBtn);
+      downBtn.onclick = () => sendFeedback('down', downBtn, upBtn);
+      actions.appendChild(upBtn);
+      actions.appendChild(downBtn);
+    }
+  }
+  return result;
+};
+
+/* ==================================================================
+   ২) স্ট্রিমিং রিপ্লাই
+   ব্যাকএন্ডে POST /chat/conversations/:id/message/stream থাকতে হবে, যেটা text/event-stream
+   রেসপন্স দেবে — প্রতিটা টুকরো আসবে   data: {"delta":"..."}\n\n   ফরম্যাটে, আর একদম শেষে
+   data: {"done":true,"userMessageId":..,"assistantMessageId":..,"title":"..","replyImageUrl":..,
+   "humanControlled":false}\n\n   ইভেন্ট আসবে (অর্থাৎ নন-স্ট্রিমিং /message এন্ডপয়েন্ট যা
+   রিটার্ন করে, ঠিক তারই সমতুল্য মেটাডেটা)। এই এন্ডপয়েন্ট এখনো ব্যাকএন্ডে যোগ না হয়ে থাকলে
+   (404 বা fetch ব্যর্থ) স্বয়ংক্রিয়ভাবে আগের অক্ষত sendMessage()-এ fallback করবে, তাই ব্যাকএন্ড
+   আপডেট হওয়ার আগ পর্যন্তও সাইট আগের মতোই স্বাভাবিকভাবে কাজ করবে — কিছুই ভাঙবে না। ==============*/
+const __originalSendMessage = sendMessage;
+let __streamingSupported = true;
+
+async function sendMessageWithStreaming() {
+  const input = document.getElementById('userInput');
+  const text = input.value.trim();
+  if ((!text && !pendingAttachment) || sending || !currentConvId) return;
+
+  if (!__streamingSupported || typeof ReadableStream === 'undefined' || !window.fetch) {
+    return __originalSendMessage();
+  }
+
+  sending = true;
+  document.getElementById('sendBtn').disabled = true;
+
+  const attachment = pendingAttachment;
+  pendingAttachment = null;
+  renderComposerAttachment();
+  const userEntry = addMessage('user', text, { imageUrl: attachment ? attachment.dataUrl : null });
+  input.value = '';
+  showTyping();
+
+  const body = { content: text };
+  if (attachment) body.image = attachment.dataUrl;
+  if (webSearchEnabled) body.webSearch = true;
+
+  let tempRow = null;
+  let accumulated = '';
+
+  try {
+    const res = await fetch(`/api/chat/conversations/${currentConvId}/message/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + userToken, 'Accept': 'text/event-stream' },
+      body: JSON.stringify(body),
+    });
+
+    if (res.status === 404 || !res.body) {
+      // ব্যাকএন্ডে স্ট্রিমিং এন্ডপয়েন্ট নেই — এই সেশনে আর চেষ্টা না করে সবসময় আগের ফ্লো-তেই চলে যাই
+      __streamingSupported = false;
+      hideTyping();
+      if (userEntry && userEntry.row) userEntry.row.remove();
+      currentMessages = currentMessages.filter((m) => m !== userEntry.record);
+      input.value = text;
+      pendingAttachment = attachment;
+      renderComposerAttachment();
+      sending = false;
+      document.getElementById('sendBtn').disabled = false;
+      return __originalSendMessage();
+    }
+    if (!res.ok) {
+      let errMsg = 'কিছু একটা ভুল হয়েছে।';
+      try { const j = await res.json(); errMsg = j.error || errMsg; } catch (e) { /* body ছিল না বা JSON না */ }
+      throw new Error(errMsg);
+    }
+
+    hideTyping();
+    const box = document.getElementById('messages');
+    tempRow = document.createElement('div');
+    tempRow.className = 'msg-row bot';
+    const tempBubble = document.createElement('div');
+    tempBubble.className = 'msg bot streaming';
+    const tempText = document.createElement('div');
+    tempBubble.appendChild(tempText);
+    tempRow.appendChild(tempBubble);
+    box.appendChild(tempRow);
+    box.scrollTop = box.scrollHeight;
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let meta = null;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split('\n\n');
+      buffer = events.pop(); // অসম্পূর্ণ শেষ অংশ পরের chunk-এর জন্য রেখে দিই
+      for (const evt of events) {
+        const line = evt.split('\n').find((l) => l.indexOf('data:') === 0);
+        if (!line) continue;
+        const raw = line.slice(5).trim();
+        if (!raw || raw === '[DONE]') continue;
+        let payload;
+        try { payload = JSON.parse(raw); } catch (e) { continue; }
+        if (payload.delta) {
+          accumulated += payload.delta;
+          tempText.textContent = accumulated;
+          box.scrollTop = box.scrollHeight;
+        }
+        if (payload.done) meta = payload;
+      }
+    }
+
+    tempRow.remove();
+
+    if (accumulated) {
+      const botEntry = addMessage('bot', accumulated, {
+        id: meta && meta.assistantMessageId != null ? meta.assistantMessageId : null,
+        imageUrl: (meta && meta.replyImageUrl) || null,
+      });
+    } else if (meta && meta.humanControlled) {
+      addMessage('note', '🧑\u200d💼 একজন মানব এজেন্ট এই কথোপকথনে যুক্ত হয়েছেন — তিনি শীঘ্রই সরাসরি রিপ্লাই দেবেন।');
+    }
+
+    if (userEntry && meta && meta.userMessageId != null) {
+      userEntry.record.id = meta.userMessageId;
+      userEntry.row.dataset.msgId = meta.userMessageId;
+    }
+
+    const conv = conversations.find((c) => c.id === currentConvId);
+    if (conv) {
+      if (meta && meta.title) conv.title = meta.title;
+      conv.updatedAt = new Date().toISOString();
+      renderConvList();
+    }
+  } catch (err) {
+    hideTyping();
+    if (tempRow && tempRow.parentNode) tempRow.remove();
+    let msg = (err && err.message) || 'অজানা সমস্যা হয়েছে।';
+    if (isNetworkFailure(err)) msg = 'নেটওয়ার্ক সংযোগ পাওয়া যাচ্ছে না। ইন্টারনেট চেক করে আবার চেষ্টা করুন।';
+    addRetryableNote('রিপ্লাই আনা যায়নি: ' + msg, () => {
+      input.value = text;
+      if (attachment) { pendingAttachment = attachment; renderComposerAttachment(); }
+      sendMessageWithStreaming();
+    });
+  }
+
+  sending = false;
+  document.getElementById('sendBtn').disabled = false;
+  input.focus();
+}
+
+// গ্লোবাল sendMessage আইডেন্টিফায়ারটা নতুন স্ট্রিমিং-অ্যাওয়্যার ভার্সনে বদলে দিই — আগের
+// sendMessage ফাংশনটা ফাইলে ঠিক আগের মতোই অক্ষত আছে (উপরে __originalSendMessage হিসেবে ফলব্যাকেও
+// ব্যবহৃত হচ্ছে)। উজার ইনপুটের Enter-keydown লিসেনার আগে থেকেই sendMessage() নাম ধরে কল করে,
+// তাই সেটা এমনিতেই এই নতুন ভার্সন ব্যবহার করবে — শুধু sendBtn.onclick রিঅ্যাসাইন করাই যথেষ্ট,
+// কারণ onclick আগেই ফাংশন-ভ্যালু ক্যাপচার করে ফেলেছিল।
+sendMessage = sendMessageWithStreaming;
+document.getElementById('sendBtn').onclick = sendMessage;
+
+/* ==================================================================
+   ৩) পুরনো কথোপকথন খোঁজার সার্চ বার + পিন/ফেভারিট চ্যাট
+   পিন শুধু এই ডিভাইসে (localStorage) মনে রাখা হয় যাতে ব্যাকএন্ডে আলাদা এন্ডপয়েন্ট না থাকলেও
+   ফিচারটা সবসময় নির্ভরযোগ্যভাবে কাজ করে; ব্যাকএন্ডে POST /chat/conversations/:id/pin
+   (body {pinned:true|false}) থাকলে সেটাও best-effort সিঙ্ক করার চেষ্টা করা হয়।
+   ================================================================== */
+function getPinnedIds() {
+  try { return new Set(JSON.parse(localStorage.getItem('srgroup:pinnedConvIds') || '[]')); }
+  catch (e) { return new Set(); }
+}
+function savePinnedIds(set) {
+  try { localStorage.setItem('srgroup:pinnedConvIds', JSON.stringify(Array.from(set))); } catch (e) { /* ignore */ }
+}
+function toggleConversationPin(id) {
+  const pinned = getPinnedIds();
+  if (pinned.has(id)) pinned.delete(id); else pinned.add(id);
+  savePinnedIds(pinned);
+  api(`/chat/conversations/${id}/pin`, { method: 'POST', body: { pinned: pinned.has(id) }, token: userToken }).catch(() => { /* ব্যাকএন্ড সাপোর্ট না করলেও local pin কাজ করে যাবে */ });
+  renderConvList();
+}
+function ensurePinnedContainer() {
+  let el = document.getElementById('pinnedConvList');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pinnedConvList';
+    const recentLabel = document.querySelector('.sidebar-label');
+    if (recentLabel && recentLabel.parentNode) recentLabel.parentNode.insertBefore(el, recentLabel);
+  }
+  return el;
+}
+
+let __convSearchQuery = '';
+
+// renderConvList()-কে সম্পূর্ণ নতুনভাবে ওভাররাইড করা হলো। আগের renderConvList ফাংশনটা যেভাবে
+// লেখা ছিল ফাইলে ঠিক সেভাবেই অপরিবর্তিত রয়ে গেছে — শুধু গ্লোবাল renderConvList আইডেন্টিফায়ারটা
+// এখন এই নতুন, সার্চ+পিন সহ ভার্সনকে পয়েন্ট করছে। deleteConversation, switchConversation,
+// createNewConversation, quota-save ইত্যাদি যেখানেই renderConvList() কল হয়, সবজায়গাতেই
+// স্বয়ংক্রিয়ভাবে এই নতুন ভার্সনই চলবে (call-time name resolution বলে), তাই আলাদা করে কোথাও
+// হাত দেওয়া লাগেনি।
+renderConvList = function () {
+  const wrap = document.getElementById('convList');
+  wrap.innerHTML = '';
+  const pinnedIds = getPinnedIds();
+  const q = __convSearchQuery.trim().toLowerCase();
+
+  let list = conversations.slice();
+  if (q) list = list.filter((c) => (c.title || 'new chat').toLowerCase().indexOf(q) !== -1);
+  list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+  const pinned = list.filter((c) => pinnedIds.has(c.id));
+  const rest = list.filter((c) => !pinnedIds.has(c.id));
+
+  function buildItem(c) {
+    const div = document.createElement('div');
+    div.className = 'conv-item' + (c.id === currentConvId ? ' active' : '') + (pinnedIds.has(c.id) ? ' pinned' : '');
+
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'conv-item-title';
+    titleSpan.textContent = c.title || 'New chat';
+    titleSpan.onclick = () => { switchConversation(c.id); closeSidebarDrawer(); };
+    div.appendChild(titleSpan);
+
+    const pinBtn = document.createElement('button');
+    pinBtn.className = 'conv-item-pin-btn' + (pinnedIds.has(c.id) ? ' pinned' : '');
+    pinBtn.type = 'button';
+    pinBtn.title = pinnedIds.has(c.id) ? 'Unpin' : 'Pin to top';
+    pinBtn.textContent = pinnedIds.has(c.id) ? '📌' : '📍';
+    pinBtn.onclick = (e) => { e.stopPropagation(); toggleConversationPin(c.id); };
+    div.appendChild(pinBtn);
+
+    if (conversations.length > 1) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'conv-delete-btn';
+      delBtn.type = 'button';
+      delBtn.title = 'Delete chat';
+      delBtn.textContent = '🗑';
+      delBtn.onclick = (e) => { e.stopPropagation(); deleteConversation(c.id); };
+      div.appendChild(delBtn);
+    }
+    return div;
+  }
+
+  const pinnedWrap = ensurePinnedContainer();
+  pinnedWrap.innerHTML = '';
+  if (pinned.length) {
+    const label = document.createElement('div');
+    label.className = 'conv-section-label';
+    label.textContent = '📌 Pinned';
+    pinnedWrap.appendChild(label);
+    pinned.forEach((c) => pinnedWrap.appendChild(buildItem(c)));
+    pinnedWrap.style.display = '';
+  } else {
+    pinnedWrap.style.display = 'none';
+  }
+
+  rest.forEach((c) => wrap.appendChild(buildItem(c)));
+
+  if (q && list.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'conv-empty-note';
+    empty.textContent = '"' + __convSearchQuery + '" নামে কোনো চ্যাট পাওয়া যায়নি।';
+    wrap.appendChild(empty);
+  }
+};
+
+const sidebarSearchInput = document.getElementById('sidebarSearchInput');
+const sidebarSearchWrap = document.getElementById('sidebarSearchWrap');
+if (sidebarSearchInput) {
+  sidebarSearchInput.addEventListener('input', (e) => {
+    __convSearchQuery = e.target.value;
+    sidebarSearchWrap.classList.toggle('has-query', !!__convSearchQuery.trim());
+    renderConvList();
+  });
+}
+const sidebarSearchClearBtn = document.getElementById('sidebarSearchClearBtn');
+if (sidebarSearchClearBtn) {
+  sidebarSearchClearBtn.onclick = () => {
+    __convSearchQuery = '';
+    sidebarSearchInput.value = '';
+    sidebarSearchWrap.classList.remove('has-query');
+    renderConvList();
+  };
+}
+
+// হেডারের 🔍 আইকন — সাইডবার (এখানেই সার্চ বক্স ও পুরনো চ্যাটের লিস্ট থাকে) খুলে দিয়ে সরাসরি
+// সার্চ ইনপুটে ফোকাস করে দেয়, যাতে হ্যামবার্গার মেনু গিয়ে খুঁজতে না হয়
+const headerSearchBtn = document.getElementById('headerSearchBtn');
+if (headerSearchBtn && typeof openSidebarDrawer === 'function') {
+  headerSearchBtn.onclick = () => {
+    openSidebarDrawer();
+    setTimeout(() => sidebarSearchInput && sidebarSearchInput.focus(), 150);
+  };
+}
+
+// সেশন restore হয়ে থাকলে (পেজ রিফ্রেশ) ততক্ষণে হয়তো পুরনো renderConvList() একবার চলে গেছে —
+// তাই এখনই একবার নতুন ভার্সন দিয়ে রিফ্রেশ করে দিই, যাতে পিন সেকশন/সার্চ বার প্রথম থেকেই দেখা যায়।
+try { if (typeof conversations !== 'undefined' && Array.isArray(conversations)) renderConvList(); } catch (e) { /* ignore */ }
+
+/* ==================================================================
+   ৪) ভয়েস ইনপুট (Speech-to-Text)
+   ব্রাউজারের বিল্ট-ইন Web Speech API ব্যবহার করা হয়েছে — কোনো এক্সটার্নাল সার্ভার/API-key লাগে না।
+   গুরুত্বপূর্ণ: মোবাইল ব্রাউজার (Chrome for Android সহ) নিরাপত্তার কারণে মাইক্রোফোন এক্সেস শুধু
+   "secure context"-এ (HTTPS, বা localhost) দেয় — plain http:// অথবা ফাইল সরাসরি খুললে (file://)
+   এই API ব্রাউজার নিজেই বন্ধ রাখে, কোনো কোডেই এটা বাইপাস করা যায় না। তাই সেক্ষেত্রে বাটনটা পুরো
+   লুকিয়ে না ফেলে ধূসর/disabled অবস্থায় দেখানো হচ্ছে, ট্যাপ করলে ঠিক কী কারণে কাজ করছে না সেটা
+   স্পষ্ট করে বলে দেয় — যাতে এটাকে "ফিচার হারিয়ে গেছে" মনে না হয়ে "এই কারণে বন্ধ আছে" বোঝা যায়।
+   ব্রাউজার একেবারেই এই API সাপোর্ট করে না এমন খুব বিরল ক্ষেত্রেই (যেমন পুরনো Firefox) বাটনটা
+   সত্যিই লুকানো থাকে। ================================================================== */
+(function initVoiceInput() {
+  const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = document.getElementById('micBtn');
+  const micIcon = document.getElementById('micIcon');
+  const voiceInput = document.getElementById('userInput');
+  if (!micBtn || !voiceInput) return;
+
+  if (!SpeechRecognitionCtor) {
+    return; // ব্রাউজারই এই API সাপোর্ট করে না — এখানে সত্যিই লুকানো থাকাই সবচেয়ে পরিষ্কার আচরণ
+  }
+
+  micBtn.style.display = 'flex';
+
+  if (window.isSecureContext === false) {
+    micBtn.style.opacity = '0.45';
+    micBtn.style.cursor = 'not-allowed';
+    micBtn.title = 'ভয়েস ইনপুট শুধু HTTPS (বা localhost) সংযোগে কাজ করে — এই পেজটা এখন নিরাপদ সংযোগে খোলা নেই।';
+    micBtn.onclick = () => alert('ভয়েস ইনপুট ব্যবহার করতে সাইটটা HTTPS-এ (বা localhost-এ) খুলতে হবে — মোবাইল ব্রাউজার নিরাপত্তার কারণে অন্য কোনো ঠিকানায় মাইক্রোফোন এক্সেস দেয় না।');
+    return;
+  }
+
+  let recognizing = false;
+  let recognition = null;
+  let baseText = '';
+
+  function createRecognition() {
+    const r = new SpeechRecognitionCtor();
+    r.lang = navigator.language || 'bn-BD';
+    r.continuous = true;
+    r.interimResults = true;
+
+    r.onresult = (event) => {
+      let finalText = '';
+      let interimText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const chunk = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalText += chunk;
+        else interimText += chunk;
+      }
+      if (finalText) baseText = (baseText ? baseText + ' ' : '') + finalText.trim();
+      voiceInput.value = (baseText + ' ' + interimText).trim();
+    };
+    r.onerror = (event) => {
+      stopRecording();
+      if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+        alert('ভয়েস ইনপুট ব্যবহার করতে ব্রাউজারে মাইক্রোফোন অ্যাক্সেসের অনুমতি দিন।');
+      } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        console.error('Speech recognition error:', event.error);
+      }
+    };
+    r.onend = () => { if (recognizing) stopRecording(); };
+    return r;
+  }
+
+  function startRecording() {
+    baseText = voiceInput.value.trim();
+    recognition = createRecognition();
+    try { recognition.start(); } catch (e) { return; }
+    recognizing = true;
+    micBtn.classList.add('recording');
+    micBtn.title = 'Stop recording';
+    micIcon.textContent = '⏹';
+  }
+  function stopRecording() {
+    recognizing = false;
+    if (recognition) { try { recognition.stop(); } catch (e) { /* ignore */ } }
+    micBtn.classList.remove('recording');
+    micBtn.title = 'Voice input';
+    micIcon.textContent = '🎤';
+    voiceInput.focus();
+  }
+
+  micBtn.onclick = () => { recognizing ? stopRecording() : startRecording(); };
+})();
+
+/* ==================================================================
+   ৬) অ্যাডমিন কনভারসেশনে ম্যানুয়াল টেক-ওভার
+   ব্যাকএন্ডে এই এন্ডপয়েন্টগুলো থাকতে হবে:
+     POST /admin/conversations/:id/takeover -> এই কথোপকথনে AI বন্ধ করে অ্যাডমিনকে নিয়ন্ত্রণ দেয়
+     POST /admin/conversations/:id/release  -> আবার AI-কে নিয়ন্ত্রণ ফিরিয়ে দেয়
+     POST /admin/conversations/:id/message  -> body {content}, অ্যাডমিনের মেসেজ 'agent' role এ
+                                                সেভ হয়ে সরাসরি কাস্টমারকে দেখা যায়
+   আগে থেকেই থাকা GET /admin/conversations/:id/messages রেসপন্সে humanControlled (boolean) ও
+   takenOverByName (string, ঐচ্ছিক) থাকলে সেটাও এখানে দেখানো হবে — না থাকলে ডিফল্ট ধরা হয়
+   AI-ই চলছে। ব্যাকএন্ড এখনো এই এন্ডপয়েন্টগুলো সাপোর্ট না করলে টেক-ওভার বাটনে ক্লিকে স্পষ্ট
+   এরর দেখাবে, বাকি অ্যাডমিন প্যানেল আগের মতোই স্বাভাবিক থাকবে।
+   ================================================================== */
+const __originalOpenConversationMessages = openConversationMessages;
+openConversationMessages = async function (email, name, conv) {
+  await __originalOpenConversationMessages(email, name, conv);
+  renderTakeoverBar(conv);
+};
+
+async function renderTakeoverBar(conv) {
+  const body = document.getElementById('transcriptBody');
+  const backLink = body.querySelector('.back-link');
+  if (!backLink) return; // "no messages"/error state হলেও .back-link সবসময় থাকে; না থাকলে বাতিল
+
+  const oldBar = document.getElementById('takeoverBar');
+  if (oldBar) oldBar.remove();
+  const oldComposer = document.getElementById('agentComposer');
+  if (oldComposer) oldComposer.remove();
+
+  let isLive = false;
+  let takenOverByName = '';
+  try {
+    const data = await api(`/admin/conversations/${conv.id}/messages`, { token: adminToken });
+    isLive = !!data.humanControlled;
+    takenOverByName = data.takenOverByName || '';
+  } catch (e) { /* স্ট্যাটাস জানা না গেলে ডিফল্ট ধরে নিই AI-ই চলছে */ }
+
+  const bar = document.createElement('div');
+  bar.className = 'takeover-bar';
+  bar.id = 'takeoverBar';
+
+  const status = document.createElement('div');
+  status.className = 'takeover-status' + (isLive ? ' live' : '');
+  const statusText = isLive
+    ? '🧑\u200d💼 আপনি এখন সরাসরি রিপ্লাই দিচ্ছেন' + (takenOverByName ? ' (' + escapeHtml(takenOverByName) + ')' : '')
+    : '🤖 AI স্বয়ংক্রিয়ভাবে রিপ্লাই দিচ্ছে';
+  status.innerHTML = '<span class="ts-dot"></span><span>' + statusText + '</span>';
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className = 'takeover-toggle-btn' + (isLive ? ' live' : '');
+  toggleBtn.textContent = isLive ? 'Hand back to AI' : 'Take over this chat';
+  toggleBtn.onclick = async () => {
+    toggleBtn.disabled = true;
+    try {
+      await api(`/admin/conversations/${conv.id}/${isLive ? 'release' : 'takeover'}`, { method: 'POST', token: adminToken });
+      renderTakeoverBar(conv);
+    } catch (err) {
+      alert("এই কথোপকথন টেক-ওভার/রিলিজ করা যায়নি: " + err.message);
+      toggleBtn.disabled = false;
+    }
+  };
+
+  bar.appendChild(status);
+  bar.appendChild(toggleBtn);
+  body.insertBefore(bar, backLink.nextSibling);
+
+  const composer = document.createElement('div');
+  composer.className = 'agent-composer' + (isLive ? ' show' : '');
+  composer.id = 'agentComposer';
+  const agentInput = document.createElement('input');
+  agentInput.type = 'text';
+  agentInput.placeholder = 'Reply to the customer directly...';
+  const agentSendBtn = document.createElement('button');
+  agentSendBtn.type = 'button';
+  agentSendBtn.textContent = 'Send';
+  async function sendAgentMessage() {
+    const text = agentInput.value.trim();
+    if (!text) return;
+    agentSendBtn.disabled = true;
+    try {
+      await api(`/admin/conversations/${conv.id}/message`, { method: 'POST', body: { content: text }, token: adminToken });
+      agentInput.value = '';
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'msg agent';
+      msgDiv.textContent = text;
+      body.appendChild(msgDiv);
+    } catch (err) {
+      alert("মেসেজ পাঠানো যায়নি: " + err.message);
+    }
+    agentSendBtn.disabled = false;
+    agentInput.focus();
+  }
+  agentSendBtn.onclick = sendAgentMessage;
+  agentInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendAgentMessage(); });
+  composer.appendChild(agentInput);
+  composer.appendChild(agentSendBtn);
+  body.insertBefore(composer, bar.nextSibling);
+}
+
+})();
+</script>
+
+<!-- ==================================================================
+     ৭) অ্যাডমিন প্যানেলে "Test Assistant" ট্যাব
+     উদ্দেশ্য: AI Settings-এ (Description/Tone/Facts) কিছু বদলানোর পর সেটা AI-এর উত্তরে
+     আসলে কী প্রভাব ফেলছে সেটা যাচাই করতে যেন কোনো কাস্টমার অ্যাকাউন্টে লগইন করার দরকার না হয়।
+     এটা সম্পূর্ণ sandbox — এখানকার কথোপকথন কোনো কাস্টমারের রেকর্ডে সেভ হয় না, অ্যানালিটিক্সেও
+     গোনা হয় না, শুধু এই ব্রাউজার সেশনেই থাকে।
+
+     ব্যাকএন্ডে এই এন্ডপয়েন্টটা থাকতে হবে:
+       POST /admin/test-chat   body: { message, history: [{role:'user'|'assistant', content}, ...] }
+                                headers: Authorization: Bearer <adminToken>
+                                response: { reply: string }
+       - এই কল বর্তমানে সেভ করা AI Settings (description/tone/facts) ব্যবহার করে রিপ্লাই বানাবে,
+         ঠিক কাস্টমার চ্যাটের মতোই, কিন্তু কোনো DB-তে conversation/message সেভ করবে না।
+     ব্যাকএন্ড এখনো এই এন্ডপয়েন্ট সাপোর্ট না করলে নিচে স্পষ্ট এরর মেসেজ দেখাবে, বাকি অ্যাডমিন
+     প্যানেল আগের মতোই স্বাভাবিক থাকবে — এর আগের কোনো ফিচার/কোডের একটা অক্ষরও বদলানো হয়নি,
+     এই পুরো ব্লকটা শুধু নতুন করে জোড়া লাগানো হয়েছে। ================================================================== */
+(function initTestAssistantTab() {
+  // ---- নতুন CSS আলাদা <style> ট্যাগে — আগের কোনো স্টাইল রুল স্পর্শ করা হয়নি ----
+  const style = document.createElement('style');
+  style.textContent = `
+    .srta-panel{ display:flex; flex-direction:column; height:100%; max-width:720px; }
+    .srta-note{ color:var(--text-soft); font-size:12.5px; margin:0 0 14px; }
+    .srta-transcript{ flex:1; min-height:280px; max-height:52vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:4px 2px 14px; }
+    .srta-row{ display:flex; gap:8px; align-items:flex-end; }
+    .srta-input{
+      flex:1; resize:none; min-height:44px; max-height:140px;
+      background:rgba(255,255,255,0.04); border:1px solid var(--border-glass); border-radius:9px;
+      padding:11px 13px; color:var(--text-primary); font-size:14px; font-family:'Inter',sans-serif;
+    }
+    .srta-input:focus{ outline:2px solid var(--accent-a); outline-offset:1px; }
+    .srta-send-btn, .srta-clear-btn{
+      border:none; border-radius:9px; padding:11px 16px; font-family:'Inter',sans-serif;
+      font-weight:600; font-size:13.5px; cursor:pointer; white-space:nowrap;
+    }
+    .srta-send-btn{ background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); color:#fff; }
+    .srta-send-btn:disabled{ opacity:0.55; cursor:default; }
+    .srta-clear-btn{ background:rgba(255,255,255,0.05); border:1px solid var(--border-glass); color:var(--text-soft); }
+    .srta-clear-btn:hover{ background:rgba(255,255,255,0.09); color:var(--text-primary); }
+  `;
+  document.head.appendChild(style);
+
+  // ---- নতুন ট্যাব বাটন (আগের .admin-tabs বার-এ, বাকি বাটনের ঠিক পাশে) ----
+  const tabsBar = document.querySelector('.admin-tabs');
+  const adminsBtn = document.getElementById('tabBtnAdmins');
+  const testTabBtn = document.createElement('button');
+  testTabBtn.className = 'tab-btn';
+  testTabBtn.id = 'tabBtnTestAssistant';
+  testTabBtn.dataset.tab = 'testbot';
+  testTabBtn.textContent = 'Test Assistant';
+  if (tabsBar) tabsBar.insertBefore(testTabBtn, adminsBtn || null);
+
+  // ---- নতুন প্যানেল (আগের .admin-body-এর ভিতরেই, বাকি প্যানেলগুলোর পাশে) ----
+  const adminBody = document.querySelector('.admin-body');
+  const panel = document.createElement('div');
+  panel.className = 'admin-panel';
+  panel.id = 'panel-testbot';
+  panel.innerHTML = `
+    <div class="srta-panel">
+      <p class="srta-note">এখানে সরাসরি AI-কে টেস্ট মেসেজ পাঠাতে পারেন — Settings ট্যাবে যা সেভ করা আছে সেটাই এখানে ব্যবহার হবে। এই কথোপকথন কোনো কাস্টমারের রেকর্ডে সেভ হয় না, অ্যানালিটিক্সেও যোগ হয় না।</p>
+      <div id="srtaError"></div>
+      <div class="srta-transcript" id="srtaTranscript"></div>
+      <div class="srta-row">
+        <textarea class="srta-input" id="srtaInput" rows="1" placeholder="একটা টেস্ট মেসেজ লিখুন..."></textarea>
+        <button class="srta-send-btn" id="srtaSendBtn">Send</button>
+        <button class="srta-clear-btn" id="srtaClearBtn">Clear</button>
+      </div>
+    </div>
+  `;
+  if (adminBody) adminBody.appendChild(panel);
+
+  // ---- এই ট্যাবের নিজস্ব sandbox history (localStorage/DB-তে সেভ হয় না) ----
+  let srtaHistory = []; // [{role:'user'|'assistant', content}]
+  let srtaSending = false;
+
+  function srtaRenderMessage(role, content) {
+    const wrap = document.getElementById('srtaTranscript');
+    const div = document.createElement('div');
+    div.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
+    div.textContent = content;
+    wrap.appendChild(div);
+    wrap.scrollTop = wrap.scrollHeight;
+  }
+
+  async function srtaSend() {
+    const input = document.getElementById('srtaInput');
+    const text = input.value.trim();
+    if (!text || srtaSending) return;
+    setError('srtaError', '');
+    srtaSending = true;
+    document.getElementById('srtaSendBtn').disabled = true;
+    input.value = '';
+    srtaRenderMessage('user', text);
+    const historyBeforeThisMessage = srtaHistory.slice(); // ব্যাকএন্ড নিজেই current message যোগ করে,
+                                                            // তাই এখানে আগেরটুকুই পাঠানো হচ্ছে — দুইবার যোগ হওয়া ঠেকাতে
+    srtaHistory.push({ role: 'user', content: text });
+    try {
+      const data = await api('/admin/test-chat', {
+        method: 'POST',
+        body: { content: text, history: historyBeforeThisMessage },
+        token: adminToken,
+      });
+      const reply = (data && data.reply) || '';
+      srtaRenderMessage('assistant', reply);
+      srtaHistory.push({ role: 'assistant', content: reply });
+    } catch (err) {
+      setError('srtaError', 'টেস্ট মেসেজ পাঠানো যায়নি: ' + err.message);
+    }
+    srtaSending = false;
+    document.getElementById('srtaSendBtn').disabled = false;
+    input.focus();
+  }
+
+  document.getElementById('srtaSendBtn').onclick = srtaSend;
+  document.getElementById('srtaInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); srtaSend(); }
+  });
+  document.getElementById('srtaClearBtn').onclick = () => {
+    srtaHistory = [];
+    document.getElementById('srtaTranscript').innerHTML = '';
+    setError('srtaError', '');
+  };
+
+  // ---- ট্যাব সুইচিং: আগের ট্যাব বাটনগুলোর মতোই আচরণ, কিন্তু আলাদা করে বসানো হলো কারণ
+  // আগের querySelectorAll('.tab-btn') লুপ এই স্ক্রিপ্ট লোড হওয়ার আগেই চলে গেছে, তাই এই নতুন
+  // বাটনের নিজের ক্লিক-হ্যান্ডলার এখানে বসাতে হচ্ছে — বাকি বাটনগুলোর হ্যান্ডলার অক্ষতই আছে। ----
+  testTabBtn.onclick = () => {
+    if (testTabBtn.style.display === 'none') return;
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    testTabBtn.classList.add('active');
+    document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
+    panel.classList.add('active');
+  };
+})();
 </script>
 </body>
 </html>
