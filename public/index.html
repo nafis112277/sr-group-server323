@@ -2240,12 +2240,11 @@ let webSearchEnabled = false;
 /* ---------------- Model selector (Claude-style dropdown, with premium lock) ---------------- */
 const MODELS = [
   { id: 'auto',      name: 'Auto',    premium: false },
-  { id: 'groq',      name: 'Groq',    premium: false },
-  { id: 'gemini',    name: 'Gemini',  premium: true },
+  { id: 'groq',      name: 'Quorix',  premium: false },
+  { id: 'gemini',    name: 'Velix',   premium: false },
   { id: 'openai',    name: 'GPT',     premium: true },
   { id: 'anthropic', name: 'Claude',  premium: true },
 ];
-
 function isCustomerPremium() {
   return !!(currentUser && currentUser.isPremium);
 }
@@ -2403,9 +2402,9 @@ async function sendMessage() {
   try {
     // image পাঠালে base64 dataUrl সহ পাঠাই — ব্যাকএন্ড এটা আপলোড হ্যান্ডলার/স্টোরেজে সেভ করে
     // একটা স্থায়ী URL রিটার্ন করবে বলে ধরে নিচ্ছি (data.reply, data.title-এর পাশাপাশি)।
-   const body = { content: text };
-    if (attachment) body.image = attachment.dataUrl;
-    if (webSearchEnabled) body.webSearch = true;
+const body = { content: text };
+  if (attachment) body.image = attachment.dataUrl;
+  if (webSearchEnabled) body.webSearch = true;
     const selectedModel = getSelectedModel();
     if (selectedModel && selectedModel !== 'auto') body.provider = selectedModel;
 
