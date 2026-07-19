@@ -232,9 +232,10 @@ router.post('/conversations/:id/message', async (req, res) => {
     const baseSystem = buildSystemPrompt(settings, customerRow?.customInstructions);
     const skillBlock = await getMatchingSkillInstructions(req.userEmail, text);
     const system = baseSystem + skillBlock;
-
-    const result = await callAI(system, history, { webSearch: !!(req.body || {}).webSearch });
-
+const result = await callAI(system, history, {
+  webSearch: !!(req.body || {}).webSearch,
+  forceProvider: (req.body || {}).provider || null,
+});
     if (!result.ok) {
       return res.status(502).json({ error: result.error });
     }
