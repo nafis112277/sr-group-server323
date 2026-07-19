@@ -294,8 +294,65 @@
     border-radius:10px; width:44px; height:44px; min-width:44px; font-size:18px; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
   }
-  .attach-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+.attach-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
 
+  /* ---------- Model selector dropdown (Claude-style) ---------- */
+  .model-select-wrap{ position:relative; }
+  .model-select-btn{
+    background:var(--panel); border:1px solid var(--border-glass); color:var(--text-primary);
+    border-radius:9px; padding:0 12px; height:44px; font-size:12.5px; cursor:pointer;
+    display:flex; align-items:center; gap:6px; font-family:'Inter',sans-serif; white-space:nowrap;
+  }
+  .model-select-btn:hover{ border-color:var(--accent-a); }
+  .model-select-menu{
+    display:none;
+    position:absolute; bottom:52px; left:0; z-index:40;
+    min-width:200px;
+    background:var(--panel-solid); border:1px solid var(--border-glass);
+    border-radius:12px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.45);
+  }
+  .model-select-menu.show{ display:block; }
+  .model-select-item{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:9px 10px; border-radius:8px; cursor:pointer;
+    font-size:13px; color:var(--text-primary); font-family:'Inter',sans-serif;
+  }
+  .model-select-item:hover{ background:rgba(255,255,255,0.06); }
+  .model-select-item .msi-check{ font-size:12px; color:var(--accent-glow); opacity:0; }
+  .model-select-item.selected .msi-check{ opacity:1; }
+  .model-select-item.locked{ opacity:0.65; }
+  .msi-premium-badge{
+    font-family:'JetBrains Mono', monospace; font-size:9.5px; font-weight:700;
+    background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); color:#fff;
+    border-radius:5px; padding:1px 6px; letter-spacing:0.03em; flex-shrink:0;
+  }
+  .msi-lock-icon{ font-size:11px; color:var(--text-soft); flex-shrink:0; }
+
+  /* ---------- Upgrade to premium modal ---------- */
+  .upgrade-modal-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(6,9,15,0.65);
+    backdrop-filter:blur(2px); z-index:90; align-items:center; justify-content:center; padding:20px;
+  }
+  .upgrade-modal-backdrop.show{ display:flex; }
+  .upgrade-modal-card{
+    width:100%; max-width:380px;
+    background:var(--panel-solid); border:1px solid var(--border-glass);
+    border-radius:18px; padding:28px 26px; text-align:center;
+  }
+  .upgrade-modal-icon{
+    width:52px; height:52px; margin:0 auto 14px; border-radius:14px;
+    background:linear-gradient(135deg, var(--accent-a), var(--accent-b));
+    display:flex; align-items:center; justify-content:center; font-size:24px;
+  }
+  .upgrade-modal-card h3{ font-family:'Space Grotesk',sans-serif; font-size:18px; margin:0 0 8px; }
+  .upgrade-modal-card p{ color:var(--text-soft); font-size:13.5px; line-height:1.6; margin:0 0 20px; }
+  .upgrade-modal-actions{ display:flex; flex-direction:column; gap:8px; }
+  .upgrade-modal-actions .btn-primary{ margin-top:0; }
+  .upgrade-modal-cancel{
+    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:9px; padding:11px; font-size:13.5px; cursor:pointer; font-family:'Inter',sans-serif;
+  }
+  .upgrade-modal-cancel:hover{ color:var(--text-primary); border-color:var(--accent-a); }
   /* ---------- Composer "+" dropdown menu (Claude-style) ---------- */
   .plus-menu-wrap{ position:relative; }
   .plus-menu{
@@ -1072,6 +1129,12 @@
           <span class="mic-wave"></span>
           <span id="micIcon">🎤</span>
         </button>
+        <div class="model-select-wrap">
+          <button class="model-select-btn" id="modelSelectBtn" type="button">
+            <span id="modelSelectLabel">Auto</span><span>▾</span>
+          </button>
+          <div class="model-select-menu" id="modelSelectMenu"></div>
+        </div>
         <input id="userInput" type="text" placeholder="Type a message...">
         <button class="send-btn" id="sendBtn">Send</button>
       </div>
@@ -1100,7 +1163,21 @@
   </div>
 </div>
 
+<!-- UPGRADE TO PREMIUM MODAL -->
+<div class="upgrade-modal-backdrop" id="upgradeModalBackdrop">
+  <div class="upgrade-modal-card">
+    <div class="upgrade-modal-icon">⚡</div>
+    <h3>Upgrade to Premium</h3>
+    <p id="upgradeModalText">This model is available on the Premium plan. Upgrade to unlock faster, more capable responses.</p>
+    <div class="upgrade-modal-actions">
+      <button class="btn-primary" id="upgradeModalCtaBtn">Upgrade now</button>
+      <button class="upgrade-modal-cancel" id="upgradeModalCancelBtn">Maybe later</button>
+    </div>
+  </div>
+</div>
+
 <!-- ACCOUNT SETTINGS MODAL (Customize AI + Skills + Change password) -->
+
 <div class="modal-backdrop" id="accountModalBackdrop">
   <div class="modal-card">
     <div class="modal-head">
@@ -2160,6 +2237,85 @@ async function regenerateBotMessage(row, msgRecord, btn) {
 /* ---------------- "+" composer menu (photo / skills / web search) ---------------- */
 let webSearchEnabled = false;
 
+/* ---------------- Model selector (Claude-style dropdown, with premium lock) ---------------- */
+const MODELS = [
+  { id: 'auto',      name: 'Auto',    premium: false },
+  { id: 'groq',      name: 'Groq',    premium: false },
+  { id: 'gemini',    name: 'Gemini',  premium: true },
+  { id: 'openai',    name: 'GPT',     premium: true },
+  { id: 'anthropic', name: 'Claude',  premium: true },
+];
+
+function isCustomerPremium() {
+  return !!(currentUser && currentUser.isPremium);
+}
+
+function getSelectedModel() {
+  try { return localStorage.getItem('srgroup:model') || 'auto'; } catch (e) { return 'auto'; }
+}
+function setSelectedModel(id) {
+  try { localStorage.setItem('srgroup:model', id); } catch (e) { /* ignore */ }
+  const m = MODELS.find((x) => x.id === id);
+  document.getElementById('modelSelectLabel').textContent = m ? m.name : 'Auto';
+}
+
+function renderModelMenu() {
+  const menu = document.getElementById('modelSelectMenu');
+  const active = getSelectedModel();
+  const premium = isCustomerPremium();
+  menu.innerHTML = '';
+  MODELS.forEach((m) => {
+    const locked = m.premium && !premium;
+    const item = document.createElement('div');
+    item.className = 'model-select-item' + (m.id === active ? ' selected' : '') + (locked ? ' locked' : '');
+    item.innerHTML = `
+      <span style="display:flex; align-items:center; gap:7px;">
+        <span>${escapeHtml(m.name)}</span>
+        ${m.premium ? '<span class="msi-premium-badge">PRO</span>' : ''}
+      </span>
+      ${locked ? '<span class="msi-lock-icon">🔒</span>' : '<span class="msi-check">✓</span>'}
+    `;
+    item.onclick = () => {
+      if (locked) {
+        document.getElementById('modelSelectMenu').classList.remove('show');
+        showUpgradeModal(m.name);
+        return;
+      }
+      setSelectedModel(m.id);
+      menu.classList.remove('show');
+      renderModelMenu();
+    };
+    menu.appendChild(item);
+  });
+}
+setSelectedModel(getSelectedModel());
+renderModelMenu();
+
+document.getElementById('modelSelectBtn').onclick = (e) => {
+  e.stopPropagation();
+  document.getElementById('modelSelectMenu').classList.toggle('show');
+};
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.model-select-wrap');
+  if (wrap && !wrap.contains(e.target)) document.getElementById('modelSelectMenu').classList.remove('show');
+});
+
+function showUpgradeModal(modelName) {
+  document.getElementById('upgradeModalText').textContent =
+    modelName + ' is available on the Premium plan. Upgrade to unlock faster, more capable responses.';
+  document.getElementById('upgradeModalBackdrop').classList.add('show');
+}
+document.getElementById('upgradeModalCancelBtn').onclick = () => {
+  document.getElementById('upgradeModalBackdrop').classList.remove('show');
+};
+document.getElementById('upgradeModalBackdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'upgradeModalBackdrop') document.getElementById('upgradeModalBackdrop').classList.remove('show');
+});
+document.getElementById('upgradeModalCtaBtn').onclick = () => {
+  // TODO: nijer payment/checkout page-er link ekhane boshaw
+  window.open('https://your-upgrade-page.example.com', '_blank');
+};
+
 function togglePlusMenu(forceState) {
   const menu = document.getElementById('composerPlusMenu');
   const shouldShow = forceState !== undefined ? forceState : !menu.classList.contains('show');
@@ -2247,15 +2403,16 @@ async function sendMessage() {
   try {
     // image পাঠালে base64 dataUrl সহ পাঠাই — ব্যাকএন্ড এটা আপলোড হ্যান্ডলার/স্টোরেজে সেভ করে
     // একটা স্থায়ী URL রিটার্ন করবে বলে ধরে নিচ্ছি (data.reply, data.title-এর পাশাপাশি)।
-    const body = { content: text };
+   const body = { content: text };
     if (attachment) body.image = attachment.dataUrl;
     if (webSearchEnabled) body.webSearch = true;
+    const selectedModel = getSelectedModel();
+    if (selectedModel && selectedModel !== 'auto') body.provider = selectedModel;
 
     const data = await api(`/chat/conversations/${currentConvId}/message`, {
       method: 'POST', body, token: userToken,
     });
     hideTyping();
-
     // just-sent message-e server-er real id boshai — ei id na thakle "Edit" click korle
     // "missing id from server" error dekhabe, jotokhon na page reload kore purono history load hoy
     if (userEntry && data.userMessageId != null) {
