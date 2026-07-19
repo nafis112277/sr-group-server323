@@ -217,6 +217,7 @@
   .msg-row.bot{ align-self:flex-start; align-items:flex-start; }
   .msg-actions{ display:flex; gap:8px; margin-top:4px; opacity:0; transition:opacity 0.12s; }
   .msg-row:hover .msg-actions{ opacity:1; }
+.msg-actions.menu-open{ opacity:1 !important; }
   .msg-action-btn{
     background:none; border:none; color:var(--text-soft); font-size:11px; cursor:pointer;
     font-family:'JetBrains Mono', monospace; padding:2px 4px;
@@ -1946,17 +1947,22 @@ let openShareMenuEl = null;
 
 function closeShareMenu() {
   if (openShareMenuEl) {
+    const actionsEl = openShareMenuEl.closest('.msg-actions');
+    if (actionsEl) actionsEl.classList.remove('menu-open');
     openShareMenuEl.remove();
     openShareMenuEl = null;
   }
 }
-document.addEventListener('click', () => closeShareMenu());
+ document.addEventListener('click', () => closeShareMenu());
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeShareMenu(); });
 
 function toggleShareMenu(wrapEl, msgRecord) {
   const alreadyOpenHere = openShareMenuEl && wrapEl.contains(openShareMenuEl);
   closeShareMenu();
   if (alreadyOpenHere) return;
+
+  const actionsEl = wrapEl.closest('.msg-actions');
+  if (actionsEl) actionsEl.classList.add('menu-open');
 
   const menu = document.createElement('div');
   menu.className = 'share-menu show';
