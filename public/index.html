@@ -2353,6 +2353,13 @@ async function regenerateBotMessage(row, msgRecord, btn) {
 
     msgRecord.content = data.reply;
     msgRecord.imageUrl = data.replyImageUrl || null;
+    // FIX: regenerate backend-e purono message row delete kore notun id soho notun row insert kore,
+    // tai msgRecord.id-o update kora dorkar — na hole পরের বার Regenerate চাপলে purono (already-deleted)
+    // id pathiye "Message not found" error ashe.
+    if (data.assistantMessageId != null) {
+      msgRecord.id = data.assistantMessageId;
+      row.dataset.msgId = data.assistantMessageId;
+    }
 
     // বাবল রিফ্রেশ করি — নতুন reply-তেও কোড ব্লক/ছবি থাকতে পারে, তাই আগের মতোই hasRichContent চেক করি
     const oldTextWrap = bubble.querySelector('div:last-child');
