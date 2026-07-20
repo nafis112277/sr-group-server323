@@ -1125,9 +1125,9 @@
   <div class="auth-wrap">
     <div class="auth-card">
       <div class="auth-head">
-        <div class="brandmark"><span class="dot"></span> SR Group</div>
+        <div class="brandmark"><span class="dot"></span> Provoja.aihelp</div>
         <h1>Welcome back</h1>
-        <p>Sign in to chat with the SR Group assistant.</p>
+        <p>Sign in to chat with the Provoja.aihelp.</p>
       </div>
       <div id="loginError"></div>
       <div class="field"><label>Email</label><input id="loginEmail" type="email" placeholder="you@example.com"></div>
@@ -1145,7 +1145,7 @@
   <div class="auth-wrap">
     <div class="auth-card">
       <div class="auth-head">
-        <div class="brandmark"><span class="dot"></span> SR Group</div>
+        <div class="brandmark"><span class="dot"></span> Provoja.aihelp</div>
         <h1>Create your account</h1>
         <p>Takes a few seconds.</p>
       </div>
@@ -1168,7 +1168,7 @@
   <div class="auth-wrap">
     <div class="auth-card">
       <div class="auth-head">
-        <div class="brandmark"><span class="dot"></span> SR Group</div>
+        <div class="brandmark"><span class="dot"></span>Provoja.aihelp</div>
         <h1>Reset your password</h1>
         <p id="forgotSubtitle">Enter the email on your account.</p>
       </div>
@@ -1196,7 +1196,7 @@
   <div class="auth-wrap">
     <div class="auth-card">
       <div class="auth-head">
-        <div class="brandmark"><span class="dot"></span> SR Group</div>
+        <div class="brandmark"><span class="dot"></span> Provoja.aihelp</div>
         <h1>Admin access</h1>
         <p>Sign in with your admin account.</p>
       </div>
@@ -1214,7 +1214,7 @@
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <div class="chat-sidebar" id="chatSidebar">
     <div class="sidebar-top">
-      <div class="brandmark"><span class="dot"></span> SR Group</div>
+      <div class="brandmark"><span class="dot"></span> Provoja.aihelp</div>
       <button class="new-chat-btn" id="newChatBtn">+ New chat</button>
     </div>
     <!-- নতুন সংযোজন: পুরনো কথোপকথন খোঁজার সার্চ বার (টাইটেল অনুযায়ী instant filter) -->
@@ -1237,7 +1237,7 @@
     <div class="chat-header">
       <div style="display:flex; align-items:center; gap:10px;">
         <button class="sidebar-toggle-btn" id="sidebarToggleBtn">☰</button>
-        <div class="brandmark"><span class="dot"></span> SR Group Assistant</div>
+        <div class="brandmark"><span class="dot"></span> Provoja.aihelp</div>
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
         <button class="icon-btn" id="openSkillsHeaderBtn" title="Skills">🧩</button>
@@ -1316,7 +1316,7 @@
     </div>
 
     <div class="modal-section active" id="modalSection-customize">
-      <p class="hint">Tell the assistant how you'd like it to talk to you — e.g. tone you prefer, topics you mostly ask about, reply length. This only applies to your own chats and can never override SR Group's core rules for the assistant.</p>
+      <p class="hint">Tell the assistant how you'd like it to talk to you — e.g. tone you prefer, topics you mostly ask about, reply length. This only applies to your own chats and can never override Provoja.aihelp's core rules for the assistant.</p>
       <div id="customizeError"></div>
       <div class="settings-field">
         <label>Your preferences</label>
@@ -1327,7 +1327,7 @@
     </div>
 
     <div class="modal-section" id="modalSection-skills">
-      <p class="hint">Install skills to teach the assistant extra topic knowledge. A skill only activates on a message that contains one of its trigger words — trigger words are required. Skills are saved to your account (works across devices). Anything that looks like malicious code or a rule-breaking instruction is blocked automatically, both here and on the server, and can never override SR Group's core rules.</p>
+      <p class="hint">Install skills to teach the assistant extra topic knowledge. A skill only activates on a message that contains one of its trigger words — trigger words are required. Skills are saved to your account (works across devices). Anything that looks like malicious code or a rule-breaking instruction is blocked automatically, both here and on the server, and can never overrideProvoja.aihelp's core rules.</p>
       <div id="skillsError"></div>
       <div class="skill-list" id="skillList"></div>
 
@@ -1388,7 +1388,7 @@
 <!-- ADMIN DASHBOARD -->
 <div class="screen" id="screen-adminDashboard">
   <div class="admin-top">
-    <div class="brandmark"><span class="dot"></span> SR Group — Admin</div>
+    <div class="brandmark"><span class="dot"></span> Provoja.aihelp — Admin</div>
     <div style="display:flex; align-items:center; gap:12px;">
       <span class="who" id="adminWhoami"></span>
       <button class="logout-btn" id="adminLogoutBtn">Exit admin</button>
@@ -1446,7 +1446,7 @@
 
     <div class="admin-panel" id="panel-settings">
       <div class="settings-field">
-        <label>What SR Group does</label>
+        <label>What Provoja.aihelpdoes</label>
         <textarea id="setDesc" placeholder="Describe the business..."></textarea>
       </div>
       <div class="settings-field">
@@ -1709,7 +1709,7 @@ async function switchConversation(id) {
     const log = data.messages || [];
     log.forEach((m) => addMessage(m.role === 'user' ? 'user' : 'bot', m.content, { id: m.id, imageUrl: m.imageUrl }));
     if (log.length === 0) {
-      addMessage('note', "You're chatting with SR Group's AI assistant. It can answer questions about SR Group's services and help with coding requests, but it can't give medical, legal, or financial advice, process payments, or write harmful/malicious content.");
+      addMessage('note', "You're chatting with Provoja.aihelp's AI assistant. It can answer questions about Provoja.aihelp's services and help with coding requests, but it can't give medical, legal, or financial advice, process payments, or write harmful/malicious content.");
       addMessage('note', 'Say hello to get started.');
     }
   } catch (e) { /* empty/broken conversation view */ }
@@ -2176,7 +2176,7 @@ function toggleShareMenu(wrapEl, msgRecord) {
     nativeItem.innerHTML = '<span class="smi-icon">📱</span><span>More apps…</span>';
     nativeItem.onclick = async () => {
       closeShareMenu();
-      try { await navigator.share({ title: 'SR Group Assistant', text }); } catch (err) { /* ইউজার বাতিল করলে বা অ্যানসাপোর্টেড হলে চুপচাপ ইগনোর */ }
+      try { await navigator.share({ title: 'Provoja.aihelp', text }); } catch (err) { /* ইউজার বাতিল করলে বা অ্যানসাপোর্টেড হলে চুপচাপ ইগনোর */ }
     };
     menu.appendChild(nativeItem);
     const divider0 = document.createElement('hr');
@@ -2187,7 +2187,7 @@ function toggleShareMenu(wrapEl, msgRecord) {
   const quickItems = [
     { icon: '🟢', label: 'WhatsApp', action: () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank') },
     { icon: '✈️', label: 'Telegram', action: () => window.open('https://t.me/share/url?url=&text=' + encodeURIComponent(text), '_blank') },
-    { icon: '✉️', label: 'Email', action: () => { window.location.href = 'mailto:?subject=' + encodeURIComponent('SR Group Assistant — reply') + '&body=' + encodeURIComponent(text); } },
+    { icon: '✉️', label: 'Email', action: () => { window.location.href = 'mailto:?subject=' + encodeURIComponent('Provoja.aihelp — reply') + '&body=' + encodeURIComponent(text); } },
   ];
   quickItems.forEach((it) => {
     const el = document.createElement('div');
@@ -2251,7 +2251,7 @@ function buildMessagePdf(msgRecord) {
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  doc.text('SR Group Assistant', marginX, y);
+  doc.text('Provoja.aihelp', marginX, y);
   y += 16;
 
   doc.setFont('helvetica', 'normal');
@@ -2305,7 +2305,7 @@ async function sharePdfOfMessage(msgRecord) {
     try {
       const file = new File([blob], filename, { type: 'application/pdf' });
       if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'SR Group Assistant' });
+        await navigator.share({ files: [file], title: 'Provoja.aihelp' });
         return;
       }
     } catch (err) {
