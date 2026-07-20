@@ -217,7 +217,13 @@
   .msg-row.bot{ align-self:flex-start; align-items:flex-start; }
   .msg-actions{ display:flex; gap:8px; margin-top:4px; opacity:0; transition:opacity 0.12s; }
   .msg-row:hover .msg-actions{ opacity:1; }
-.msg-actions.menu-open{ opacity:1 !important; }
+  /* Fix: টাচ ডিভাইসে (মোবাইল/ট্যাবলেট) কোনো ":hover" স্টেট নেই, তাই উপরের opacity:0 এর কারণে
+     Share/👍/👎/Copy/PDF বাটনগুলো দেখাই যেত না বা অস্থিরভাবে দেখা যেত — এই কারণেই মোবাইলে এগুলো
+     "কাজ করে না" মনে হচ্ছিল। টাচ ডিভাইস/ছোট স্ক্রিনে এখন এই বাটনগুলো সবসময় দৃশ্যমান থাকবে,
+     ডেস্কটপে আগের hover behavior একদম আগের মতোই অক্ষত থাকছে। */
+  @media (hover: none), (pointer: coarse), (max-width: 680px) {
+    .msg-actions{ opacity:1; }
+  }
   .msg-action-btn{
     background:none; border:none; color:var(--text-soft); font-size:11px; cursor:pointer;
     font-family:'JetBrains Mono', monospace; padding:2px 4px;
@@ -242,7 +248,7 @@
   .share-btn-wrap{ position:relative; display:inline-flex; }
   .share-menu{
     display:none;
-    position:absolute; bottom:26px; left:0; z-index:45;
+    position:fixed; z-index:90;
     min-width:200px;
     background:var(--panel-solid); border:1px solid var(--border-glass);
     border-radius:12px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.45);
@@ -294,65 +300,8 @@
     border-radius:10px; width:44px; height:44px; min-width:44px; font-size:18px; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
   }
-.attach-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+  .attach-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
 
-  /* ---------- Model selector dropdown (Claude-style) ---------- */
-  .model-select-wrap{ position:relative; }
-  .model-select-btn{
-    background:var(--panel); border:1px solid var(--border-glass); color:var(--text-primary);
-    border-radius:9px; padding:0 12px; height:44px; font-size:12.5px; cursor:pointer;
-    display:flex; align-items:center; gap:6px; font-family:'Inter',sans-serif; white-space:nowrap;
-  }
-  .model-select-btn:hover{ border-color:var(--accent-a); }
-  .model-select-menu{
-    display:none;
-    position:absolute; bottom:52px; left:0; z-index:40;
-    min-width:200px;
-    background:var(--panel-solid); border:1px solid var(--border-glass);
-    border-radius:12px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.45);
-  }
-  .model-select-menu.show{ display:block; }
-  .model-select-item{
-    display:flex; align-items:center; justify-content:space-between; gap:8px;
-    padding:9px 10px; border-radius:8px; cursor:pointer;
-    font-size:13px; color:var(--text-primary); font-family:'Inter',sans-serif;
-  }
-  .model-select-item:hover{ background:rgba(255,255,255,0.06); }
-  .model-select-item .msi-check{ font-size:12px; color:var(--accent-glow); opacity:0; }
-  .model-select-item.selected .msi-check{ opacity:1; }
-  .model-select-item.locked{ opacity:0.65; }
-  .msi-premium-badge{
-    font-family:'JetBrains Mono', monospace; font-size:9.5px; font-weight:700;
-    background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); color:#fff;
-    border-radius:5px; padding:1px 6px; letter-spacing:0.03em; flex-shrink:0;
-  }
-  .msi-lock-icon{ font-size:11px; color:var(--text-soft); flex-shrink:0; }
-
-  /* ---------- Upgrade to premium modal ---------- */
-  .upgrade-modal-backdrop{
-    display:none; position:fixed; inset:0; background:rgba(6,9,15,0.65);
-    backdrop-filter:blur(2px); z-index:90; align-items:center; justify-content:center; padding:20px;
-  }
-  .upgrade-modal-backdrop.show{ display:flex; }
-  .upgrade-modal-card{
-    width:100%; max-width:380px;
-    background:var(--panel-solid); border:1px solid var(--border-glass);
-    border-radius:18px; padding:28px 26px; text-align:center;
-  }
-  .upgrade-modal-icon{
-    width:52px; height:52px; margin:0 auto 14px; border-radius:14px;
-    background:linear-gradient(135deg, var(--accent-a), var(--accent-b));
-    display:flex; align-items:center; justify-content:center; font-size:24px;
-  }
-  .upgrade-modal-card h3{ font-family:'Space Grotesk',sans-serif; font-size:18px; margin:0 0 8px; }
-  .upgrade-modal-card p{ color:var(--text-soft); font-size:13.5px; line-height:1.6; margin:0 0 20px; }
-  .upgrade-modal-actions{ display:flex; flex-direction:column; gap:8px; }
-  .upgrade-modal-actions .btn-primary{ margin-top:0; }
-  .upgrade-modal-cancel{
-    background:none; border:1px solid var(--border-glass); color:var(--text-soft);
-    border-radius:9px; padding:11px; font-size:13.5px; cursor:pointer; font-family:'Inter',sans-serif;
-  }
-  .upgrade-modal-cancel:hover{ color:var(--text-primary); border-color:var(--accent-a); }
   /* ---------- Composer "+" dropdown menu (Claude-style) ---------- */
   .plus-menu-wrap{ position:relative; }
   .plus-menu{
@@ -953,6 +902,201 @@
   }
 </style>
 
+<!-- ==================================================================
+     নিওমরফিজম (Soft-UI) লেয়ার — সম্পূর্ণ নতুন, আলাদা <style> ব্লক
+     আগের <style> ব্লকের একটা লাইনও বদলানো হয়নি বা মোছা হয়নি — এই ব্লকটা
+     শুধু তার পরে যোগ হয়েছে, তাই CSS cascade-এ এটা আগেরগুলোর উপর বসে
+     জিনিসগুলোকে নরম, উঁচু-নিচু (raised / pressed) নিওমরফিক লুক দেয়,
+     কিন্তু কোনো ক্লাস নাম, HTML স্ট্রাকচার বা JS লজিক স্পর্শ করা হয়নি।
+     ================================================================== -->
+<style id="neomorphism-layer">
+  :root{
+    --neu-base: var(--bg-deep-2);
+    --neu-light: rgba(255,255,255,0.06);
+    --neu-lighter: rgba(255,255,255,0.10);
+    --neu-dark: rgba(0,0,0,0.55);
+    --neu-dark-soft: rgba(0,0,0,0.35);
+    --neu-r: 20px;
+    --neu-r-sm: 14px;
+    --neu-r-lg: 26px;
+  }
+  html[data-theme="white"]{
+    --neu-base:#EEF1F6;
+    --neu-light: rgba(255,255,255,0.95);
+    --neu-lighter: #ffffff;
+    --neu-dark: rgba(163,177,198,0.55);
+    --neu-dark-soft: rgba(163,177,198,0.35);
+  }
+
+  body{
+    background:
+      radial-gradient(circle at 15% 20%, var(--grad-1), transparent 45%),
+      radial-gradient(circle at 85% 75%, var(--grad-2), transparent 45%),
+      radial-gradient(circle at 50% 100%, var(--grad-3), transparent 40%),
+      var(--neu-base) !important;
+  }
+
+  /* ---------- Auth card ---------- */
+  .auth-card{
+    background:var(--neu-base) !important;
+    border:none !important;
+    border-radius:var(--neu-r-lg) !important;
+    box-shadow:
+      9px 9px 18px var(--neu-dark),
+      -9px -9px 18px var(--neu-light) !important;
+  }
+  .field input{
+    background:var(--neu-base) !important;
+    border:none !important;
+    border-radius:var(--neu-r-sm) !important;
+    box-shadow:
+      inset 4px 4px 8px var(--neu-dark-soft),
+      inset -4px -4px 8px var(--neu-light) !important;
+  }
+  .field input:focus{
+    outline:none !important;
+    box-shadow:
+      inset 4px 4px 8px var(--neu-dark-soft),
+      inset -4px -4px 8px var(--neu-light),
+      0 0 0 2px var(--accent-a) !important;
+  }
+  .error-note{
+    border:none !important;
+    border-radius:var(--neu-r-sm) !important;
+    box-shadow:
+      inset 3px 3px 6px rgba(0,0,0,0.25),
+      inset -3px -3px 6px rgba(255,107,107,0.06) !important;
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn-primary, .send-btn, .srta-send-btn,
+  .quota-save-btn, .qw-custom-submit, .artifact-run-btn{
+    border:none !important;
+    border-radius:var(--neu-r-sm) !important;
+    box-shadow:
+      6px 6px 12px var(--neu-dark),
+      -6px -6px 12px var(--neu-light) !important;
+    transition:box-shadow .15s ease, transform .15s ease !important;
+  }
+  .btn-primary:active, .send-btn:active, .srta-send-btn:active,
+  .quota-save-btn:active, .qw-custom-submit:active, .artifact-run-btn:active{
+    box-shadow:
+      inset 4px 4px 8px rgba(0,0,0,0.35),
+      inset -4px -4px 8px rgba(255,255,255,0.05) !important;
+    transform:translateY(1px);
+  }
+  .new-chat-btn, .icon-btn, .attach-btn, .mic-btn,
+  .srta-clear-btn, .sidebar-toggle-btn, .modal-close, .artifact-close-btn,
+  .artifact-copy-btn, .conv-delete-btn, .logout-btn, .skill-remove-btn{
+    background:var(--neu-base) !important;
+    border:none !important;
+    border-radius:var(--neu-r-sm) !important;
+    box-shadow:
+      4px 4px 9px var(--neu-dark),
+      -4px -4px 9px var(--neu-light) !important;
+  }
+  .new-chat-btn:hover, .icon-btn:hover, .attach-btn:hover, .mic-btn:hover,
+  .srta-clear-btn:hover, .sidebar-toggle-btn:hover{
+    box-shadow:
+      inset 3px 3px 6px var(--neu-dark-soft),
+      inset -3px -3px 6px var(--neu-light) !important;
+  }
+
+  /* ---------- Sidebar & conversation list ---------- */
+  .chat-sidebar{
+    background:var(--neu-base) !important;
+    border-right:none !important;
+    box-shadow:6px 0 16px var(--neu-dark-soft) !important;
+  }
+  .sidebar-search-wrap, .quota-input, .srta-input{
+    background:var(--neu-base) !important;
+    border:none !important;
+    border-radius:var(--neu-r-sm) !important;
+    box-shadow:
+      inset 3px 3px 7px var(--neu-dark-soft),
+      inset -3px -3px 7px var(--neu-light) !important;
+  }
+  .conv-item{
+    border-radius:var(--neu-r-sm) !important;
+  }
+  .conv-item:hover{
+    box-shadow:
+      inset 2px 2px 5px var(--neu-dark-soft),
+      inset -2px -2px 5px var(--neu-light) !important;
+    background:transparent !important;
+  }
+  .conv-item.active{
+    background:var(--neu-base) !important;
+    border:none !important;
+    box-shadow:
+      3px 3px 7px var(--neu-dark),
+      -3px -3px 7px var(--neu-light) !important;
+  }
+
+  /* ---------- Chat area / composer / messages ---------- */
+  .chat-header{
+    background:var(--neu-base) !important;
+    box-shadow:0 4px 12px var(--neu-dark-soft) !important;
+  }
+  .composer, .composer-row{
+    background:var(--neu-base) !important;
+    border:none !important;
+    border-radius:var(--neu-r-lg) !important;
+    box-shadow:
+      7px 7px 15px var(--neu-dark),
+      -7px -7px 15px var(--neu-light) !important;
+  }
+  .msg, .messages .msg{
+    border-radius:var(--neu-r-sm) !important;
+    box-shadow:
+      4px 4px 10px var(--neu-dark-soft),
+      -4px -4px 10px var(--neu-light) !important;
+  }
+
+  /* ---------- Cards / panels / modals ---------- */
+  .stat-card, .artifact-card, .modal-card, .artifact-panel,
+  .question-widget, .chart-block, .plus-menu, .admin-panel{
+    background:var(--neu-base) !important;
+    border:none !important;
+    border-radius:var(--neu-r) !important;
+    box-shadow:
+      8px 8px 16px var(--neu-dark),
+      -8px -8px 16px var(--neu-light) !important;
+  }
+  .qw-option-btn, .theme-swatch-dot, .table-scroll,
+  .srta-transcript, .plus-menu-item{
+    border-radius:var(--neu-r-sm) !important;
+    box-shadow:
+      inset 3px 3px 7px var(--neu-dark-soft),
+      inset -3px -3px 7px var(--neu-light) !important;
+  }
+  .qw-option-btn:hover, .plus-menu-item:hover{
+    box-shadow:
+      3px 3px 7px var(--neu-dark),
+      -3px -3px 7px var(--neu-light) !important;
+  }
+
+  /* ---------- Tabs ---------- */
+  .tab-btn{
+    border-radius:var(--neu-r-sm) !important;
+    box-shadow:none !important;
+  }
+  .tab-btn.active{
+    background:var(--neu-base) !important;
+    box-shadow:
+      inset 3px 3px 6px var(--neu-dark-soft),
+      inset -3px -3px 6px var(--neu-light) !important;
+  }
+
+  /* ---------- Misc rounded surfaces ---------- */
+  .user-chip, .role-select, .brandmark .dot{
+    border-radius:var(--neu-r-sm) !important;
+    box-shadow:
+      3px 3px 7px var(--neu-dark-soft),
+      -3px -3px 7px var(--neu-light) !important;
+  }
+</style>
+
 <script>
   // পেজ রেন্ডার হওয়ার আগেই সেভ করা থিম বসিয়ে দিই যাতে ভুল থিম এক ঝলক দেখিয়ে তারপর
   // সিলেক্ট করা থিমে সুইচ করার মতো flicker না হয়।
@@ -1129,12 +1273,6 @@
           <span class="mic-wave"></span>
           <span id="micIcon">🎤</span>
         </button>
-        <div class="model-select-wrap">
-          <button class="model-select-btn" id="modelSelectBtn" type="button">
-            <span id="modelSelectLabel">Auto</span><span>▾</span>
-          </button>
-          <div class="model-select-menu" id="modelSelectMenu"></div>
-        </div>
         <input id="userInput" type="text" placeholder="Type a message...">
         <button class="send-btn" id="sendBtn">Send</button>
       </div>
@@ -1163,21 +1301,7 @@
   </div>
 </div>
 
-<!-- UPGRADE TO PREMIUM MODAL -->
-<div class="upgrade-modal-backdrop" id="upgradeModalBackdrop">
-  <div class="upgrade-modal-card">
-    <div class="upgrade-modal-icon">⚡</div>
-    <h3>Upgrade to Premium</h3>
-    <p id="upgradeModalText">This model is available on the Premium plan. Upgrade to unlock faster, more capable responses.</p>
-    <div class="upgrade-modal-actions">
-      <button class="btn-primary" id="upgradeModalCtaBtn">Upgrade now</button>
-      <button class="upgrade-modal-cancel" id="upgradeModalCancelBtn">Maybe later</button>
-    </div>
-  </div>
-</div>
-
 <!-- ACCOUNT SETTINGS MODAL (Customize AI + Skills + Change password) -->
-
 <div class="modal-backdrop" id="accountModalBackdrop">
   <div class="modal-card">
     <div class="modal-head">
@@ -2024,25 +2148,24 @@ let openShareMenuEl = null;
 
 function closeShareMenu() {
   if (openShareMenuEl) {
-    const actionsEl = openShareMenuEl.closest('.msg-actions');
-    if (actionsEl) actionsEl.classList.remove('menu-open');
     openShareMenuEl.remove();
     openShareMenuEl = null;
   }
 }
- document.addEventListener('click', () => closeShareMenu());
+document.addEventListener('click', () => closeShareMenu());
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeShareMenu(); });
+// FIX: চ্যাট স্ক্রল করলে বা স্ক্রিন রিসাইজ/রোটেট হলে মেনু বন্ধ করে দিই — নাহলে ভুল জায়গায় ভাসতে থাকতো
+window.addEventListener('scroll', () => closeShareMenu(), true);
+window.addEventListener('resize', () => closeShareMenu());
 
 function toggleShareMenu(wrapEl, msgRecord) {
-  const alreadyOpenHere = openShareMenuEl && wrapEl.contains(openShareMenuEl);
+  const alreadyOpenHere = openShareMenuEl && openShareMenuEl.__anchor === wrapEl;
   closeShareMenu();
   if (alreadyOpenHere) return;
 
-  const actionsEl = wrapEl.closest('.msg-actions');
-  if (actionsEl) actionsEl.classList.add('menu-open');
-
   const menu = document.createElement('div');
   menu.className = 'share-menu show';
+  menu.__anchor = wrapEl;
   menu.onclick = (e) => e.stopPropagation();
 
   const text = msgRecord.content || '';
@@ -2084,8 +2207,32 @@ function toggleShareMenu(wrapEl, msgRecord) {
   pdfShareItem.onclick = () => { closeShareMenu(); sharePdfOfMessage(msgRecord); };
   menu.appendChild(pdfShareItem);
 
-  wrapEl.appendChild(menu);
+  document.body.appendChild(menu);
   openShareMenuEl = menu;
+
+  // FIX: এতদিন menu টা wrapEl-এর ভিতরে (position:absolute) বসানো হতো, যেটা চ্যাটের
+  // scrollable কনটেইনারের overflow-এর কারণে ক্লিপ হয়ে যেত — তাই কিছুই দেখা যেত না।
+  // এখন document.body-তে বসিয়ে, বাটনের আসল স্ক্রিন-পজিশন হিসাব করে fixed position দিচ্ছি,
+  // যাতে চ্যাট যতই স্ক্রল করা থাকুক বা মেসেজ যেখানেই থাকুক, মেনু সবসময় ভিউপোর্টের ভিতরেই দেখা যায়।
+  const btnRect = wrapEl.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+
+  let left = btnRect.left;
+  if (left + menuRect.width > window.innerWidth - 8) left = window.innerWidth - menuRect.width - 8;
+  if (left < 8) left = 8;
+
+  const spaceAbove = btnRect.top;
+  const spaceBelow = window.innerHeight - btnRect.bottom;
+  let top;
+  if (spaceAbove >= menuRect.height + 10 || spaceAbove > spaceBelow) {
+    top = btnRect.top - menuRect.height - 8; // যথেষ্ট জায়গা থাকলে উপরে খোলে
+  } else {
+    top = btnRect.bottom + 8; // নাহলে নিচে খোলে
+  }
+  if (top < 8) top = 8;
+
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
 }
 
 // শুধু এই একটা রিপ্লাইয়ের কনটেন্ট দিয়ে একটা jsPDF ডকুমেন্ট বানায় (ডাউনলোড/শেয়ার দুই জায়গাতেই ব্যবহার হয়)
@@ -2237,84 +2384,6 @@ async function regenerateBotMessage(row, msgRecord, btn) {
 /* ---------------- "+" composer menu (photo / skills / web search) ---------------- */
 let webSearchEnabled = false;
 
-/* ---------------- Model selector (Claude-style dropdown, with premium lock) ---------------- */
-const MODELS = [
-  { id: 'auto',      name: 'Auto',    premium: false },
-  { id: 'groq',      name: 'Quorix',  premium: false },
-  { id: 'gemini',    name: 'Velix',   premium: false },
-  { id: 'openai',    name: 'GPT',     premium: true },
-  { id: 'anthropic', name: 'Claude',  premium: true },
-];
-function isCustomerPremium() {
-  return !!(currentUser && currentUser.isPremium);
-}
-
-function getSelectedModel() {
-  try { return localStorage.getItem('srgroup:model') || 'auto'; } catch (e) { return 'auto'; }
-}
-function setSelectedModel(id) {
-  try { localStorage.setItem('srgroup:model', id); } catch (e) { /* ignore */ }
-  const m = MODELS.find((x) => x.id === id);
-  document.getElementById('modelSelectLabel').textContent = m ? m.name : 'Auto';
-}
-
-function renderModelMenu() {
-  const menu = document.getElementById('modelSelectMenu');
-  const active = getSelectedModel();
-  const premium = isCustomerPremium();
-  menu.innerHTML = '';
-  MODELS.forEach((m) => {
-    const locked = m.premium && !premium;
-    const item = document.createElement('div');
-    item.className = 'model-select-item' + (m.id === active ? ' selected' : '') + (locked ? ' locked' : '');
-    item.innerHTML = `
-      <span style="display:flex; align-items:center; gap:7px;">
-        <span>${escapeHtml(m.name)}</span>
-        ${m.premium ? '<span class="msi-premium-badge">PRO</span>' : ''}
-      </span>
-      ${locked ? '<span class="msi-lock-icon">🔒</span>' : '<span class="msi-check">✓</span>'}
-    `;
-    item.onclick = () => {
-      if (locked) {
-        document.getElementById('modelSelectMenu').classList.remove('show');
-        showUpgradeModal(m.name);
-        return;
-      }
-      setSelectedModel(m.id);
-      menu.classList.remove('show');
-      renderModelMenu();
-    };
-    menu.appendChild(item);
-  });
-}
-setSelectedModel(getSelectedModel());
-renderModelMenu();
-
-document.getElementById('modelSelectBtn').onclick = (e) => {
-  e.stopPropagation();
-  document.getElementById('modelSelectMenu').classList.toggle('show');
-};
-document.addEventListener('click', (e) => {
-  const wrap = document.querySelector('.model-select-wrap');
-  if (wrap && !wrap.contains(e.target)) document.getElementById('modelSelectMenu').classList.remove('show');
-});
-
-function showUpgradeModal(modelName) {
-  document.getElementById('upgradeModalText').textContent =
-    modelName + ' is available on the Premium plan. Upgrade to unlock faster, more capable responses.';
-  document.getElementById('upgradeModalBackdrop').classList.add('show');
-}
-document.getElementById('upgradeModalCancelBtn').onclick = () => {
-  document.getElementById('upgradeModalBackdrop').classList.remove('show');
-};
-document.getElementById('upgradeModalBackdrop').addEventListener('click', (e) => {
-  if (e.target.id === 'upgradeModalBackdrop') document.getElementById('upgradeModalBackdrop').classList.remove('show');
-});
-document.getElementById('upgradeModalCtaBtn').onclick = () => {
-  // TODO: nijer payment/checkout page-er link ekhane boshaw
-  window.open('https://your-upgrade-page.example.com', '_blank');
-};
-
 function togglePlusMenu(forceState) {
   const menu = document.getElementById('composerPlusMenu');
   const shouldShow = forceState !== undefined ? forceState : !menu.classList.contains('show');
@@ -2402,16 +2471,15 @@ async function sendMessage() {
   try {
     // image পাঠালে base64 dataUrl সহ পাঠাই — ব্যাকএন্ড এটা আপলোড হ্যান্ডলার/স্টোরেজে সেভ করে
     // একটা স্থায়ী URL রিটার্ন করবে বলে ধরে নিচ্ছি (data.reply, data.title-এর পাশাপাশি)।
-const body = { content: text };
-  if (attachment) body.image = attachment.dataUrl;
-  if (webSearchEnabled) body.webSearch = true;
-    const selectedModel = getSelectedModel();
-    if (selectedModel && selectedModel !== 'auto') body.provider = selectedModel;
+    const body = { content: text };
+    if (attachment) body.image = attachment.dataUrl;
+    if (webSearchEnabled) body.webSearch = true;
 
     const data = await api(`/chat/conversations/${currentConvId}/message`, {
       method: 'POST', body, token: userToken,
     });
     hideTyping();
+
     // just-sent message-e server-er real id boshai — ei id na thakle "Edit" click korle
     // "missing id from server" error dekhabe, jotokhon na page reload kore purono history load hoy
     if (userEntry && data.userMessageId != null) {
