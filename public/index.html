@@ -895,14 +895,49 @@
     background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); border:none; border-radius:9px;
     color:#fff; padding:0 18px; font-weight:600; cursor:pointer; font-size:13px;
   }
-  .msg.agent{
+.msg.agent{
     align-self:flex-end; background:linear-gradient(135deg,#22C55E,#16A34A); color:#fff;
     border-bottom-right-radius:3px; display:block; margin:6px 0 6px auto; max-width:70%;
     padding:10px 13px; border-radius:12px; font-size:13.5px;
   }
 </style>
-
-<!-- ==================================================================
+<style id="sr-added-broadcast-banner">
+  #broadcastBanner{
+    display:none;
+    align-items:flex-start; gap:10px;
+    max-width:760px; width:calc(100% - 56px);
+    margin:14px auto 0;
+    padding:12px 14px;
+    border-radius:12px;
+    background:linear-gradient(135deg, var(--grad-1), var(--grad-2));
+    border:1px solid var(--border-glass);
+    font-family:'Inter',sans-serif;
+  }
+  #broadcastBanner.show{ display:flex; }
+  #broadcastBanner .srb-icon{ font-size:16px; flex-shrink:0; margin-top:1px; }
+  #broadcastBanner .srb-body{ flex:1; min-width:0; }
+  #broadcastBanner .srb-title{ font-weight:700; font-size:13.5px; margin-bottom:2px; }
+  #broadcastBanner .srb-msg{ font-size:12.5px; color:var(--text-soft); line-height:1.5; white-space:pre-wrap; }
+  #broadcastBanner .srb-close{
+    background:none; border:none; color:var(--text-soft); font-size:15px; cursor:pointer;
+    padding:2px 4px; line-height:1; flex-shrink:0;
+  }
+  #broadcastBanner .srb-close:hover{ color:var(--text-primary); }
+  @media (max-width:680px){
+    #broadcastBanner{ width:calc(100% - 28px); margin-top:10px; }
+  }
+  .srb-admin-panel{ max-width:560px; }
+  .srb-toggle-row{ display:flex; align-items:center; gap:9px; margin:4px 0 18px; }
+  .srb-toggle-row input[type="checkbox"]{ width:16px; height:16px; }
+  .srb-toggle-row label{ font-size:13px; color:var(--text-primary); cursor:pointer; }
+  .srb-status-pill{
+    display:inline-block; font-family:'JetBrains Mono',monospace; font-size:10.5px;
+    padding:2px 9px; border-radius:6px; margin-left:8px; vertical-align:middle;
+    border:1px solid var(--border-glass); color:var(--text-soft);
+  }
+  .srb-status-pill.live{ color:var(--accent-glow); border-color:var(--accent-glow); }
+</style>
+ <!-- ==================================================================
      নিওমরফিজম (Soft-UI) লেয়ার — সম্পূর্ণ নতুন, আলাদা <style> ব্লক
      আগের <style> ব্লকের একটা লাইনও বদলানো হয়নি বা মোছা হয়নি — এই ব্লকটা
      শুধু তার পরে যোগ হয়েছে, তাই CSS cascade-এ এটা আগেরগুলোর উপর বসে
@@ -1247,8 +1282,16 @@
         <span class="who" id="convStatus"></span>
       </div>
     </div>
+<div id="broadcastBanner">
+      <span class="srb-icon">📢</span>
+      <div class="srb-body">
+        <div class="srb-title" id="broadcastBannerTitle"></div>
+        <div class="srb-msg" id="broadcastBannerMsg"></div>
+      </div>
+      <button type="button" class="srb-close" id="broadcastBannerClose" title="Dismiss">✕</button>
+    </div>
     <div class="messages" id="messages"></div>
-    <div class="composer">
+<div class="composer">
       <div class="composer-attachments" id="composerAttachments"></div>
       <div class="composer-row">
         <input type="file" id="imageFileInput" accept="image/*" style="display:none;">
@@ -3986,9 +4029,10 @@ async function renderTakeoverBar(conv) {
          ঠিক কাস্টমার চ্যাটের মতোই, কিন্তু কোনো DB-তে conversation/message সেভ করবে না।
      ব্যাকএন্ড এখনো এই এন্ডপয়েন্ট সাপোর্ট না করলে নিচে স্পষ্ট এরর মেসেজ দেখাবে, বাকি অ্যাডমিন
      প্যানেল আগের মতোই স্বাভাবিক থাকবে — এর আগের কোনো ফিচার/কোডের একটা অক্ষরও বদলানো হয়নি,
-     এই পুরো ব্লকটা শুধু নতুন করে জোড়া লাগানো হয়েছে। ================================================================== */
+এই পুরো ব্লকটা শুধু নতুন করে জোড়া লাগানো হয়েছে। ================================================================== -->
+<script id="sr-added-test-assistant-tab">
 (function initTestAssistantTab() {
-  // ---- নতুন CSS আলাদা <style> ট্যাগে — আগের কোনো স্টাইল রুল স্পর্শ করা হয়নি ----
+     // ---- নতুন CSS আলাদা <style> ট্যাগে — আগের কোনো স্টাইল রুল স্পর্শ করা হয়নি ----
   const style = document.createElement('style');
   style.textContent = `
     .srta-panel{ display:flex; flex-direction:column; height:100%; max-width:720px; }
@@ -4087,7 +4131,7 @@ async function renderTakeoverBar(conv) {
   document.getElementById('srtaInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); srtaSend(); }
   });
-  document.getElementById('srtaClearBtn').onclick = () => {
+ document.getElementById('srtaClearBtn').onclick = () => {
     srtaHistory = [];
     document.getElementById('srtaTranscript').innerHTML = '';
     setError('srtaError', '');
@@ -4105,7 +4149,152 @@ async function renderTakeoverBar(conv) {
   };
 })();
 </script>
+
+<!-- ==================================================================
+     ৮) Admin Broadcast/Announcement — নতুন ট্যাব + কাস্টমার-সাইড ব্যানার
+     সম্পূর্ণ নতুন ব্লক, আগের কিছুই স্পর্শ করা হয়নি। ব্যাকএন্ডে দরকার:
+       GET  /admin/broadcast   -> { title, message, active }
+       POST /admin/broadcast   body:{ title, message, active } (super_admin only)
+       GET  /chat/broadcast    -> { id, title, message, active }
+     এন্ডপয়েন্ট না থাকলে UI নিরবে আগের মতো স্বাভাবিক থাকবে।
+     ================================================================== -->
+<script id="sr-added-broadcast-feature">
+(function initBroadcastFeature() {
+
+  /* ---- Admin: Broadcast ট্যাব ---- */
+  const tabsBar = document.querySelector('.admin-tabs');
+  const adminsBtn = document.getElementById('tabBtnAdmins');
+  const broadcastTabBtn = document.createElement('button');
+  broadcastTabBtn.className = 'tab-btn';
+  broadcastTabBtn.id = 'tabBtnBroadcast';
+  broadcastTabBtn.dataset.tab = 'broadcast';
+  broadcastTabBtn.style.display = 'none';
+  broadcastTabBtn.textContent = 'Broadcast';
+  if (tabsBar) tabsBar.insertBefore(broadcastTabBtn, adminsBtn || null);
+
+  const adminBody = document.querySelector('.admin-body');
+  const panel = document.createElement('div');
+  panel.className = 'admin-panel';
+  panel.id = 'panel-broadcast';
+  panel.innerHTML = `
+    <div class="srb-admin-panel">
+      <p class="hint" style="margin-bottom:16px;">সব কাস্টমারের চ্যাট স্ক্রিনের উপরে ঘোষণা ব্যানার দেখান। <span id="broadcastStatusPill" class="srb-status-pill">Off</span></p>
+      <div id="broadcastError"></div>
+      <div class="settings-field">
+        <label>Title</label>
+        <input id="broadcastTitle" type="text" placeholder="e.g. Scheduled maintenance">
+      </div>
+      <div class="settings-field">
+        <label>Message</label>
+        <textarea id="broadcastMessage" style="min-height:100px;" placeholder="Announcement text customers will see..."></textarea>
+      </div>
+      <div class="srb-toggle-row">
+        <input type="checkbox" id="broadcastActiveToggle">
+        <label for="broadcastActiveToggle">Show this banner to customers now</label>
+      </div>
+      <button class="btn-primary" style="max-width:200px;" id="saveBroadcastBtn">Save broadcast</button>
+      <div class="save-note" id="broadcastSaveNote" style="display:none;">Saved.</div>
+    </div>
+  `;
+  if (adminBody) adminBody.appendChild(panel);
+
+  async function loadBroadcastPanel() {
+    setError('broadcastError', '');
+    try {
+      const data = await api('/admin/broadcast', { token: adminToken });
+      document.getElementById('broadcastTitle').value = data.title || '';
+      document.getElementById('broadcastMessage').value = data.message || '';
+      document.getElementById('broadcastActiveToggle').checked = !!data.active;
+      const pill = document.getElementById('broadcastStatusPill');
+      pill.textContent = data.active ? 'Live' : 'Off';
+      pill.classList.toggle('live', !!data.active);
+    } catch (err) {
+      setError('broadcastError', "Couldn't load the current broadcast: " + err.message);
+    }
+  }
+
+  document.getElementById('saveBroadcastBtn').onclick = async () => {
+    const title = document.getElementById('broadcastTitle').value.trim();
+    const message = document.getElementById('broadcastMessage').value.trim();
+    const active = document.getElementById('broadcastActiveToggle').checked;
+    setError('broadcastError', '');
+    if (active && !message) { setError('broadcastError', 'Write a message before turning the banner on.'); return; }
+    try {
+      await api('/admin/broadcast', { method: 'POST', body: { title, message, active }, token: adminToken });
+      const pill = document.getElementById('broadcastStatusPill');
+      pill.textContent = active ? 'Live' : 'Off';
+      pill.classList.toggle('live', active);
+      const note = document.getElementById('broadcastSaveNote');
+      note.style.display = 'block';
+      setTimeout(() => (note.style.display = 'none'), 2000);
+    } catch (err) {
+      setError('broadcastError', err.message);
+    }
+  };
+
+  broadcastTabBtn.onclick = () => {
+    if (broadcastTabBtn.style.display === 'none') return;
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    broadcastTabBtn.classList.add('active');
+    document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
+    panel.classList.add('active');
+    loadBroadcastPanel();
+  };
+
+  if (typeof applyAdminRoleUI === 'function') {
+    const __originalApplyAdminRoleUI = applyAdminRoleUI;
+    applyAdminRoleUI = function () {
+      __originalApplyAdminRoleUI();
+      broadcastTabBtn.style.display = (typeof adminRole !== 'undefined' && adminRole === 'super_admin') ? '' : 'none';
+    };
+  }
+
+  /* ---- Customer: ব্যানার দেখানো/বন্ধ করা ---- */
+  const banner = document.getElementById('broadcastBanner');
+  const bannerTitleEl = document.getElementById('broadcastBannerTitle');
+  const bannerMsgEl = document.getElementById('broadcastBannerMsg');
+  const bannerCloseBtn = document.getElementById('broadcastBannerClose');
+
+  function getDismissedBroadcastId() {
+    try { return localStorage.getItem('srgroup:dismissedBroadcastId'); } catch (e) { return null; }
+  }
+  function setDismissedBroadcastId(id) {
+    try { localStorage.setItem('srgroup:dismissedBroadcastId', String(id)); } catch (e) { /* ignore */ }
+  }
+
+  async function checkBroadcast() {
+    if (!banner || !userToken) return;
+    try {
+      const data = await api('/chat/broadcast', { token: userToken });
+      if (!data || !data.active || !data.message) { banner.classList.remove('show'); return; }
+      const bId = data.id != null ? data.id : data.message;
+      if (String(getDismissedBroadcastId()) === String(bId)) { banner.classList.remove('show'); return; }
+      bannerTitleEl.textContent = data.title || 'Announcement';
+      bannerMsgEl.textContent = data.message;
+      banner.dataset.broadcastId = bId;
+      banner.classList.add('show');
+    } catch (err) {
+      banner.classList.remove('show');
+    }
+  }
+
+  if (bannerCloseBtn) {
+    bannerCloseBtn.onclick = () => {
+      if (banner.dataset.broadcastId) setDismissedBroadcastId(banner.dataset.broadcastId);
+      banner.classList.remove('show');
+    };
+  }
+
+  if (typeof enterChat === 'function') {
+    const __originalEnterChat = enterChat;
+    enterChat = async function () {
+      await __originalEnterChat();
+      checkBroadcast();
+    };
+  }
+
+})();
+</script>
 </body>
 </html>
-
           
