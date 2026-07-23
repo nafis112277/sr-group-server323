@@ -30,12 +30,13 @@ export async function callAI(systemPrompt, history, options = {}) {
   let lastError = 'No AI provider is configured on the server. Add at least one API key in the Environment Variables (Render dashboard or .env).';
   // customer je model select korche, thakle shudhu oitai try hobe (fallback chain skip)
   const tryOrder = (forceProvider && PROVIDERS[forceProvider]) ? [forceProvider] : order;
-  for (const name of tryOrder) {
-    const fn = PROVIDERS[name];
-    const result = await fn(systemPrompt, history, { webSearch });
-    if (result.ok) return result;
-    lastError = result.error || lastError;
-  }
+for (const name of tryOrder) {
+  const fn = PROVIDERS[name];
+  const result = await fn(systemPrompt, history, { webSearch });
+  console.log(`[AI] ${name}:`, result.ok ? 'SUCCESS' : result.error); // <-- add koro
+  if (result.ok) return result;
+  lastError = result.error || lastError;
+}
   return { ok: false, error: lastError };
 }
 
