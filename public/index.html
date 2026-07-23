@@ -2870,6 +2870,16 @@ async function loadCustomerList() {
       const lastLogin = u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never (signed up only)';
       const quotaValue = (u.dailyLimit !== null && u.dailyLimit !== undefined) ? u.dailyLimit : '';
       // viewer role শুধু দেখতে পাবে, quota/reset/block কোনোটাই করতে পারবে না
+      const currentPlan = u.plan || 'free';
+      const planCell = isSuper
+        ? `<select class="role-select plan-select" data-email="${escapeHtml(u.email)}">
+            <option value="free" ${currentPlan === 'free' ? 'selected' : ''}>Free</option>
+            <option value="pro" ${currentPlan === 'pro' ? 'selected' : ''}>Pro</option>
+            <option value="max" ${currentPlan === 'max' ? 'selected' : ''}>Max</option>
+          </select>`
+        : `<span class="role-badge">${escapeHtml(currentPlan)}</span>`;
+
+      const quotaCell = isSuper
       const quotaCell = isSuper
         ? `<div class="quota-cell">
             <input type="number" min="0" step="1" class="quota-input" placeholder="default"
@@ -2879,21 +2889,22 @@ async function loadCustomerList() {
         : `<span style="font-size:12.5px; color:var(--text-soft);">${quotaValue !== '' ? quotaValue : 'default'}</span>`;
       const resetCell = isSuper ? `<span class="view-link reset-pw" data-email="${escapeHtml(u.email)}">Reset password</span>` : '';
       const blockCell = isSuper ? `<span class="view-link block-toggle" style="color:${actionColor};" data-email="${escapeHtml(u.email)}">${actionLabel}</span>` : '';
-      rows += `<tr data-email="${escapeHtml(u.email)}">
+    rows += `<tr data-email="${escapeHtml(u.email)}">
         <td>${escapeHtml(u.name)}</td>
         <td>${escapeHtml(u.email)}</td>
         <td>${new Date(u.createdAt).toLocaleDateString()}</td>
         <td style="font-size:12px;">${lastLogin}</td>
         <td>${statusLabel}</td>
+        <td>${planCell}</td>
         <td>${quotaCell}</td>
         <td><span class="view-link" data-email="${escapeHtml(u.email)}" data-name="${escapeHtml(u.name)}">View chat →</span></td>
         <td>${resetCell}</td>
         <td>${blockCell}</td>
       </tr>`;
     }
-    wrap.innerHTML = `<div class="table-scroll"><table><thead><tr>
+wrap.innerHTML = `<div class="table-scroll"><table><thead><tr>
       <th>Name</th><th>Email</th><th>Joined</th><th>Last signed in</th><th>Status</th>
-      <th>Daily limit</th><th></th><th></th><th></th>
+      <th>Plan</th><th>Daily limit</th><th></th><th></th><th></th>
     </tr></thead><tbody>${rows}</tbody></table></div>`;
 
     wrap.querySelectorAll('.view-link:not(.block-toggle):not(.reset-pw)').forEach((el) => {
@@ -2923,7 +2934,7 @@ async function loadCustomerList() {
     });
 
     // প্রতিটা কাস্টমারের quota আলাদাভাবে সেভ করার বাটন
-    wrap.querySelectorAll('.quota-save-btn').forEach((btn) => {
+wrap.querySelectorAll('.quota-save-btn').forEach((btn) => {
       btn.onclick = async () => {
         const email = btn.dataset.email;
         const input = wrap.querySelector(`.quota-input[data-email="${CSS.escape(email)}"]`);
@@ -2949,6 +2960,26 @@ async function loadCustomerList() {
           setTimeout(() => { btn.textContent = 'Save'; }, 1800);
           console.error(err);
         }
+      };
+    });
+
+    // FIX: Plan dropdown বদলালেই সাথে সাথে সেভ হয়ে যাবে — Quota-র মতো আলাদা "Save" বাটন লাগবে না
+    wrap.querySelectorAll('.plan-select').forEach((sel) => {
+      sel.onchange = async () => {
+        const email = sel.dataset.email;
+        const newPlan = sel.value;
+        sel.disabled = true;
+        try {
+          await api(`/admin/customers/${encodeURIComponent(email)}/plan`, {
+            method: 'POST', body: { plan: newPlan }, token: adminToken,
+          });
+          sel.style.borderColor = 'var(--accent-glow)';
+          setTimeout(() => { sel.style.borderColor = ''; }, 1200);
+        } catch (err) {
+          alert("Plan বদলানো যায়নি: " + err.message);
+          loadCustomerList();
+        }
+        sel.disabled = false;
       };
     });
   } catch (err) {
