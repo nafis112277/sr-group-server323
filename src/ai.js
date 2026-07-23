@@ -2,17 +2,21 @@ import { callGemini } from './providers/gemini.js';
 import { callOpenAI } from './providers/openai.js';
 import { callAnthropicAI } from './providers/anthropic.js';
 import { callGroq } from './providers/groq.js';
+import { callDeepSeek } from './providers/deepseek.js';
 
 const PROVIDERS = {
   gemini: callGemini,
   openai: callOpenAI,
   anthropic: callAnthropicAI,
   groq: callGroq,
+  deepseek: callDeepSeek,
 };
 
 // কোন provider আগে ট্রাই হবে, কমা দিয়ে .env-এ সেট করা যায়:
 //   AI_PROVIDER_ORDER=gemini,openai,anthropic,groq
 // একটা provider-এর সব key fail করলে (quota শেষ / invalid) পরের provider দিয়ে চেষ্টা হয়।
+// FIX: deepseek ইচ্ছাকৃতভাবে এই default chain-এ নেই — এটা paid API, শুধু forceProvider
+// (Max plan থেকে সরাসরি সিলেক্ট করলে) দিয়েই কল হওয়া উচিত, silent fallback দিয়ে না।
 const order = (process.env.AI_PROVIDER_ORDER || 'gemini,openai,anthropic,groq')
   .split(',')
   .map((s) => s.trim().toLowerCase())
@@ -37,7 +41,6 @@ export async function callAI(systemPrompt, history, options = {}) {
     if (result.ok) return result;
     lastError = result.error || lastError;
   }
-
   return { ok: false, error: lastError };
 }
 
