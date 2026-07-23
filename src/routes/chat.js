@@ -12,12 +12,26 @@ const MAX_HISTORY_MESSAGES = 24;
 /* ============================================================
  * DAILY QUOTA CHECK — অপরিবর্তিত
  * ============================================================ */
+// Plan onujayi daily message limit — .env theke customize kora jay,
+// na dile ei default gula use hobe.
+const PLAN_LIMITS = {
+  free: Number(process.env.PLAN_LIMIT_FREE) || 40,
+  pro: Number(process.env.PLAN_LIMIT_PRO) || 300,
+  max: Number(process.env.PLAN_LIMIT_MAX) || 1000,
+};
+
 async function checkDailyQuota(userEmail, settings) {
-  const user = await queryOne('SELECT daily_limit AS "dailyLimit" FROM users WHERE email = $1', [userEmail]);
+  const user = await queryOne(
+    'SELECT daily_limit AS "dailyLimit", plan FROM users WHERE email = $1',
+    [userEmail]
+  );
+  const plan = user?.plan || 'free';
+
+  // priority: user-specific manual override (daily_limit column) > plan-based default > global settings
   const effectiveLimit =
     user && user.dailyLimit !== null && user.dailyLimit !== undefined
       ? user.dailyLimit
-      : Number(settings.dailyLimit) || 40;
+      : PLAN_LIMITS[plan] || Number(settings.dailyLimit) || 40;
 
   const usedToday = await queryOne(
     `SELECT COUNT(*)::int AS count FROM messages m
@@ -26,7 +40,7 @@ async function checkDailyQuota(userEmail, settings) {
     [userEmail]
   );
 
-  return { allowed: usedToday.count < effectiveLimit, limit: effectiveLimit, used: usedToday.count };
+  return { allowed: usedToday.count < effectiveLimit, limit: effectiveLimit, used: usedToday.count, plan };
 }
 
 async function getMatchingSkillInstructions(userEmail, userText) {
@@ -98,7 +112,15 @@ router.get('/conversations', async (req, res) => {
     res.status(500).json({ error: 'Could not load conversations.' });
   }
 });
-
+router.get('/my-plan', async (req, res) => {
+  try {
+    const user = await queryOne('SELECT plan FROM users WHERE email = $1', [req.userEmail]);
+    res.json({ plan: user?.plan || 'free' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load plan.' });
+  }
+});
 router.post('/conversations', async (req, res) => {
   try {
     const row = await queryOne(
