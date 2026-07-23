@@ -9,6 +9,10 @@ router.use(requireUser);
 
 const MAX_HISTORY_MESSAGES = 24;
 
+// FIX: message content-er upore ekta hard cap — age kono limit chilo na,
+// tai keu chaile huge payload pathiye DB bloat / cost abuse korte parto.
+const MAX_MESSAGE_LENGTH = 8000;
+
 /* ============================================================
  * DAILY QUOTA CHECK — অপরিবর্তিত
  * ============================================================ */
@@ -41,6 +45,31 @@ function isModelAllowed(plan, modelName) {
   const allowed = MODEL_ACCESS[plan] || MODEL_ACCESS.free;
   return allowed.includes(modelName);
 }
+
+// FIX: ei helper age likha chilo kintu kothao call hocchilo na. Ekhon eta
+// message/edit/regenerate — tin jaygatei call kore plan onujayi model
+// enforce kora hocche. deepseek-er jonno kono provider file dekhi nai,
+// tai oi case-e "not configured" error e return kora hocche (silent bypass na).
+async function resolveModelChoice(userEmail, requestedModel) {
+  const user = await queryOne('SELECT plan FROM users WHERE email = $1', [userEmail]);
+  const plan = user?.plan || 'free';
+
+  if (!requestedModel) {
+    return { ok: true, plan, forceProvider: null };
+  }
+  if (!MODEL_INFO[requestedModel]) {
+    return { ok: false, status: 400, error: 'Unknown model selected.' };
+  }
+  if (!isModelAllowed(plan, requestedModel)) {
+    return { ok: false, status: 403, error: 'This model is not available on your current plan.' };
+  }
+  if (!['gemini', 'openai', 'anthropic', 'groq'].includes(requestedModel)) {
+    // deepseek MODEL_ACCESS-e ache kintu ai.js-er PROVIDERS-e nei
+    return { ok: false, status: 502, error: 'This model is not configured on the server yet.' };
+  }
+  return { ok: true, plan, forceProvider: requestedModel };
+}
+
 async function checkDailyQuota(userEmail, settings) {
   const user = await queryOne(
     'SELECT daily_limit AS "dailyLimit", plan FROM users WHERE email = $1',
@@ -256,9 +285,15 @@ router.post('/conversations/:id/message', async (req, res) => {
     ]);
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
 
-    const text = ((req.body || {}).content || '').trim();
+    let text = ((req.body || {}).content || '').trim();
     const incomingImage = (req.body || {}).image || null; // data URL, optional
+    const requestedModel = (req.body || {}).model || null; // FIX: composer-er "+" menu theke select kora model
     if (!text && !incomingImage) return res.status(400).json({ error: 'Message is empty.' });
+
+    // FIX: content length cap — age kono limit chilo na
+    if (text.length > MAX_MESSAGE_LENGTH) {
+      return res.status(400).json({ error: `Message is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
+    }
 
     const settings = await getSettings();
 
@@ -267,6 +302,14 @@ router.post('/conversations/:id/message', async (req, res) => {
       return res.status(429).json({
         error: `You've reached your daily message limit (${quota.limit}). Please try again tomorrow.`,
       });
+    }
+
+    // FIX: model plan onujayi allowed kina check kora — age eta MODEL_ACCESS-e define
+    // kora thakleo kothao enforce hocchilo na, tai free user request-e model:'anthropic'
+    // pathale seta silently chole jeto.
+    const modelCheck = await resolveModelChoice(req.userEmail, requestedModel);
+    if (!modelCheck.ok) {
+      return res.status(modelCheck.status).json({ error: modelCheck.error });
     }
 
     const userImageRecord = dataUrlToImageRecord(incomingImage);
@@ -296,7 +339,12 @@ router.post('/conversations/:id/message', async (req, res) => {
     const skillBlock = await getMatchingSkillInstructions(req.userEmail, text);
     const system = baseSystem + skillBlock;
 
-    const result = await callAI(system, history, { webSearch: !!(req.body || {}).webSearch });
+    // FIX: forceProvider pass kora hocche jate user-er selected model-e i reply ashe,
+    // fallback chain skip hoye. model select na korle age-er moto full fallback chain cholbe.
+    const result = await callAI(system, history, {
+      webSearch: !!(req.body || {}).webSearch,
+      forceProvider: modelCheck.forceProvider,
+    });
 
     if (!result.ok) {
       return res.status(502).json({ error: result.error });
@@ -344,7 +392,13 @@ router.put('/conversations/:id/messages/:messageId', async (req, res) => {
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
 
     const newContent = ((req.body || {}).content || '').trim();
+    const requestedModel = (req.body || {}).model || null; // FIX
     if (!newContent) return res.status(400).json({ error: 'Message is empty.' });
+
+    // FIX: content length cap edit-eo lagbe
+    if (newContent.length > MAX_MESSAGE_LENGTH) {
+      return res.status(400).json({ error: `Message is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
+    }
 
     const target = await queryOne(
       'SELECT id, role FROM messages WHERE id = $1 AND conversation_id = $2',
@@ -362,6 +416,12 @@ router.put('/conversations/:id/messages/:messageId', async (req, res) => {
       return res.status(429).json({
         error: `You've reached your daily message limit (${quota.limit}). Please try again tomorrow.`,
       });
+    }
+
+    // FIX: eikhaneo model-access check
+    const modelCheck = await resolveModelChoice(req.userEmail, requestedModel);
+    if (!modelCheck.ok) {
+      return res.status(modelCheck.status).json({ error: modelCheck.error });
     }
 
     await query('UPDATE messages SET content = $1 WHERE id = $2', [newContent, target.id]);
@@ -388,7 +448,10 @@ router.put('/conversations/:id/messages/:messageId', async (req, res) => {
     const skillBlock = await getMatchingSkillInstructions(req.userEmail, newContent);
     const system = baseSystem + skillBlock;
 
-    const result = await callAI(system, history, { webSearch: !!(req.body || {}).webSearch });
+    const result = await callAI(system, history, {
+      webSearch: !!(req.body || {}).webSearch,
+      forceProvider: modelCheck.forceProvider, // FIX
+    });
     if (!result.ok) {
       return res.status(502).json({ error: result.error });
     }
@@ -452,6 +515,14 @@ router.post('/conversations/:id/messages/:messageId/regenerate', async (req, res
       });
     }
 
+    // FIX: regenerate-eo user chaile onno model diye try korte pare (composer-e model
+    // switch kore "Regenerate with..." dile), tai ekhane o check kora holo.
+    const requestedModel = (req.body || {}).model || null;
+    const modelCheck = await resolveModelChoice(req.userEmail, requestedModel);
+    if (!modelCheck.ok) {
+      return res.status(modelCheck.status).json({ error: modelCheck.error });
+    }
+
     // এই reply আর তার পরে যা যা এসেছে (থাকলে) সব মুছে দিই — এর জায়গায় নতুন reply বসবে
     await query('DELETE FROM messages WHERE conversation_id = $1 AND id >= $2', [conv.id, target.id]);
 
@@ -474,7 +545,7 @@ router.post('/conversations/:id/messages/:messageId/regenerate', async (req, res
     const skillBlock = await getMatchingSkillInstructions(req.userEmail, lastUserMsg ? lastUserMsg.content : '');
     const system = baseSystem + skillBlock;
 
-    const result = await callAI(system, history, {});
+    const result = await callAI(system, history, { forceProvider: modelCheck.forceProvider }); // FIX
     if (!result.ok) return res.status(502).json({ error: result.error });
 
     const images = result.images || null;
