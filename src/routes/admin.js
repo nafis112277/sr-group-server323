@@ -65,7 +65,27 @@ router.get('/customers', async (req, res) => {
     res.status(500).json({ error: 'Could not load customers.' });
   }
 });
+// FIX: নতুন রুট — client payment করলে admin এখান থেকে তার plan (free/pro/max) বদলাতে পারবে।
+const VALID_PLANS = ['free', 'pro', 'max'];
 
+router.post('/customers/:email/plan', requireSuperAdmin, async (req, res) => {
+  try {
+    const { plan } = req.body || {};
+    if (!VALID_PLANS.includes(plan)) {
+      return res.status(400).json({ error: 'Invalid plan. Must be free, pro, or max.' });
+    }
+
+    const email = decodeURIComponent(req.params.email);
+    const user = await queryOne('SELECT email FROM users WHERE email = $1', [email]);
+    if (!user) return res.status(404).json({ error: 'Customer not found.' });
+
+    await query('UPDATE users SET plan = $1 WHERE email = $2', [plan, email]);
+    res.json({ ok: true, email, plan });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not update plan.' });
+  }
+});
 router.post('/customers/:email/block', requireSuperAdmin, async (req, res) => {
   try {
     const email = req.params.email.toLowerCase();
