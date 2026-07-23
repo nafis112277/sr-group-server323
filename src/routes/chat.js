@@ -46,6 +46,16 @@ function isModelAllowed(plan, modelName) {
   return allowed.includes(modelName);
 }
 
+// FIX: frontend-er model-picker ekhon "tier" field diye Free/Pro/Max grup kore dekhay,
+// tai prottekta model kon tier-e "first appear" kore seta ber kora dorkar.
+// Ex: 'gemini' free+pro+max shob-jaygay ache -> tier hobe 'free' (sob-thk niche tier).
+// 'anthropic' shudhu max-e ache -> tier hobe 'max'.
+function tierOfModel(modelName) {
+  if (MODEL_ACCESS.free.includes(modelName)) return 'free';
+  if (MODEL_ACCESS.pro.includes(modelName)) return 'pro';
+  return 'max';
+}
+
 // FIX: ei helper age likha chilo kintu kothao call hocchilo na. Ekhon eta
 // message/edit/regenerate — tin jaygatei call kore plan onujayi model
 // enforce kora hocche. deepseek-er jonno kono provider file dekhi nai,
@@ -162,6 +172,7 @@ router.get('/conversations', async (req, res) => {
     res.status(500).json({ error: 'Could not load conversations.' });
   }
 });
+
 router.get('/my-plan', async (req, res) => {
   try {
     const user = await queryOne('SELECT plan FROM users WHERE email = $1', [req.userEmail]);
@@ -171,8 +182,13 @@ router.get('/my-plan', async (req, res) => {
     res.status(500).json({ error: 'Could not load plan.' });
   }
 });
+
 // Composer-er "+" menu-te dekhanor jonno — shob model + user-er plan onujayi kon gula
 // unlocked/locked seta bole dey. Frontend eita diye UI decide korbe.
+// FIX: response-e ekhon "currentPlan" (frontend-er field naam-er sathe match kore) ebong
+// prottekta model-e "tier" (free/pro/max) o pathano hocche, jate composer-er model-picker
+// Free/Pro/Max grup kore dekhate pare. Purono "plan"/"locked" field gula o rekhe deya hoyeche
+// backward-compatibility-er jonno.
 router.get('/available-models', async (req, res) => {
   try {
     const user = await queryOne('SELECT plan FROM users WHERE email = $1', [req.userEmail]);
@@ -182,15 +198,17 @@ router.get('/available-models', async (req, res) => {
     const models = Object.keys(MODEL_INFO).map((name) => ({
       id: name,
       label: MODEL_INFO[name].label,
+      tier: tierOfModel(name),
       locked: !allowed.includes(name),
     }));
 
-    res.json({ plan, models });
+    res.json({ plan, currentPlan: plan, models });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not load models.' });
   }
 });
+
 router.post('/conversations', async (req, res) => {
   try {
     const row = await queryOne(
