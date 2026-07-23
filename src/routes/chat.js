@@ -19,7 +19,28 @@ const PLAN_LIMITS = {
   pro: Number(process.env.PLAN_LIMIT_PRO) || 300,
   max: Number(process.env.PLAN_LIMIT_MAX) || 1000,
 };
+// Kon plan-e kon model access pabe. Ei list frontend-e o pathano hobe (GET /available-models),
+// jate composer-er "+" menu-te shothik model dekhano jay (lock/unlock soho).
+const MODEL_ACCESS = {
+  free: ['gemini', 'groq'],
+  pro: ['gemini', 'groq', 'openai', 'deepseek'],
+  max: ['gemini', 'groq', 'openai', 'deepseek', 'anthropic'],
+};
 
+// UI-te dekhanor jonno display info — label, kono icon hint etc.
+// (naam/order apnar পছন্দ moto সাজিয়ে নিন)
+const MODEL_INFO = {
+  gemini: { label: 'Gemini' },
+  groq: { label: 'Groq' },
+  openai: { label: 'GPT' },
+  deepseek: { label: 'DeepSeek' },
+  anthropic: { label: 'Claude' },
+};
+
+function isModelAllowed(plan, modelName) {
+  const allowed = MODEL_ACCESS[plan] || MODEL_ACCESS.free;
+  return allowed.includes(modelName);
+}
 async function checkDailyQuota(userEmail, settings) {
   const user = await queryOne(
     'SELECT daily_limit AS "dailyLimit", plan FROM users WHERE email = $1',
@@ -119,6 +140,26 @@ router.get('/my-plan', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not load plan.' });
+  }
+});
+// Composer-er "+" menu-te dekhanor jonno — shob model + user-er plan onujayi kon gula
+// unlocked/locked seta bole dey. Frontend eita diye UI decide korbe.
+router.get('/available-models', async (req, res) => {
+  try {
+    const user = await queryOne('SELECT plan FROM users WHERE email = $1', [req.userEmail]);
+    const plan = user?.plan || 'free';
+    const allowed = MODEL_ACCESS[plan] || MODEL_ACCESS.free;
+
+    const models = Object.keys(MODEL_INFO).map((name) => ({
+      id: name,
+      label: MODEL_INFO[name].label,
+      locked: !allowed.includes(name),
+    }));
+
+    res.json({ plan, models });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load models.' });
   }
 });
 router.post('/conversations', async (req, res) => {
