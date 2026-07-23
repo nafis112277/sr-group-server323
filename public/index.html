@@ -4313,12 +4313,14 @@ async function renderTakeoverBar(conv) {
 
 <script id="sr-added-model-picker-script">
 (function initModelPicker() {
-  let selectedModel = null;
-  let modelChoices = [];   // [{id, label, tier}]
-  let currentPlan = 'free'; // 'free' | 'pro' | 'max' — backend থেকে আসবে
+  let selectedTier = null; // null (Auto) | 'free' | 'pro' | 'max'
+  let currentPlan = 'free'; // ইউজারের নিজের প্ল্যান — backend থেকে আসে
 
   const TIER_ORDER = { free: 0, pro: 1, max: 2 };
   const TIER_LABELS = { free: 'Free', pro: 'Pro', max: 'Max' };
+  // এই তিনটা tier সিলেক্ট করলে backend-কে ঠিক কোন model পাঠাতে হবে তা এখানে ম্যাপ করা —
+  // Free/Pro একই ফ্রি মডেল ব্যবহার করে (তাই null = auto fallback), Max হলে সরাসরি deepseek পাঠাই।
+  const TIER_MODEL = { free: null, pro: null, max: 'deepseek' };
 
   function isLocked(tier) {
     return TIER_ORDER[tier] > TIER_ORDER[currentPlan];
@@ -4332,14 +4334,13 @@ async function renderTakeoverBar(conv) {
   badge.type = 'button';
   badge.className = 'model-badge';
   badge.id = 'modelBadge';
-  badge.title = 'Choose AI model';
+  badge.title = 'Choose plan';
   badge.innerHTML = '<span id="modelBadgeIcon">✨</span><span class="mb-full-label" id="modelBadgeLabel">Auto</span>';
   badge.onclick = (e) => { e.stopPropagation(); if (typeof togglePlusMenu === 'function') togglePlusMenu(); };
   if (composerRow && userInputEl) composerRow.insertBefore(badge, userInputEl);
 
   function updateBadge() {
-    const found = modelChoices.find((m) => m.id === selectedModel);
-    document.getElementById('modelBadgeLabel').textContent = selectedModel ? (found ? found.label : selectedModel) : 'Auto';
+    document.getElementById('modelBadgeLabel').textContent = selectedTier ? TIER_LABELS[selectedTier] : 'Auto';
   }
 
   function buildModelMenuItems() {
@@ -4353,65 +4354,51 @@ async function renderTakeoverBar(conv) {
     divider.className = 'plus-menu-divider model-menu-divider';
     plusMenu.insertBefore(divider, existingDivider);
 
-    // "Auto" সবসময় সবার উপরে, লক থাকে না
+    // "Auto" — সবসময় unlocked, ইউজারের নিজের প্ল্যান অনুযায়ী সার্ভার নিজেই ঠিক করবে
     const autoItem = document.createElement('div');
-    autoItem.className = 'plus-menu-item model-item' + (selectedModel === null ? ' toggled' : '');
-    autoItem.innerHTML =
-      '<span class="pmi-icon">✨</span><span class="pmi-label">Auto</span><span class="pmi-check">✓</span>';
+    autoItem.className = 'plus-menu-item model-item' + (selectedTier === null ? ' toggled' : '');
+    autoItem.innerHTML = '<span class="pmi-icon">✨</span><span class="pmi-label">Auto</span><span class="pmi-check">✓</span>';
     autoItem.onclick = () => {
-      selectedModel = null;
+      selectedTier = null;
       updateBadge();
       if (typeof togglePlusMenu === 'function') togglePlusMenu(false);
       buildModelMenuItems();
     };
     plusMenu.insertBefore(autoItem, existingDivider);
 
-    // Free -> Pro -> Max ক্রমে গ্রুপ করে দেখাই, প্রতিটা গ্রুপের আগে একটা ছোট লেবেল
+    // শুধু Free / Pro / Max — কোনো individual মডেলের নাম দেখানো হবে না
     ['free', 'pro', 'max'].forEach((tier) => {
-      const group = modelChoices.filter((m) => m.tier === tier);
-      if (group.length === 0) return;
-
-      const label = document.createElement('div');
-      label.className = 'model-tier-label';
-      label.style.cssText = 'padding:6px 10px 2px; font-size:10.5px; font-family:JetBrains Mono,monospace; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-soft);';
-      label.textContent = TIER_LABELS[tier];
-      plusMenu.insertBefore(label, existingDivider);
-
-      group.forEach((opt) => {
-        const locked = isLocked(opt.tier);
-        const item = document.createElement('div');
-        item.className = 'plus-menu-item model-item' + (locked ? ' locked' : '') + (selectedModel === opt.id ? ' toggled' : '');
-        item.innerHTML =
-          '<span class="pmi-icon">' + (locked ? '🔒' : '🧠') + '</span>' +
-          '<span class="pmi-label">' + escapeHtml(opt.label) + '</span>' +
-          '<span class="pmi-check">✓</span>';
-        item.onclick = () => {
-          if (locked) {
-            alert('এই মডেলটা "' + TIER_LABELS[opt.tier] + '" প্ল্যানে আছে। আপনার বর্তমান প্ল্যান "' + TIER_LABELS[currentPlan] + '"। ব্যবহার করতে প্ল্যান আপগ্রেড করুন।');
-            return;
-          }
-          selectedModel = opt.id;
-          updateBadge();
-          if (typeof togglePlusMenu === 'function') togglePlusMenu(false);
-          buildModelMenuItems();
-        };
-        plusMenu.insertBefore(item, existingDivider);
-      });
+      const locked = isLocked(tier);
+      const item = document.createElement('div');
+      item.className = 'plus-menu-item model-item' + (locked ? ' locked' : '') + (selectedTier === tier ? ' toggled' : '');
+      item.innerHTML =
+        '<span class="pmi-icon">' + (locked ? '🔒' : '🧠') + '</span>' +
+        '<span class="pmi-label">' + TIER_LABELS[tier] + '</span>' +
+        '<span class="pmi-check">✓</span>';
+      item.onclick = () => {
+        if (locked) {
+          alert('এটা "' + TIER_LABELS[tier] + '" প্ল্যানে আছে। আপনার বর্তমান প্ল্যান "' + TIER_LABELS[currentPlan] + '"। ব্যবহার করতে প্ল্যান আপগ্রেড করুন।');
+          return;
+        }
+        selectedTier = tier;
+        updateBadge();
+        if (typeof togglePlusMenu === 'function') togglePlusMenu(false);
+        buildModelMenuItems();
+      };
+      plusMenu.insertBefore(item, existingDivider);
     });
   }
 
   async function loadModelChoices() {
     try {
       const data = await api('/chat/available-models', { token: userToken });
-      modelChoices = data.models || [];
       currentPlan = data.currentPlan || 'free';
-      const stillOk = modelChoices.find((m) => m.id === selectedModel && !isLocked(m.tier));
-      if (selectedModel && !stillOk) selectedModel = null;
+      if (selectedTier && isLocked(selectedTier)) selectedTier = null;
       buildModelMenuItems();
       updateBadge();
     } catch (err) {
-      console.error('Could not load available models', err);
-      buildModelMenuItems(); // API না থাকলেও অন্তত "Auto" দেখাবে
+      console.error('Could not load plan info', err);
+      buildModelMenuItems();
     }
   }
 
@@ -4430,18 +4417,18 @@ async function renderTakeoverBar(conv) {
       const isChatSendCall = /\/api\/chat\/conversations\/[^/]+\/(message|message\/stream|messages\/[^/]+|messages\/[^/]+\/regenerate)$/.test(url);
       if (isChatSendCall && init && init.body && typeof init.body === 'string') {
         const parsed = JSON.parse(init.body);
-        if (selectedModel && !parsed.model) {
-          parsed.model = selectedModel;
+        const modelForTier = selectedTier ? TIER_MODEL[selectedTier] : null;
+        if (modelForTier && !parsed.model) {
+          parsed.model = modelForTier;
           init = Object.assign({}, init, { body: JSON.stringify(parsed) });
         }
       }
     } catch (e) { /* ignore */ }
     return __originalFetchForModelPicker(input, init);
   };
+
   // FIX: session-restore (auto-login via localStorage) হলে init() এই স্ক্রিপ্ট লোড হওয়ার
-  // আগেই enterChat() কল করে ফেলে (wrap হওয়ার আগেই) — তাই enterChat-wrap ধরতে পারে না।
-  // এই কারণেই মেনুতে Free/Pro/Max কখনো দেখাই যায় না। এখানে সরাসরি চেক করি: ইউজার ইতিমধ্যে
-  // লগইন থাকলে (session already restored), সাথে সাথেই একবার loadModelChoices() চালিয়ে দিই।
+  // আগেই enterChat() কল করে ফেলে — তাই সরাসরি চেক করে একবার loadModelChoices() চালিয়ে দিই।
   if (typeof currentUser !== 'undefined' && currentUser) {
     loadModelChoices();
   }
