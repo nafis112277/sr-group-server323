@@ -1131,7 +1131,23 @@
       -3px -3px 7px var(--neu-light) !important;
   }
 </style>
-
+<style id="sr-added-model-picker">
+  .plus-menu-item.model-item{ justify-content:space-between; }
+  .plus-menu-item.model-item.locked{ opacity:0.5; cursor:not-allowed; }
+  .plus-menu-item.model-item.locked:hover{ background:none; }
+  .plus-menu-item .pmi-lock{ font-size:11px; color:var(--text-soft); flex-shrink:0; }
+  .model-badge{
+    display:flex; align-items:center; gap:6px;
+    background:var(--panel); border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:10px; padding:0 13px; height:44px; font-size:12.5px; cursor:pointer;
+    font-family:'JetBrains Mono', monospace; flex-shrink:0; white-space:nowrap;
+  }
+  .model-badge:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+  @media (max-width:680px){
+    .model-badge{ padding:0 9px; font-size:11px; }
+    .model-badge .mb-full-label{ display:none; }
+  }
+</style>
 <script>
   // পেজ রেন্ডার হওয়ার আগেই সেভ করা থিম বসিয়ে দিই যাতে ভুল থিম এক ঝলক দেখিয়ে তারপর
   // সিলেক্ট করা থিমে সুইচ করার মতো flicker না হয়।
@@ -4292,11 +4308,104 @@ async function renderTakeoverBar(conv) {
       checkBroadcast();
     };
   }
+})();
+</script>
+
+<script id="sr-added-model-picker-script">
+(function initModelPicker() {
+  let selectedModel = null;
+  let modelChoices = [];
+
+  const plusMenu = document.getElementById('composerPlusMenu');
+  const composerRow = document.querySelector('.composer-row');
+  const userInputEl = document.getElementById('userInput');
+
+  const badge = document.createElement('button');
+  badge.type = 'button';
+  badge.className = 'model-badge';
+  badge.id = 'modelBadge';
+  badge.title = 'Choose AI model';
+  badge.innerHTML = '<span id="modelBadgeIcon">✨</span><span class="mb-full-label" id="modelBadgeLabel">Auto</span>';
+  badge.onclick = (e) => { e.stopPropagation(); if (typeof togglePlusMenu === 'function') togglePlusMenu(); };
+  if (composerRow && userInputEl) composerRow.insertBefore(badge, userInputEl);
+
+  function updateBadge() {
+    const found = modelChoices.find((m) => m.id === selectedModel);
+    document.getElementById('modelBadgeLabel').textContent = selectedModel ? (found ? found.label : selectedModel) : 'Auto';
+  }
+
+  function buildModelMenuItems() {
+    if (!plusMenu) return;
+    const existingDivider = plusMenu.querySelector('hr.plus-menu-divider');
+    if (!existingDivider) return;
+
+    plusMenu.querySelectorAll('.model-item, .model-menu-divider').forEach((el) => el.remove());
+
+    const divider = document.createElement('hr');
+    divider.className = 'plus-menu-divider model-menu-divider';
+    plusMenu.insertBefore(divider, existingDivider);
+
+    const options = [{ id: null, label: 'Auto', locked: false }].concat(modelChoices);
+    options.forEach((opt) => {
+      const item = document.createElement('div');
+      item.className = 'plus-menu-item model-item' + (opt.locked ? ' locked' : '') + (selectedModel === opt.id ? ' toggled' : '');
+      item.innerHTML =
+        '<span class="pmi-icon">' + (opt.locked ? '🔒' : '🧠') + '</span>' +
+        '<span class="pmi-label">' + escapeHtml(opt.label) + '</span>' +
+        '<span class="pmi-check">✓</span>';
+      item.onclick = () => {
+        if (opt.locked) {
+          alert('এই মডেলটা আপনার বর্তমান প্ল্যানে নেই। ব্যবহার করতে চাইলে প্ল্যান আপগ্রেড করুন।');
+          return;
+        }
+        selectedModel = opt.id;
+        updateBadge();
+        if (typeof togglePlusMenu === 'function') togglePlusMenu(false);
+        buildModelMenuItems();
+      };
+      plusMenu.insertBefore(item, existingDivider);
+    });
+  }
+
+  async function loadModelChoices() {
+    try {
+      const data = await api('/chat/available-models', { token: userToken });
+      modelChoices = data.models || [];
+      const stillOk = modelChoices.find((m) => m.id === selectedModel && !m.locked);
+      if (selectedModel && !stillOk) selectedModel = null;
+      buildModelMenuItems();
+      updateBadge();
+    } catch (err) {
+      console.error('Could not load available models', err);
+    }
+  }
+
+  if (typeof enterChat === 'function') {
+    const __originalEnterChatForModelPicker = enterChat;
+    enterChat = async function () {
+      await __originalEnterChatForModelPicker();
+      loadModelChoices();
+    };
+  }
+
+  const __originalFetchForModelPicker = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    try {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      const isChatSendCall = /\/api\/chat\/conversations\/[^/]+\/(message|message\/stream|messages\/[^/]+|messages\/[^/]+\/regenerate)$/.test(url);
+      if (isChatSendCall && init && init.body && typeof init.body === 'string') {
+        const parsed = JSON.parse(init.body);
+        if (selectedModel && !parsed.model) {
+          parsed.model = selectedModel;
+          init = Object.assign({}, init, { body: JSON.stringify(parsed) });
+        }
+      }
+    } catch (e) { /* ignore */ }
+    return __originalFetchForModelPicker(input, init);
+  };
 
 })();
 </script>
 </body>
 </html>
-Done
 
-You are out of free messages 
