@@ -4438,6 +4438,13 @@ async function renderTakeoverBar(conv) {
     } catch (e) { /* ignore */ }
     return __originalFetchForModelPicker(input, init);
   };
+  // FIX: session-restore (auto-login via localStorage) হলে init() এই স্ক্রিপ্ট লোড হওয়ার
+  // আগেই enterChat() কল করে ফেলে (wrap হওয়ার আগেই) — তাই enterChat-wrap ধরতে পারে না।
+  // এই কারণেই মেনুতে Free/Pro/Max কখনো দেখাই যায় না। এখানে সরাসরি চেক করি: ইউজার ইতিমধ্যে
+  // লগইন থাকলে (session already restored), সাথে সাথেই একবার loadModelChoices() চালিয়ে দিই।
+  if (typeof currentUser !== 'undefined' && currentUser) {
+    loadModelChoices();
+  }
 
 })();
 </script>
