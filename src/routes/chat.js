@@ -27,18 +27,15 @@ const PLAN_LIMITS = {
 // jate composer-er "+" menu-te shothik model dekhano jay (lock/unlock soho).
 const MODEL_ACCESS = {
   free: ['gemini', 'groq'],
-  pro: ['gemini', 'groq', 'openai', 'deepseek'],
-  max: ['gemini', 'groq', 'openai', 'deepseek', 'anthropic'],
+  pro: ['gemini', 'groq'],
+  max: ['gemini', 'groq', 'deepseek'],
 };
 
-// UI-te dekhanor jonno display info — label, kono icon hint etc.
-// (naam/order apnar পছন্দ moto সাজিয়ে নিন)
+// UI-te dekhanor jonno display info
 const MODEL_INFO = {
   gemini: { label: 'Gemini' },
   groq: { label: 'Groq' },
-  openai: { label: 'GPT' },
   deepseek: { label: 'DeepSeek' },
-  anthropic: { label: 'Claude' },
 };
 
 function isModelAllowed(plan, modelName) {
@@ -73,13 +70,11 @@ async function resolveModelChoice(userEmail, requestedModel) {
   if (!isModelAllowed(plan, requestedModel)) {
     return { ok: false, status: 403, error: 'This model is not available on your current plan.' };
   }
-  if (!['gemini', 'openai', 'anthropic', 'groq'].includes(requestedModel)) {
-    // deepseek MODEL_ACCESS-e ache kintu ai.js-er PROVIDERS-e nei
-    return { ok: false, status: 502, error: 'This model is not configured on the server yet.' };
-  }
+  // FIX: deepseek এখন আসলেই ব্যবহৃত হবে (paid API, Max plan), তাই আর ব্লক করা হচ্ছে না।
+  // ⚠️ শর্ত: ai.js ফাইলে deepseek-এর জন্য provider function (callDeepSeek) থাকতে হবে,
+  // নাহলে callAI() এই মডেল খুঁজে পাবে না এবং error দেবে।
   return { ok: true, plan, forceProvider: requestedModel };
 }
-
 async function checkDailyQuota(userEmail, settings) {
   const user = await queryOne(
     'SELECT daily_limit AS "dailyLimit", plan FROM users WHERE email = $1',
