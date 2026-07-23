@@ -2878,8 +2878,7 @@ async function loadCustomerList() {
             <option value="max" ${currentPlan === 'max' ? 'selected' : ''}>Max</option>
           </select>`
         : `<span class="role-badge">${escapeHtml(currentPlan)}</span>`;
-
-      const quotaCell = isSuper
+      
       const quotaCell = isSuper
         ? `<div class="quota-cell">
             <input type="number" min="0" step="1" class="quota-input" placeholder="default"
