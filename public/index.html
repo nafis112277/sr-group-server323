@@ -4314,7 +4314,15 @@ async function renderTakeoverBar(conv) {
 <script id="sr-added-model-picker-script">
 (function initModelPicker() {
   let selectedModel = null;
-  let modelChoices = [];
+  let modelChoices = [];   // [{id, label, tier}]
+  let currentPlan = 'free'; // 'free' | 'pro' | 'max' — backend থেকে আসবে
+
+  const TIER_ORDER = { free: 0, pro: 1, max: 2 };
+  const TIER_LABELS = { free: 'Free', pro: 'Pro', max: 'Max' };
+
+  function isLocked(tier) {
+    return TIER_ORDER[tier] > TIER_ORDER[currentPlan];
+  }
 
   const plusMenu = document.getElementById('composerPlusMenu');
   const composerRow = document.querySelector('.composer-row');
@@ -4339,31 +4347,56 @@ async function renderTakeoverBar(conv) {
     const existingDivider = plusMenu.querySelector('hr.plus-menu-divider');
     if (!existingDivider) return;
 
-    plusMenu.querySelectorAll('.model-item, .model-menu-divider').forEach((el) => el.remove());
+    plusMenu.querySelectorAll('.model-item, .model-menu-divider, .model-tier-label').forEach((el) => el.remove());
 
     const divider = document.createElement('hr');
     divider.className = 'plus-menu-divider model-menu-divider';
     plusMenu.insertBefore(divider, existingDivider);
 
-    const options = [{ id: null, label: 'Auto', locked: false }].concat(modelChoices);
-    options.forEach((opt) => {
-      const item = document.createElement('div');
-      item.className = 'plus-menu-item model-item' + (opt.locked ? ' locked' : '') + (selectedModel === opt.id ? ' toggled' : '');
-      item.innerHTML =
-        '<span class="pmi-icon">' + (opt.locked ? '🔒' : '🧠') + '</span>' +
-        '<span class="pmi-label">' + escapeHtml(opt.label) + '</span>' +
-        '<span class="pmi-check">✓</span>';
-      item.onclick = () => {
-        if (opt.locked) {
-          alert('এই মডেলটা আপনার বর্তমান প্ল্যানে নেই। ব্যবহার করতে চাইলে প্ল্যান আপগ্রেড করুন।');
-          return;
-        }
-        selectedModel = opt.id;
-        updateBadge();
-        if (typeof togglePlusMenu === 'function') togglePlusMenu(false);
-        buildModelMenuItems();
-      };
-      plusMenu.insertBefore(item, existingDivider);
+    // "Auto" সবসময় সবার উপরে, লক থাকে না
+    const autoItem = document.createElement('div');
+    autoItem.className = 'plus-menu-item model-item' + (selectedModel === null ? ' toggled' : '');
+    autoItem.innerHTML =
+      '<span class="pmi-icon">✨</span><span class="pmi-label">Auto</span><span class="pmi-check">✓</span>';
+    autoItem.onclick = () => {
+      selectedModel = null;
+      updateBadge();
+      if (typeof togglePlusMenu === 'function') togglePlusMenu(false);
+      buildModelMenuItems();
+    };
+    plusMenu.insertBefore(autoItem, existingDivider);
+
+    // Free -> Pro -> Max ক্রমে গ্রুপ করে দেখাই, প্রতিটা গ্রুপের আগে একটা ছোট লেবেল
+    ['free', 'pro', 'max'].forEach((tier) => {
+      const group = modelChoices.filter((m) => m.tier === tier);
+      if (group.length === 0) return;
+
+      const label = document.createElement('div');
+      label.className = 'model-tier-label';
+      label.style.cssText = 'padding:6px 10px 2px; font-size:10.5px; font-family:JetBrains Mono,monospace; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-soft);';
+      label.textContent = TIER_LABELS[tier];
+      plusMenu.insertBefore(label, existingDivider);
+
+      group.forEach((opt) => {
+        const locked = isLocked(opt.tier);
+        const item = document.createElement('div');
+        item.className = 'plus-menu-item model-item' + (locked ? ' locked' : '') + (selectedModel === opt.id ? ' toggled' : '');
+        item.innerHTML =
+          '<span class="pmi-icon">' + (locked ? '🔒' : '🧠') + '</span>' +
+          '<span class="pmi-label">' + escapeHtml(opt.label) + '</span>' +
+          '<span class="pmi-check">✓</span>';
+        item.onclick = () => {
+          if (locked) {
+            alert('এই মডেলটা "' + TIER_LABELS[opt.tier] + '" প্ল্যানে আছে। আপনার বর্তমান প্ল্যান "' + TIER_LABELS[currentPlan] + '"। ব্যবহার করতে প্ল্যান আপগ্রেড করুন।');
+            return;
+          }
+          selectedModel = opt.id;
+          updateBadge();
+          if (typeof togglePlusMenu === 'function') togglePlusMenu(false);
+          buildModelMenuItems();
+        };
+        plusMenu.insertBefore(item, existingDivider);
+      });
     });
   }
 
@@ -4371,12 +4404,14 @@ async function renderTakeoverBar(conv) {
     try {
       const data = await api('/chat/available-models', { token: userToken });
       modelChoices = data.models || [];
-      const stillOk = modelChoices.find((m) => m.id === selectedModel && !m.locked);
+      currentPlan = data.currentPlan || 'free';
+      const stillOk = modelChoices.find((m) => m.id === selectedModel && !isLocked(m.tier));
       if (selectedModel && !stillOk) selectedModel = null;
       buildModelMenuItems();
       updateBadge();
     } catch (err) {
       console.error('Could not load available models', err);
+      buildModelMenuItems(); // API না থাকলেও অন্তত "Auto" দেখাবে
     }
   }
 
