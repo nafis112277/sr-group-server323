@@ -142,6 +142,39 @@ router.post('/customers/:email/reset-password', requireSuperAdmin, async (req, r
   }
 });
 
+// ---- Delete an inactive customer (never logged in) — super admin only ----
+// "কখনো ব্যবহার করেনি" মানে last_login_at NULL — সার্ভার সাইডেও এটা যাচাই করা হয়,
+// শুধু frontend-এর চেকের উপর নির্ভর করা হয় না। User + তার conversations, messages,
+// এবং user_skills সব cascade delete করা হয়।
+router.post('/customers/:email/delete', requireSuperAdmin, async (req, res) => {
+  try {
+    const email = decodeURIComponent(req.params.email).toLowerCase();
+    const user = await queryOne('SELECT id, last_login_at FROM users WHERE email = $1', [email]);
+    if (!user) return res.status(404).json({ error: 'Customer not found.' });
+
+    if (user.last_login_at) {
+      return res.status(400).json({ error: 'This customer has used the chatbot before and cannot be deleted this way.' });
+    }
+
+    const convRows = await query('SELECT id FROM conversations WHERE user_email = $1', [email]);
+    const convIds = convRows.map((c) => c.id);
+
+    if (convIds.length > 0) {
+      await query('DELETE FROM messages WHERE conversation_id = ANY($1::int[])', [convIds]);
+      await query('DELETE FROM conversations WHERE user_email = $1', [email]);
+    }
+
+    await query('DELETE FROM user_skills WHERE user_email = $1', [email]).catch(() => { /* skills table/column না থাকলেও বাকি ডিলিট চলবে */ });
+
+    await query('DELETE FROM users WHERE email = $1', [email]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not delete this customer account.' });
+  }
+});
+
 router.get('/customers/:email/conversations', async (req, res) => {
   try {
     const email = req.params.email.toLowerCase();
