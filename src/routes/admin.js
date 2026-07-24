@@ -1,4 +1,4 @@
-import { getSettings, setSettings, buildSystemPrompt } from '../settings.js';
+import { getSettings, setSettings, buildSystemPrompt, getBroadcast, setBroadcast } from '../settings.js';
 import { callAI } from '../ai.js';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
@@ -218,6 +218,34 @@ router.post('/settings', requireSuperAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not save settings.' });
+  }
+});
+
+// ---- Broadcast/announcement banner (super admin only) ----
+// GET: admin panel-এর Broadcast ট্যাব লোড হওয়ার সময় বর্তমান broadcast state দেখায়।
+// POST: title/message/active সেভ করে। settings.js-এর getBroadcast/setBroadcast ব্যবহার করে,
+// যেটা ai_settings টেবিলের একই singleton row-এ (id=1) রাখে — তাই টেবিলে নতুন কলাম লাগবে
+// (settings.js-এর কমেন্টে মাইগ্রেশন দেওয়া আছে)।
+router.get('/broadcast', requireSuperAdmin, async (req, res) => {
+  try {
+    res.json(await getBroadcast());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load the current broadcast.' });
+  }
+});
+
+router.post('/broadcast', requireSuperAdmin, async (req, res) => {
+  try {
+    const { title, message, active } = req.body || {};
+    if (active && !(message || '').trim()) {
+      return res.status(400).json({ error: 'Write a message before turning the banner on.' });
+    }
+    await setBroadcast({ title, message, active });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not save the broadcast.' });
   }
 });
 
