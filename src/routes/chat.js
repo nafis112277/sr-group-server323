@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { query, queryOne } from '../db.js';
 import { requireUser } from '../auth.js';
 import { callAI } from '../ai.js';
-import { getSettings, buildSystemPrompt } from '../settings.js';
+import { getSettings, buildSystemPrompt, getBroadcast } from '../settings.js';
 
 const router = Router();
 router.use(requireUser);
@@ -201,6 +201,25 @@ router.get('/available-models', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not load models.' });
+  }
+});
+
+// ---- Broadcast banner — কাস্টমার সাইড। এন্টার-চ্যাট হওয়ার সময় ফ্রন্টএন্ড এটা কল করে
+// active broadcast আছে কিনা দেখে ব্যানার দেখাবে কিনা ঠিক করে। settings.js-এর getBroadcast
+// ব্যবহার করে, ai_settings টেবিলের broadcast_updated_at কে "id" হিসেবে পাঠানো হয় যাতে
+// ফ্রন্টএন্ড dismiss-tracking (একই broadcast দ্বিতীয়বার আর না দেখানো) করতে পারে।
+router.get('/broadcast', async (req, res) => {
+  try {
+    const b = await getBroadcast();
+    res.json({
+      id: b.updatedAt ? new Date(b.updatedAt).getTime() : null,
+      title: b.title || '',
+      message: b.message || '',
+      active: !!b.active,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load the broadcast.' });
   }
 });
 
