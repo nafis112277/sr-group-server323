@@ -7,6 +7,29 @@ import { getMaintenanceStatus } from './admin.js';
 
 const router = Router();
 router.use(requireUser);
+// ============================================================
+// BROADCAST CHAT LOCK
+// Broadcast Active থাকলে customer নতুন message/edit/regenerate
+// করতে পারবে না।
+// ============================================================
+async function blockIfBroadcastActive(req, res, next) {
+  try {
+    const broadcast = await getBroadcast();
+
+    if (broadcast.active) {
+      return res.status(503).json({
+        error: broadcast.message || 'Chat is temporarily unavailable.',
+        broadcast: true,
+        broadcastTitle: broadcast.title || ''
+      });
+    }
+
+    next();
+  } catch (err) {
+    console.error('Broadcast check failed:', err);
+    next();
+  }
+}
 
 // FIX: maintenance mode চালু থাকলে চ্যাট-সংক্রান্ত সব রুট ব্লক করে দেয় (503)।
 // requireUser-এর পরে বসানো হয়েছে যাতে আগে auth চেক হয়, তারপর maintenance।
@@ -323,7 +346,7 @@ router.post('/preferences', async (req, res) => {
   }
 });
 
-router.post('/conversations/:id/message', async (req, res) => {
+router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
       req.params.id,
@@ -429,7 +452,7 @@ router.post('/conversations/:id/message', async (req, res) => {
 
 // ---- age pathano ekta user message edit kore, tar por theke shob delete kore,
 // notun kore AI reply generate kore. Frontend-er "Save & regenerate" ei call hoy. ----
-router.put('/conversations/:id/messages/:messageId', async (req, res) => {
+router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
       req.params.id,
@@ -536,7 +559,7 @@ router.put('/conversations/:id/messages/:messageId', async (req, res) => {
    হলেও, 404 দিত)। এই রুট এই assistant reply আর তার পরের সবকিছু মুছে নতুন করে reply বানায়,
    ঠিক PUT /messages/:messageId (user-message edit) এর মতোই যুক্তি অনুসরণ করে।
    ============================================================================================ */
-router.post('/conversations/:id/messages/:messageId/regenerate', async (req, res) => {
+router.post('/conversations/:id/messages/:messageId/regenerate', blockIfBroadcastActive, async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
       req.params.id,
