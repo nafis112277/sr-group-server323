@@ -18,6 +18,31 @@ export async function setSettings({ desc, tone, facts, dailyLimit }) {
   ]);
 }
 
+// ---- Broadcast/announcement — ai_settings টেবিলের একই singleton row (id=1) এ রাখা হয়েছে,
+// তাই আলাদা টেবিল/মাইগ্রেশনের ঝামেলা ছাড়াই getSettings/setSettings-এর মতো একই প্যাটার্নে কাজ করে।
+// টেবিলে নতুন কলাম লাগবে (উপরে মাইগ্রেশন কমেন্টে দেওয়া আছে):
+//   ALTER TABLE ai_settings ADD COLUMN IF NOT EXISTS broadcast_title TEXT,
+//     ADD COLUMN IF NOT EXISTS broadcast_message TEXT,
+//     ADD COLUMN IF NOT EXISTS broadcast_active BOOLEAN DEFAULT FALSE,
+//     ADD COLUMN IF NOT EXISTS broadcast_updated_at TIMESTAMPTZ DEFAULT now();
+export async function getBroadcast() {
+  const row = await queryOne(
+    `SELECT broadcast_title AS "title", broadcast_message AS "message",
+            broadcast_active AS "active", broadcast_updated_at AS "updatedAt"
+     FROM ai_settings WHERE id = 1`
+  );
+  return row || { title: '', message: '', active: false, updatedAt: null };
+}
+
+export async function setBroadcast({ title, message, active }) {
+  await query(
+    `UPDATE ai_settings
+     SET broadcast_title = $1, broadcast_message = $2, broadcast_active = $3, broadcast_updated_at = now()
+     WHERE id = 1`,
+    [title || '', message || '', !!active]
+  );
+}
+
 // customerInstructions: এই নির্দিষ্ট কাস্টমার নিজের "Customize AI" সেটিংস থেকে যা লিখেছে (ঐচ্ছিক)
 export function buildSystemPrompt(settings, customerInstructions) {
   const factLines = (settings.facts || '')
