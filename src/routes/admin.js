@@ -26,9 +26,17 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 });
-
+router.get('/maintenance-status', async (req, res) => {
+  try {
+    res.json(await getMaintenanceStatus());
+  } catch (err) {
+    console.error(err);
+    res.json({ active: false, message: '' }); // ব্যর্থ হলে "বন্ধ" ধরে নেওয়াই নিরাপদ
+  }
+});
 // এর নিচের সব রুটে admin token লাগবে
 router.use(requireAdmin);
+
 // Admin panel theke shorashori assistant test korar jonno — kono conversation save hoy na,
 // kono customer quota-o count hoy na, shudhu current AI settings diye ekbar reply dey.
 router.post('/test-chat', async (req, res) => {
@@ -396,5 +404,60 @@ router.get('/analytics', async (req, res) => {
     res.status(500).json({ error: 'Could not load analytics.' });
   }
 });
+// ==================================================================
+// Maintenance Mode — সম্পূর্ণ নতুন, স্বনির্ভর ব্লক। উপরের কোনো রুট/কোড
+// স্পর্শ করা হয়নি। নিজস্ব আলাদা টেবিল ব্যবহার করে (settings.js/ai_settings
+// এর কিছুই ছোঁয়া হয়নি) — প্রথম কলেই টেবিল নিজে থেকে তৈরি হয়ে যায়।
+// ==================================================================
+let __maintenanceTableReady = false;
+async function ensureMaintenanceTable() {
+  if (__maintenanceTableReady) return;
+  await query(`
+    CREATE TABLE IF NOT EXISTS maintenance_mode (
+      id INT PRIMARY KEY DEFAULT 1,
+      active BOOLEAN NOT NULL DEFAULT false,
+      message TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMP NOT NULL DEFAULT now(),
+      CHECK (id = 1)
+    )
+  `);
+  await query(
+    `INSERT INTO maintenance_mode (id, active, message) VALUES (1, false, '') ON CONFLICT (id) DO NOTHING`
+  );
+  __maintenanceTableReady = true;
+}
 
+// chat.js থেকে ইমপোর্ট করে ব্যবহার হবে — টোকেন লাগে না, শুধু বর্তমান স্ট্যাটাস জানায়
+export async function getMaintenanceStatus() {
+  await ensureMaintenanceTable();
+  const row = await queryOne('SELECT active, message FROM maintenance_mode WHERE id = 1');
+  return { active: !!(row && row.active), message: (row && row.message) || '' };
+}
+
+router.get('/maintenance', requireSuperAdmin, async (req, res) => {
+  try {
+    res.json(await getMaintenanceStatus());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load maintenance status.' });
+  }
+});
+
+router.post('/maintenance', requireSuperAdmin, async (req, res) => {
+  try {
+    const { active, message } = req.body || {};
+    if (active && !(message || '').trim()) {
+      return res.status(400).json({ error: 'মেইনটেন্যান্স চালু করার আগে একটা মেসেজ লিখুন।' });
+    }
+    await ensureMaintenanceTable();
+    await query(
+      'UPDATE maintenance_mode SET active = $1, message = $2, updated_at = now() WHERE id = 1',
+      [!!active, message || '']
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not save maintenance settings.' });
+  }
+});
 export default router;
