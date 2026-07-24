@@ -944,6 +944,35 @@
      জিনিসগুলোকে নরম, উঁচু-নিচু (raised / pressed) নিওমরফিক লুক দেয়,
      কিন্তু কোনো ক্লাস নাম, HTML স্ট্রাকচার বা JS লজিক স্পর্শ করা হয়নি।
      ================================================================== -->
+ <style id="sr-added-maintenance-mode">
+  #maintenanceOverlay{
+    display:none;
+    position:fixed; inset:0; z-index:300;
+    align-items:center; justify-content:center;
+    padding:20px;
+    background:
+      radial-gradient(circle at 15% 20%, var(--grad-1), transparent 45%),
+      radial-gradient(circle at 85% 75%, var(--grad-2), transparent 45%),
+      var(--bg-deep);
+  }
+  #maintenanceOverlay.show{ display:flex; }
+  .maintenance-card{
+    text-align:center; max-width:420px; padding:36px 28px;
+    background:var(--panel); border:1px solid var(--border-glass);
+    border-radius:18px; backdrop-filter:blur(18px);
+  }
+  .maintenance-card .mc-icon{ font-size:34px; margin-bottom:14px; }
+  .maintenance-card .mc-title{
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:18px;
+    color:var(--text-primary); margin-bottom:8px;
+  }
+  .maintenance-card .mc-msg{
+    color:var(--text-soft); font-size:13.5px; line-height:1.6; white-space:pre-wrap;
+  }
+</style>
+
+ <!-- ================= নিওমরফিজম (Soft-UI) লেয়ার ================= -->
+
 <style id="neomorphism-layer">
   :root{
     --neu-base: var(--bg-deep-2);
@@ -1168,6 +1197,14 @@
 </head>
 <body>
 
+<!-- নতুন সংযোজন: মেইনটেন্যান্স মোড ওভারলে (ডিফল্টে লুকানো, JS দিয়ে show/hide হয়) -->
+<div id="maintenanceOverlay">
+  <div class="maintenance-card">
+    <div class="mc-icon">⚠️🔧</div>
+    <div class="mc-title">SR Group KROVOS সাময়িকভাবে বন্ধ আছে</div>
+    <div class="mc-msg" id="maintenanceMsg"></div>
+  </div>
+</div>
 <!-- নতুন সংযোজন: নেটওয়ার্ক অফলাইন/অনলাইন স্ট্যাটাস ব্যানার (ডিফল্টে লুকানো, JS দিয়ে show/hide হয়) -->
 <div id="networkStatusBanner"></div>
 
@@ -1954,14 +1991,18 @@ function renderMessageHtml(text) {
           </div>
         </div>`;
       }
-      // markdown ছবি ![alt](url) -> আসল <img> (শুধু http/https লিংক গ্রহণযোগ্য)
+    // markdown ছবি ![alt](url) -> আসল <img> (শুধু http/https লিংক গ্রহণযোগ্য)
+      // নোট: এখানে আর inline onclick="...('${url}')" বসানো হচ্ছে না — কারণ escapeHtml single-quote
+      // (') কে &#39; বানালেও ব্রাউজার onclick attribute পার্স করার সময় সেটা আবার decode করে ফেলে,
+      // ফলে url-এর ভেতরে quote থাকলে সেটা JS string থেকে বেরিয়ে arbitrary code চালাতে পারত (XSS)।
+      // এখন url টা data-img-url attribute-এ রাখা হচ্ছে আর click event-delegation দিয়ে হ্যান্ডেল হচ্ছে।
       let escaped = escapeHtml(part.value).replace(
         /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
         (m, alt, url) =>
           `<span class="msg-image-wrap">` +
           `<a class="msg-image-link" href="${url}" target="_blank" rel="noopener noreferrer">` +
           `<img class="msg-image" src="${url}" alt="${alt}" loading="lazy"></a>` +
-          `<button type="button" class="msg-image-download" onclick="event.stopPropagation(); downloadImageUrl('${url}', 'sr-group-image.png')" title="Download image">⬇</button>` +
+          `<button type="button" class="msg-image-download" data-img-url="${url}" title="Download image">⬇</button>` +
           `</span>`
       );
       escaped = escaped.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
