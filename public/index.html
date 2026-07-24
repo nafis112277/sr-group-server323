@@ -4465,6 +4465,92 @@ async function renderTakeoverBar(conv) {
 
 })();
 </script>
+  <!-- ==================================================================
+     ৯) Admin: নিষ্ক্রিয় (কখনো চ্যাট ব্যবহার করেনি এমন) কাস্টমারের অ্যাকাউন্ট ডিলিট
+     সম্পূর্ণ নতুন, স্বয়ংসম্পূর্ণ ব্লক — এর আগের কোনো লাইন স্পর্শ করা হয়নি।
+     "কখনো ব্যবহার করেনি" ধরা হয়েছে lastLoginAt null থাকা কাস্টমারদের —
+     এই একই ফিল্ড আগে থেকেই Customer টেবিলে "Never (signed up only)" হিসেবে
+     দেখানো হয়। শুধু super_admin এই অ্যাকশন দেখতে/করতে পারবে।
+
+     ব্যাকএন্ডে এই এন্ডপয়েন্ট থাকতে হবে:
+       POST /admin/customers/:email/delete   (super_admin only)
+       - সার্ভার-সাইডেও যাচাই করা উচিত কাস্টমার সত্যিই কখনো ব্যবহার করেছে
+         কিনা (শুধু frontend-এর চেকের উপর নির্ভর না করাই নিরাপদ)
+       - পাস হলে ইউজার + তার conversations/messages/skills সব ডিলিট করবে
+     এন্ডপয়েন্ট এখনো ব্যাকএন্ডে না থাকলে ক্লিকে স্পষ্ট এরর দেখাবে, বাকি
+     অ্যাডমিন প্যানেল আগের মতোই স্বাভাবিক থাকবে।
+     ================================================================== -->
+<script id="sr-added-delete-inactive-customer">
+(function initDeleteInactiveCustomer() {
+
+  const __originalLoadCustomerListForDelete = loadCustomerList;
+
+  loadCustomerList = async function () {
+    await __originalLoadCustomerListForDelete();
+    augmentCustomerRowsWithDelete();
+  };
+
+  async function augmentCustomerRowsWithDelete() {
+    if (adminRole !== 'super_admin') return; // viewer-কে এই অ্যাকশন দেখানো হবে না
+
+    let customers = [];
+    try {
+      const data = await api('/admin/customers', { token: adminToken });
+      customers = data.customers || [];
+    } catch (e) { return; }
+
+    const table = document.querySelector('#customerListWrap table');
+    if (!table) return;
+
+    const headRow = table.querySelector('thead tr');
+    if (headRow && !headRow.querySelector('.srdc-head')) {
+      const th = document.createElement('th');
+      th.className = 'srdc-head';
+      headRow.appendChild(th);
+    }
+
+    customers.forEach((u) => {
+      const row = table.querySelector(`tbody tr[data-email="${CSS.escape(u.email)}"]`);
+      if (!row || row.querySelector('.srdc-cell')) return;
+
+      const neverUsed = !u.lastLoginAt; // চ্যাটবট আসলে ব্যবহারই করেনি
+
+      const td = document.createElement('td');
+      td.className = 'srdc-cell';
+      if (neverUsed) {
+        const delLink = document.createElement('span');
+        delLink.className = 'view-link';
+        delLink.style.color = 'var(--danger)';
+        delLink.textContent = 'Delete account';
+        delLink.onclick = () => confirmDeleteInactiveCustomer(u);
+        td.appendChild(delLink);
+      } else {
+        const note = document.createElement('span');
+        note.style.cssText = 'font-size:11px; color:var(--text-soft);';
+        note.textContent = '—';
+        td.appendChild(note);
+      }
+      row.appendChild(td);
+    });
+  }
+
+  async function confirmDeleteInactiveCustomer(u) {
+    const ok = confirm(
+      `"${u.name}" (${u.email}) এই কাস্টমার কখনো চ্যাটবট ব্যবহার করেনি বলে দেখাচ্ছে।\n\n` +
+      `এই অ্যাকাউন্ট এবং এর সাথে যুক্ত সব তথ্য (conversations, skills ইত্যাদি) স্থায়ীভাবে মুছে ফেলা হবে — এটা আর ফেরানো যাবে না।\n\n` +
+      `আপনি কি নিশ্চিত?`
+    );
+    if (!ok) return;
+    try {
+      await api(`/admin/customers/${encodeURIComponent(u.email)}/delete`, { method: 'POST', token: adminToken });
+      loadCustomerList();
+    } catch (err) {
+      alert("অ্যাকাউন্ট ডিলিট করা যায়নি: " + err.message);
+    }
+  }
+
+})();
+</script>
 </body>
 </html>
 
