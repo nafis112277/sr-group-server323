@@ -1280,6 +1280,7 @@
     <div class="mc-icon">⚠️🔧</div>
     <div class="mc-title">SR Group KROVOS সাময়িকভাবে বন্ধ আছে</div>
     <div class="mc-msg" id="maintenanceMsg"></div>
+    <a href="#" id="maintenanceAdminLink" style="display:block; margin-top:18px; font-size:12px; color:var(--text-soft); text-decoration:underline;">Admin access →</a>
   </div>
 </div>
 <!-- নতুন সংযোজন: নেটওয়ার্ক অফলাইন/অনলাইন স্ট্যাটাস ব্যানার (ডিফল্টে লুকানো, JS দিয়ে show/hide হয়) -->
@@ -4822,6 +4823,15 @@ function setBroadcastChatLock(active, message = '') {
   let maintenanceMessage = '';
   const overlay = document.getElementById('maintenanceOverlay');
   const msgEl = document.getElementById('maintenanceMsg');
+
+  const adminLink = document.getElementById('maintenanceAdminLink');
+  if (adminLink) {
+    adminLink.onclick = (e) => {
+      e.preventDefault();
+      showScreen('screen-adminLogin');
+      applyMaintenanceUI();
+    };
+  }
 
   function applyMaintenanceUI() {
     if (!overlay) return;
