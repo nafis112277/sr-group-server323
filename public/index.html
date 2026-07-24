@@ -8,6 +8,38 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <!-- Added: jsPDF — শুধুমাত্র নতুন "PDF এ কনভার্ট" ফিচারের জন্য, আগের কোনো কিছুর সাথে সম্পর্ক নেই -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <style id="sr-added-maintenance-mode">
+  #maintenanceOverlay{
+    display:none; position:fixed; inset:0; z-index:300;
+    align-items:center; justify-content:center; padding:24px;
+    background:rgba(6,9,15,0.72); backdrop-filter:blur(3px);
+  }
+  #maintenanceOverlay.show{ display:flex; }
+  .maintenance-card{
+    max-width:440px; width:100%; text-align:center;
+    background:var(--panel-solid); border:1px solid var(--border-glass);
+    border-radius:18px; padding:36px 28px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .maintenance-card .mc-icon{ font-size:38px; margin-bottom:14px; }
+  .maintenance-card .mc-title{
+    font-family:'Space Grotesk',sans-serif; font-weight:700;
+    font-size:18px; margin-bottom:12px;
+  }
+  .maintenance-card .mc-msg{
+    color:var(--text-soft); font-size:13.5px;
+    line-height:1.65; white-space:pre-wrap;
+  }
+  .srm-toggle-row{ display:flex; align-items:center; gap:9px; margin:4px 0 18px; }
+  .srm-toggle-row input[type="checkbox"]{ width:16px; height:16px; }
+  .srm-toggle-row label{ font-size:13px; color:var(--text-primary); cursor:pointer; }
+  .srm-status-pill{
+    display:inline-block; font-family:'JetBrains Mono',monospace; font-size:10.5px;
+    padding:2px 9px; border-radius:6px; margin-left:8px; vertical-align:middle;
+    border:1px solid var(--border-glass); color:var(--text-soft);
+  }
+  .srm-status-pill.live{ color:var(--danger); border-color:var(--danger); }
+</style>
 <style>
   :root{
     --bg-deep:#0A0E14;
@@ -4522,6 +4554,169 @@ async function renderTakeoverBar(conv) {
      অ্যাডমিন প্যানেল আগের মতোই স্বাভাবিক থাকবে।
      ================================================================== -->
 <script id="sr-added-delete-inactive-customer">
+  <script id="sr-added-maintenance-mode-script">
+(function initMaintenanceMode() {
+  let maintenanceActive = false;
+  let maintenanceMessage = '';
+  const overlay = document.getElementById('maintenanceOverlay');
+  const msgEl = document.getElementById('maintenanceMsg');
+
+  function applyMaintenanceUI() {
+    if (!overlay) return;
+    const onAdminScreen =
+      document.getElementById('screen-adminLogin').classList.contains('active') ||
+      document.getElementById('screen-adminDashboard').classList.contains('active');
+    const sendBtn = document.getElementById('sendBtn');
+    const userInputEl = document.getElementById('userInput');
+    if (maintenanceActive && !onAdminScreen) {
+      msgEl.textContent = maintenanceMessage ||
+        'কারিগরি সমস্যা ও প্রয়োজনীয় আপডেটের কারণে আমাদের সার্ভিস সাময়িকভাবে বন্ধ রয়েছে।\nশীঘ্রই সার্ভিস পুনরায় চালু করা হবে। ধন্যবাদ।';
+      overlay.classList.add('show');
+      if (sendBtn) sendBtn.disabled = true;
+      if (userInputEl) userInputEl.disabled = true;
+    } else {
+      overlay.classList.remove('show');
+      if (sendBtn) sendBtn.disabled = false;
+      if (userInputEl) userInputEl.disabled = false;
+    }
+  }
+
+  async function checkMaintenanceStatus() {
+    try {
+      const res = await fetch('/api/admin/maintenance-status');
+      if (!res.ok) return;
+      const data = await res.json();
+      maintenanceActive = !!data.active;
+      maintenanceMessage = data.message || '';
+    } catch (e) { /* ব্যর্থ হলে আগের অবস্থাই থাকবে */ }
+    applyMaintenanceUI();
+  }
+
+  // পেজ লোড হলেই চেক করো, তারপর প্রতি ১৫ সেকেন্ডে চেক করতে থাকো
+  checkMaintenanceStatus();
+  setInterval(checkMaintenanceStatus, 15000);
+
+  // screen বদলালে (admin login/logout) overlay state আপডেট করো
+  document.querySelectorAll('.screen').forEach((s) => {
+    new MutationObserver(applyMaintenanceUI)
+      .observe(s, { attributes: true, attributeFilter: ['class'] });
+  });
+
+  // sendMessage override — maintenance চালু থাকলে frontend থেকেও block
+  if (typeof sendMessage === 'function') {
+    const __origSend = sendMessage;
+    sendMessage = function () {
+      if (maintenanceActive) { applyMaintenanceUI(); return; }
+      return __origSend.apply(this, arguments);
+    };
+    const btn = document.getElementById('sendBtn');
+    if (btn) btn.onclick = sendMessage;
+  }
+})();
+</script>
+
+<script id="sr-added-maintenance-admin-tab">
+(function initMaintenanceAdminTab() {
+  const DEFAULT_MSG =
+    'কারিগরি সমস্যা ও প্রয়োজনীয় আপডেটের কারণে আমাদের সার্ভিস সাময়িকভাবে বন্ধ রয়েছে। ' +
+    'এই অসুবিধার জন্য আমরা আন্তরিকভাবে দুঃখিত।\n\n' +
+    'আমাদের টিম বিষয়টি সমাধানের জন্য কাজ করছে এবং শীঘ্রই সার্ভিস পুনরায় চালু করা হবে 🚀\n\n' +
+    'আপনাদের ধৈর্য ও সহযোগিতার জন্য ধন্যবাদ 🙏';
+
+  // নতুন ট্যাব বাটন
+  const tabsBar = document.querySelector('.admin-tabs');
+  const adminsBtn = document.getElementById('tabBtnAdmins');
+  const tabBtn = document.createElement('button');
+  tabBtn.className = 'tab-btn';
+  tabBtn.id = 'tabBtnMaintenance';
+  tabBtn.dataset.tab = 'maintenance';
+  tabBtn.style.display = 'none';
+  tabBtn.textContent = '🔧 Maintenance';
+  if (tabsBar) tabsBar.insertBefore(tabBtn, adminsBtn || null);
+
+  // নতুন প্যানেল
+  const adminBody = document.querySelector('.admin-body');
+  const panel = document.createElement('div');
+  panel.className = 'admin-panel';
+  panel.id = 'panel-maintenance';
+  panel.innerHTML = `
+    <div style="max-width:560px;">
+      <p class="hint" style="margin-bottom:6px; color:var(--text-soft); font-size:12.5px;">
+        চালু করলে কোনো কাস্টমার নতুন মেসেজ পাঠাতে পারবে না এবং নিচের মেসেজটা দেখবে।
+        <span id="maintenanceStatusPill" class="srm-status-pill">Off</span>
+      </p>
+      <div id="maintenanceError"></div>
+      <div class="settings-field">
+        <label>Customers দেখবে এই message</label>
+        <textarea id="maintenanceMessageInput" style="min-height:130px;"></textarea>
+      </div>
+      <div class="srm-toggle-row">
+        <input type="checkbox" id="maintenanceActiveToggle">
+        <label for="maintenanceActiveToggle">এখনই Maintenance Mode চালু করুন</label>
+      </div>
+      <button class="btn-primary" style="max-width:220px;" id="saveMaintenanceBtn">Save</button>
+      <div class="save-note" id="maintenanceSaveNote" style="display:none;">✓ Saved.</div>
+    </div>`;
+  if (adminBody) adminBody.appendChild(panel);
+
+  // ডিফল্ট মেসেজ বসিয়ে দিই (পরে load হলে সেটা replace করবে)
+  document.getElementById('maintenanceMessageInput').value = DEFAULT_MSG;
+
+  async function loadMaintenancePanel() {
+    setError('maintenanceError', '');
+    try {
+      const data = await api('/admin/maintenance', { token: adminToken });
+      document.getElementById('maintenanceMessageInput').value = data.message || DEFAULT_MSG;
+      document.getElementById('maintenanceActiveToggle').checked = !!data.active;
+      const pill = document.getElementById('maintenanceStatusPill');
+      pill.textContent = data.active ? '🔴 Live' : 'Off';
+      pill.classList.toggle('live', !!data.active);
+    } catch (err) {
+      setError('maintenanceError', "লোড করা যায়নি: " + err.message);
+    }
+  }
+
+  document.getElementById('saveMaintenanceBtn').onclick = async () => {
+    const message = document.getElementById('maintenanceMessageInput').value.trim();
+    const active = document.getElementById('maintenanceActiveToggle').checked;
+    setError('maintenanceError', '');
+    if (active && !message) {
+      setError('maintenanceError', 'চালু করার আগে একটা মেসেজ লিখুন।');
+      return;
+    }
+    try {
+      await api('/admin/maintenance', { method: 'POST', body: { active, message }, token: adminToken });
+      const pill = document.getElementById('maintenanceStatusPill');
+      pill.textContent = active ? '🔴 Live' : 'Off';
+      pill.classList.toggle('live', active);
+      const note = document.getElementById('maintenanceSaveNote');
+      note.style.display = 'block';
+      setTimeout(() => (note.style.display = 'none'), 2000);
+    } catch (err) {
+      setError('maintenanceError', err.message);
+    }
+  };
+
+  tabBtn.onclick = () => {
+    if (tabBtn.style.display === 'none') return;
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    tabBtn.classList.add('active');
+    document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
+    panel.classList.add('active');
+    loadMaintenancePanel();
+  };
+
+  // super_admin হলেই ট্যাব দেখাবে
+  if (typeof applyAdminRoleUI === 'function') {
+    const __orig = applyAdminRoleUI;
+    applyAdminRoleUI = function () {
+      __orig();
+      tabBtn.style.display =
+        (typeof adminRole !== 'undefined' && adminRole === 'super_admin') ? '' : 'none';
+    };
+  }
+})();
+</script>
 (function initDeleteInactiveCustomer() {
 
   const __originalLoadCustomerListForDelete = loadCustomerList;
@@ -4592,6 +4787,14 @@ async function renderTakeoverBar(conv) {
 
 })();
 </script>
+  <!-- Maintenance overlay div — </body> এর আগে -->
+<div id="maintenanceOverlay">
+  <div class="maintenance-card">
+    <div class="mc-icon">⚠️🔧</div>
+    <div class="mc-title">SR Group KROVOS সাময়িকভাবে বন্ধ আছে</div>
+    <div class="mc-msg" id="maintenanceMsg"></div>
+  </div>
+</div>
 </body>
 </html>
 
