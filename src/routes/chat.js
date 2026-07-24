@@ -3,9 +3,23 @@ import { query, queryOne } from '../db.js';
 import { requireUser } from '../auth.js';
 import { callAI } from '../ai.js';
 import { getSettings, buildSystemPrompt, getBroadcast } from '../settings.js';
+import { getMaintenanceStatus } from './admin.js';
 
 const router = Router();
 router.use(requireUser);
+
+// FIX: maintenance mode চালু থাকলে চ্যাট-সংক্রান্ত সব রুট ব্লক করে দেয় (503)।
+// requireUser-এর পরে বসানো হয়েছে যাতে আগে auth চেক হয়, তারপর maintenance।
+async function blockIfMaintenance(req, res, next) {
+  try {
+    const status = await getMaintenanceStatus();
+    if (status.active) {
+      return res.status(503).json({ error: status.message || 'সার্ভিস সাময়িকভাবে বন্ধ আছে।', maintenance: true });
+    }
+    next();
+  } catch (err) { next(); }
+}
+router.use(blockIfMaintenance);
 
 const MAX_HISTORY_MESSAGES = 24;
 
