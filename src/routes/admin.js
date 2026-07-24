@@ -6,6 +6,12 @@ import { query, queryOne } from '../db.js';
 import { signAdminToken, requireAdmin, requireSuperAdmin } from '../auth.js';
 
 const router = Router();
+
+// email params সবসময় এভাবে normalize করা হবে যাতে encoded/uppercase email-এও lookup ঠিকমতো কাজ করে
+function normalizeEmailParam(raw) {
+  return decodeURIComponent(raw || '').trim().toLowerCase();
+}
+
 // ---- Login: email + password ----
 router.post('/login', async (req, res) => {
   try {
@@ -83,7 +89,7 @@ router.post('/customers/:email/plan', requireSuperAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Invalid plan. Must be free, pro, or max.' });
     }
 
-    const email = decodeURIComponent(req.params.email);
+    const email = normalizeEmailParam(req.params.email);
     const user = await queryOne('SELECT email FROM users WHERE email = $1', [email]);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
 
@@ -96,7 +102,7 @@ router.post('/customers/:email/plan', requireSuperAdmin, async (req, res) => {
 });
 router.post('/customers/:email/block', requireSuperAdmin, async (req, res) => {
   try {
-    const email = req.params.email.toLowerCase();
+    const email = normalizeEmailParam(req.params.email);
     const user = await queryOne('SELECT blocked FROM users WHERE email = $1', [email]);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
 
@@ -110,7 +116,7 @@ router.post('/customers/:email/block', requireSuperAdmin, async (req, res) => {
 
 router.post('/customers/:email/quota', requireSuperAdmin, async (req, res) => {
   try {
-    const email = req.params.email.toLowerCase();
+    const email = normalizeEmailParam(req.params.email);
     let { dailyLimit } = req.body || {};
 
     if (dailyLimit === null || dailyLimit === undefined || dailyLimit === '') {
@@ -135,7 +141,7 @@ router.post('/customers/:email/quota', requireSuperAdmin, async (req, res) => {
 
 router.post('/customers/:email/reset-password', requireSuperAdmin, async (req, res) => {
   try {
-    const email = req.params.email.toLowerCase();
+    const email = normalizeEmailParam(req.params.email);
     const user = await queryOne('SELECT id FROM users WHERE email = $1', [email]);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
 
@@ -156,7 +162,7 @@ router.post('/customers/:email/reset-password', requireSuperAdmin, async (req, r
 // এবং user_skills সব cascade delete করা হয়।
 router.post('/customers/:email/delete', requireSuperAdmin, async (req, res) => {
   try {
-    const email = decodeURIComponent(req.params.email).toLowerCase();
+    const email = normalizeEmailParam(req.params.email);
     const user = await queryOne('SELECT id, last_login_at FROM users WHERE email = $1', [email]);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
 
@@ -185,7 +191,7 @@ router.post('/customers/:email/delete', requireSuperAdmin, async (req, res) => {
 
 router.get('/customers/:email/conversations', async (req, res) => {
   try {
-    const email = req.params.email.toLowerCase();
+    const email = normalizeEmailParam(req.params.email);
     const rows = await query(
       'SELECT id, title, updated_at AS "updatedAt" FROM conversations WHERE user_email = $1 ORDER BY updated_at DESC',
       [email]
