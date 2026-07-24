@@ -976,6 +976,51 @@
      জিনিসগুলোকে নরম, উঁচু-নিচু (raised / pressed) নিওমরফিক লুক দেয়,
      কিন্তু কোনো ক্লাস নাম, HTML স্ট্রাকচার বা JS লজিক স্পর্শ করা হয়নি।
      ================================================================== -->
+  <style id="sr-added-broadcast-chat-lock">
+  /* Broadcast active হলে customer composer lock */
+  .composer.broadcast-locked {
+    opacity: 0.72;
+  }
+
+  .composer.broadcast-locked .composer-row input[type="text"] {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .composer.broadcast-locked .send-btn,
+  .composer.broadcast-locked .attach-btn,
+  .composer.broadcast-locked .mic-btn {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .broadcast-lock-note {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    margin-bottom: 2px;
+    border-radius: 9px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid var(--border-glass);
+    color:var(--text-soft);
+    font-size:12px;
+    line-height:1.45;
+  }
+
+  .broadcast-lock-note.show {
+    display:flex;
+  }
+
+  .broadcast-lock-note .bcl-icon {
+    font-size:15px;
+    flex-shrink:0;
+  }
+
+  .broadcast-lock-note .bcl-text {
+    flex:1;
+  }
+</style>
  <style id="sr-added-maintenance-mode">
   #maintenanceOverlay{
     display:none;
@@ -1377,6 +1422,13 @@
     </div>
     <div class="messages" id="messages"></div>
 <div class="composer">
+  <div class="broadcast-lock-note" id="broadcastLockNote">
+  <span class="bcl-icon">🔒</span>
+  <span class="bcl-text">
+    Chat is temporarily unavailable. Please wait until the technical issue is resolved.
+  </span>
+</div>
+</div>
       <div class="composer-attachments" id="composerAttachments"></div>
       <div class="composer-row">
         <input type="file" id="imageFileInput" accept="image/*" style="display:none;">
@@ -2591,8 +2643,121 @@ function showTyping() {
   box.appendChild(div); box.scrollTop = box.scrollHeight;
 }
 function hideTyping() { const t = document.getElementById('typingIndicator'); if (t) t.remove(); }
+// ============================================================
+// BROADCAST CHAT UI LOCK
+// Backend chat.js-এর Broadcast Lock-এর সাথে কাজ করবে
+// Broadcast ON  -> Customer UI locked
+// Broadcast OFF -> Customer UI unlocked
+// ============================================================
 
+function setBroadcastChatLock(active, message = '') {
+  broadcastChatLocked = !!active;
+
+  const composer = document.querySelector('.composer');
+  const input = document.getElementById('userInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const plusBtn = document.getElementById('composerPlusBtn');
+  const imageInput = document.getElementById('imageFileInput');
+  const micBtn = document.getElementById('micBtn');
+  const lockNote = document.getElementById('broadcastLockNote');
+
+  if (!composer) return;
+
+  if (broadcastChatLocked) {
+    // Composer visual lock
+    composer.classList.add('broadcast-locked');
+
+    // Message input বন্ধ
+    if (input) {
+      input.disabled = true;
+      input.placeholder = 'Chat is temporarily unavailable...';
+    }
+
+    // Send button বন্ধ
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.title = 'Chat is temporarily unavailable';
+    }
+
+    // Plus / attachment menu বন্ধ
+    if (plusBtn) {
+      plusBtn.disabled = true;
+      plusBtn.title = 'Chat is temporarily unavailable';
+    }
+
+    // Image upload বন্ধ
+    if (imageInput) {
+      imageInput.disabled = true;
+    }
+
+    // Voice input বন্ধ
+    if (micBtn) {
+      micBtn.disabled = true;
+      micBtn.title = 'Chat is temporarily unavailable';
+    }
+
+    // Plus menu যদি খোলা থাকে বন্ধ করে দেবে
+    const plusMenu = document.getElementById('composerPlusMenu');
+    if (plusMenu) {
+      plusMenu.classList.remove('show');
+    }
+
+    // Lock message দেখাবে
+    if (lockNote) {
+      const textEl = lockNote.querySelector('.bcl-text');
+
+      if (textEl) {
+        textEl.textContent =
+          message ||
+          'Chat is temporarily unavailable. Please wait until the technical issue is resolved.';
+      }
+
+      lockNote.classList.add('show');
+    }
+
+  } else {
+    // Composer unlock
+    composer.classList.remove('broadcast-locked');
+
+    // Message input চালু
+    if (input) {
+      input.disabled = false;
+      input.placeholder = 'Type a message...';
+    }
+
+    // Send button চালু
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.title = '';
+    }
+
+    // Plus button চালু
+    if (plusBtn) {
+      plusBtn.disabled = false;
+      plusBtn.title = 'Add';
+    }
+
+    // Image upload চালু
+    if (imageInput) {
+      imageInput.disabled = false;
+    }
+
+    // Voice input চালু
+    if (micBtn) {
+      micBtn.disabled = false;
+      micBtn.title = 'Voice input';
+    }
+
+    // Lock message hide
+    if (lockNote) {
+      lockNote.classList.remove('show');
+    }
+  }
+}
 async function sendMessage() {
+  if (broadcastChatLocked) {
+  return;
+}
   const input = document.getElementById('userInput');
   const text = input.value.trim();
   if ((!text && !pendingAttachment) || sending || !currentConvId) return;
@@ -4373,7 +4538,101 @@ async function renderTakeoverBar(conv) {
   const bannerTitleEl = document.getElementById('broadcastBannerTitle');
   const bannerMsgEl = document.getElementById('broadcastBannerMsg');
   const bannerCloseBtn = document.getElementById('broadcastBannerClose');
+// ============================================================
+// Broadcast Chat UI Lock
+// Broadcast ON হলে Customer-এর chat composer বন্ধ থাকবে
+// ============================================================
+let broadcastChatLocked = false;
 
+function setBroadcastChatLock(active, message = '') {
+  broadcastChatLocked = !!active;
+
+  const composer = document.querySelector('.composer');
+  const input = document.getElementById('userInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const plusBtn = document.getElementById('composerPlusBtn');
+  const imageInput = document.getElementById('imageFileInput');
+  const micBtn = document.getElementById('micBtn');
+  const lockNote = document.getElementById('broadcastLockNote');
+
+  if (!composer) return;
+
+  if (broadcastChatLocked) {
+    composer.classList.add('broadcast-locked');
+
+    if (input) {
+      input.disabled = true;
+      input.placeholder = 'Chat is temporarily unavailable...';
+    }
+
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.title = 'Chat is temporarily unavailable';
+    }
+
+    if (plusBtn) {
+      plusBtn.disabled = true;
+      plusBtn.title = 'Chat is temporarily unavailable';
+    }
+
+    if (imageInput) {
+      imageInput.disabled = true;
+    }
+
+    if (micBtn) {
+      micBtn.disabled = true;
+      micBtn.title = 'Chat is temporarily unavailable';
+    }
+
+    const plusMenu = document.getElementById('composerPlusMenu');
+    if (plusMenu) {
+      plusMenu.classList.remove('show');
+    }
+
+    if (lockNote) {
+      const textEl = lockNote.querySelector('.bcl-text');
+
+      if (textEl) {
+        textEl.textContent =
+          message ||
+          'Chat is temporarily unavailable. Please wait until the technical issue is resolved.';
+      }
+
+      lockNote.classList.add('show');
+    }
+
+  } else {
+    composer.classList.remove('broadcast-locked');
+
+    if (input) {
+      input.disabled = false;
+      input.placeholder = 'Type a message...';
+    }
+
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.title = '';
+    }
+
+    if (plusBtn) {
+      plusBtn.disabled = false;
+      plusBtn.title = 'Add';
+    }
+
+    if (imageInput) {
+      imageInput.disabled = false;
+    }
+
+    if (micBtn) {
+      micBtn.disabled = false;
+      micBtn.title = 'Voice input';
+    }
+
+    if (lockNote) {
+      lockNote.classList.remove('show');
+    }
+  }
+}
   function getDismissedBroadcastId() {
     try { return localStorage.getItem('srgroup:dismissedBroadcastId'); } catch (e) { return null; }
   }
@@ -4385,6 +4644,10 @@ async function renderTakeoverBar(conv) {
     if (!banner || !userToken) return;
     try {
       const data = await api('/chat/broadcast', { token: userToken });
+      setBroadcastChatLock(
+  !!data.active,
+  data.message || ''
+);
       if (!data || !data.active || !data.message) { banner.classList.remove('show'); return; }
       const bId = data.id != null ? data.id : data.message;
       if (String(getDismissedBroadcastId()) === String(bId)) { banner.classList.remove('show'); return; }
@@ -4553,7 +4816,6 @@ async function renderTakeoverBar(conv) {
      এন্ডপয়েন্ট এখনো ব্যাকএন্ডে না থাকলে ক্লিকে স্পষ্ট এরর দেখাবে, বাকি
      অ্যাডমিন প্যানেল আগের মতোই স্বাভাবিক থাকবে।
      ================================================================== -->
-<script id="sr-added-delete-inactive-customer">
   <script id="sr-added-maintenance-mode-script">
 (function initMaintenanceMode() {
   let maintenanceActive = false;
@@ -4614,7 +4876,6 @@ async function renderTakeoverBar(conv) {
   }
 })();
 </script>
-
 <script id="sr-added-maintenance-admin-tab">
 (function initMaintenanceAdminTab() {
   const DEFAULT_MSG =
@@ -4717,6 +4978,7 @@ async function renderTakeoverBar(conv) {
   }
 })();
 </script>
+<script id="sr-added-delete-inactive-customer">
 (function initDeleteInactiveCustomer() {
 
   const __originalLoadCustomerListForDelete = loadCustomerList;
