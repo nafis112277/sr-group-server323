@@ -1704,6 +1704,7 @@ let conversations = [];   // [{id, title, updatedAt}]
 let currentConvId = null;
 let currentMessages = []; // [{id, role, content, imageUrl}] for the open conversation
 let sending = false;
+let broadcastChatLocked = false;
 let forgotEmailInProgress = null;
 let pendingAttachment = null; // { dataUrl, name } — image staged for the next outgoing message
 
@@ -4539,101 +4540,6 @@ async function renderTakeoverBar(conv) {
   const bannerTitleEl = document.getElementById('broadcastBannerTitle');
   const bannerMsgEl = document.getElementById('broadcastBannerMsg');
   const bannerCloseBtn = document.getElementById('broadcastBannerClose');
-// ============================================================
-// Broadcast Chat UI Lock
-// Broadcast ON হলে Customer-এর chat composer বন্ধ থাকবে
-// ============================================================
-let broadcastChatLocked = false;
-
-function setBroadcastChatLock(active, message = '') {
-  broadcastChatLocked = !!active;
-
-  const composer = document.querySelector('.composer');
-  const input = document.getElementById('userInput');
-  const sendBtn = document.getElementById('sendBtn');
-  const plusBtn = document.getElementById('composerPlusBtn');
-  const imageInput = document.getElementById('imageFileInput');
-  const micBtn = document.getElementById('micBtn');
-  const lockNote = document.getElementById('broadcastLockNote');
-
-  if (!composer) return;
-
-  if (broadcastChatLocked) {
-    composer.classList.add('broadcast-locked');
-
-    if (input) {
-      input.disabled = true;
-      input.placeholder = 'Chat is temporarily unavailable...';
-    }
-
-    if (sendBtn) {
-      sendBtn.disabled = true;
-      sendBtn.title = 'Chat is temporarily unavailable';
-    }
-
-    if (plusBtn) {
-      plusBtn.disabled = true;
-      plusBtn.title = 'Chat is temporarily unavailable';
-    }
-
-    if (imageInput) {
-      imageInput.disabled = true;
-    }
-
-    if (micBtn) {
-      micBtn.disabled = true;
-      micBtn.title = 'Chat is temporarily unavailable';
-    }
-
-    const plusMenu = document.getElementById('composerPlusMenu');
-    if (plusMenu) {
-      plusMenu.classList.remove('show');
-    }
-
-    if (lockNote) {
-      const textEl = lockNote.querySelector('.bcl-text');
-
-      if (textEl) {
-        textEl.textContent =
-          message ||
-          'Chat is temporarily unavailable. Please wait until the technical issue is resolved.';
-      }
-
-      lockNote.classList.add('show');
-    }
-
-  } else {
-    composer.classList.remove('broadcast-locked');
-
-    if (input) {
-      input.disabled = false;
-      input.placeholder = 'Type a message...';
-    }
-
-    if (sendBtn) {
-      sendBtn.disabled = false;
-      sendBtn.title = '';
-    }
-
-    if (plusBtn) {
-      plusBtn.disabled = false;
-      plusBtn.title = 'Add';
-    }
-
-    if (imageInput) {
-      imageInput.disabled = false;
-    }
-
-    if (micBtn) {
-      micBtn.disabled = false;
-      micBtn.title = 'Voice input';
-    }
-
-    if (lockNote) {
-      lockNote.classList.remove('show');
-    }
-  }
-}
   function getDismissedBroadcastId() {
     try { return localStorage.getItem('srgroup:dismissedBroadcastId'); } catch (e) { return null; }
   }
