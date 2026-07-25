@@ -760,4 +760,52 @@ router.post('/feedback', requireUser, async (req, res) => {
     res.status(500).json({ error: 'Could not save feedback.' });
   }
 });
+// ---- Self-service API key (customer নিজের জন্য) ----
+function generateApiKey() {
+  return 'sk-' + [...Array(40)].map(() => Math.random().toString(36)[2] || '0').join('');
+}
+
+router.get('/my-api-key', async (req, res) => {
+  try {
+    const row = await queryOne(
+      'SELECT key, active, daily_limit AS "dailyLimit", requests_today AS "requestsToday" FROM api_keys WHERE user_email = $1',
+      [req.userEmail]
+    );
+    res.json({ key: row || null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load your API key.' });
+  }
+});
+
+router.post('/my-api-key/generate', async (req, res) => {
+  try {
+    const existing = await queryOne('SELECT id FROM api_keys WHERE user_email = $1', [req.userEmail]);
+    if (existing) return res.status(409).json({ error: 'You already have a key. Use regenerate instead.' });
+
+    const key = generateApiKey();
+    await query(
+      'INSERT INTO api_keys (label, key, user_email, daily_limit) VALUES ($1, $2, $3, $4)',
+      ['Customer key — ' + req.userEmail, key, req.userEmail, 200]
+    );
+    res.json({ ok: true, key });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not generate a key.' });
+  }
+});
+
+router.post('/my-api-key/regenerate', async (req, res) => {
+  try {
+    const existing = await queryOne('SELECT id FROM api_keys WHERE user_email = $1', [req.userEmail]);
+    if (!existing) return res.status(404).json({ error: "You don't have a key yet. Generate one first." });
+
+    const key = generateApiKey();
+    await query('UPDATE api_keys SET key = $1, active = true WHERE user_email = $2', [key, req.userEmail]);
+    res.json({ ok: true, key });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not regenerate your key.' });
+  }
+});
 export default router;
