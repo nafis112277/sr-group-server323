@@ -10,6 +10,7 @@ import authRoutes from './routes/auth.js';
 import chatRoutes from './routes/chat.js';
 import adminRoutes from './routes/admin.js';
 import skillsRoutes from './routes/skills.js';
+import apiV1Routes from './routes/api-v1.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors());
@@ -58,6 +59,7 @@ async function start() {
   app.use('/api/chat', chatRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/skills', skillsRoutes);
+  app.use('/api/v1', apiV1Routes);
   // ফ্রন্টএন্ড সার্ভ করছে
   app.use(express.static(path.join(__dirname, '..', 'public')));
   const PORT = process.env.PORT || 3000;
