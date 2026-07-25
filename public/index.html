@@ -4695,26 +4695,14 @@ async function renderTakeoverBar(conv) {
     };
   }
 
-if (typeof enterChat === 'function') {
-    const __originalEnterChatForPolicy = enterChat;
+  if (typeof enterChat === 'function') {
+    const __originalEnterChatForBroadcast = enterChat;
     enterChat = async function () {
-      await __originalEnterChatForPolicy();
-      link.style.display = 'block';
+      await __originalEnterChatForBroadcast();
+      checkBroadcast();
     };
   }
-
-  if (typeof currentUser !== 'undefined' && currentUser) {
-    link.style.display = 'block';
-  }
-  })(); 
-</script>
-
-  // FIX: session আগে থেকেই restore হয়ে থাকলে (auto-login) এই স্ক্রিপ্ট লোড হওয়ার আগেই
-  // enterChat() চলে যায় বলে link.style.display কখনো 'block' হয় না — তাই এখানে সরাসরি চেক করে দিই
-  if (typeof currentUser !== 'undefined' && currentUser) {
-    link.style.display = 'block';
-  }
-  })(); 
+})();
 </script>
 
 <script id="sr-added-model-picker-script">
@@ -5352,6 +5340,10 @@ const policyLinkStyle = document.createElement('style');
       await __originalEnterChatForPolicy();
       link.style.display = 'block';
     };
+  }
+
+  if (typeof currentUser !== 'undefined' && currentUser) {
+    link.style.display = 'block';
   }
   })(); 
 </script>
