@@ -61,7 +61,6 @@
     }
   }
 </style>
-</style>
 <style>
   :root{
     --bg-deep:#0A0E14;
@@ -5005,16 +5004,7 @@ function isLocked(tier) {
 
 })();
 </script>
-  <!-- Maintenance overlay div — </body> এর আগে -->
-<div id="maintenanceOverlay">
-  <div class="maintenance-card">
-    <div class="mc-icon">⚠️🔧</div>
-    <div class="mc-title">SR Group KROVOS সাময়িকভাবে বন্ধ আছে</div>
-    <div class="mc-msg" id="maintenanceMsg"></div>
-  </div>
-</div>
-
-<script id="sr-added-payment-due-admin">
+ <script id="sr-added-payment-due-admin">
 (function initPaymentDueAdmin() {
   const __originalLoadCustomerListForPaymentDue = loadCustomerList;
   loadCustomerList = async function () {
@@ -5130,6 +5120,119 @@ function isLocked(tier) {
   }
 })();
 </script>
+<script id="sr-added-policy-feature">
+(function initPolicyFeature() {
+  /* ---- Admin: নীতিমালা ট্যাব ---- */
+  const tabsBar = document.querySelector('.admin-tabs');
+  const adminsBtn = document.getElementById('tabBtnAdmins');
+  const policyTabBtn = document.createElement('button');
+  policyTabBtn.className = 'tab-btn';
+  policyTabBtn.id = 'tabBtnPolicy';
+  policyTabBtn.dataset.tab = 'policy';
+  policyTabBtn.style.display = 'none';
+  policyTabBtn.textContent = 'নীতিমালা';
+  if (tabsBar) tabsBar.insertBefore(policyTabBtn, adminsBtn || null);
+
+  const adminBody = document.querySelector('.admin-body');
+  const panel = document.createElement('div');
+  panel.className = 'admin-panel';
+  panel.id = 'panel-policy';
+  panel.innerHTML = `
+    <div style="max-width:700px;">
+      <p class="hint" style="margin-bottom:16px;">কাস্টমাররা চ্যাট স্ক্রিন থেকে এই নীতিমালা পড়তে পারবে।</p>
+      <div id="policyError"></div>
+      <div class="settings-field">
+        <label>নীতিমালার লেখা</label>
+        <textarea id="policyContent" style="min-height:260px;" placeholder="এখানে নিয়ম-নীতি লিখুন..."></textarea>
+      </div>
+      <button class="btn-primary" style="max-width:200px;" id="savePolicyBtn">Save</button>
+      <div class="save-note" id="policySaveNote" style="display:none;">Saved.</div>
+    </div>
+  `;
+  if (adminBody) adminBody.appendChild(panel);
+
+  async function loadPolicyPanel() {
+    setError('policyError', '');
+    try {
+      const data = await api('/admin/policy', { token: adminToken });
+      document.getElementById('policyContent').value = data.content || '';
+    } catch (err) {
+      setError('policyError', "Couldn't load policy: " + err.message);
+    }
+  }
+
+  document.getElementById('savePolicyBtn').onclick = async () => {
+    const content = document.getElementById('policyContent').value;
+    setError('policyError', '');
+    try {
+      await api('/admin/policy', { method: 'POST', body: { content }, token: adminToken });
+      const note = document.getElementById('policySaveNote');
+      note.style.display = 'block';
+      setTimeout(() => (note.style.display = 'none'), 2000);
+    } catch (err) {
+      setError('policyError', err.message);
+    }
+  };
+
+  policyTabBtn.onclick = () => {
+    if (policyTabBtn.style.display === 'none') return;
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    policyTabBtn.classList.add('active');
+    document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
+    panel.classList.add('active');
+    loadPolicyPanel();
+  };
+
+  if (typeof applyAdminRoleUI === 'function') {
+    const __originalApplyAdminRoleUIForPolicy = applyAdminRoleUI;
+    applyAdminRoleUI = function () {
+      __originalApplyAdminRoleUIForPolicy();
+      policyTabBtn.style.display = (typeof adminRole !== 'undefined' && adminRole === 'super_admin') ? '' : 'none';
+    };
+  }
+
+  /* ---- Customer: নীতিমালা দেখার লিংক + মোডাল ---- */
+  const link = document.createElement('div');
+  link.id = 'policyViewLink';
+  link.textContent = '📜 নীতিমালা';
+  link.style.cssText = 'display:none; position:fixed; bottom:14px; left:14px; z-index:200; font-size:11.5px; font-family:"JetBrains Mono",monospace; color:var(--text-soft); cursor:pointer; background:var(--panel-solid); border:1px solid var(--border-glass); padding:6px 10px; border-radius:8px;';
+  document.body.appendChild(link);
+
+  const modal = document.createElement('div');
+  modal.id = 'policyModal';
+  modal.style.cssText = 'display:none; position:fixed; inset:0; z-index:302; align-items:center; justify-content:center; padding:24px; background:rgba(6,9,15,0.72); backdrop-filter:blur(3px);';
+  modal.innerHTML = `
+    <div style="max-width:520px; width:100%; max-height:80vh; overflow-y:auto; background:var(--panel-solid); border:1px solid var(--border-glass); border-radius:18px; padding:28px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:17px;">নীতিমালা</div>
+        <span id="policyModalClose" style="cursor:pointer; color:var(--text-soft); font-size:18px;">✕</span>
+      </div>
+      <div id="policyModalContent" style="white-space:pre-wrap; font-size:13.5px; line-height:1.7; color:var(--text-soft);"></div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  document.getElementById('policyModalClose').onclick = () => { modal.style.display = 'none'; };
+
+  link.onclick = async () => {
+    try {
+      const data = await api('/chat/policy', { token: userToken });
+      document.getElementById('policyModalContent').textContent = data.content || 'এখনো কোনো নীতিমালা যোগ করা হয়নি।';
+      modal.style.display = 'flex';
+    } catch (err) {
+      alert("নীতিমালা লোড করা যায়নি: " + err.message);
+    }
+  };
+
+  if (typeof enterChat === 'function') {
+    const __originalEnterChatForPolicy = enterChat;
+    enterChat = async function () {
+      await __originalEnterChatForPolicy();
+      link.style.display = 'block';
+    };
+  }
+})();
+</script>
 </body>
 </html>
+
 
