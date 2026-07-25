@@ -4688,7 +4688,7 @@ async function renderTakeoverBar(conv) {
     }
   }
 
-  if (bannerCloseBtn) {
+if (bannerCloseBtn) {
     bannerCloseBtn.onclick = () => {
       if (banner.dataset.broadcastId) setDismissedBroadcastId(banner.dataset.broadcastId);
       banner.classList.remove('show');
