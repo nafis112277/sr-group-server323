@@ -1450,7 +1450,6 @@
     Chat is temporarily unavailable. Please wait until the technical issue is resolved.
   </span>
 </div>
-</div>
       <div class="composer-attachments" id="composerAttachments"></div>
       <div class="composer-row">
         <input type="file" id="imageFileInput" accept="image/*" style="display:none;">
@@ -1537,8 +1536,9 @@
     </div>
     <button class="btn-primary" id="copyApikeyBtn" style="margin-bottom:10px;">Copy key</button>
   </div>
-  <button class="btn-primary" id="generateApikeyBtn">Generate API key</button>
-  <button class="btn-primary" id="regenerateApikeyBtn" style="display:none; background:linear-gradient(135deg,var(--danger),#E11D48);">Regenerate (পুরান key বাতিল হবে)</button>
+ <button class="btn-primary" id="generateApikeyBtn">Generate API key</button>
+  <button class="btn-primary" id="regenerateApikeyBtn" style="display:none; background:linear-gradient(135deg,var(--accent-a),var(--accent-b));">Regenerate (পুরান key বাতিল হবে)</button>
+  <button class="btn-primary" id="deleteApikeyBtn" style="display:none; background:linear-gradient(135deg,var(--danger),#E11D48);">Delete key</button>
 </div>
 
     <div class="modal-section active" id="modalSection-customize">
@@ -3060,15 +3060,18 @@ async function loadApikeyTab() {
     const display = document.getElementById('apikeyDisplay');
     const genBtn = document.getElementById('generateApikeyBtn');
     const regenBtn = document.getElementById('regenerateApikeyBtn');
+    const delBtn = document.getElementById('deleteApikeyBtn');
     if (data.key && data.key.key) {
       document.getElementById('apikeyValue').value = data.key.key;
       display.style.display = 'block';
       genBtn.style.display = 'none';
       regenBtn.style.display = 'block';
+      delBtn.style.display = 'block';
     } else {
       display.style.display = 'none';
       genBtn.style.display = 'block';
       regenBtn.style.display = 'none';
+      delBtn.style.display = 'none';
     }
   } catch (err) {
     setError('apikeyError', err.message);
@@ -3103,6 +3106,17 @@ document.getElementById('copyApikeyBtn').onclick = async () => {
   const original = btn.textContent;
   btn.textContent = '✓ Copied';
   setTimeout(() => { btn.textContent = original; }, 1500);
+};
+
+document.getElementById('deleteApikeyBtn').onclick = async () => {
+  if (!confirm('তোমার API key স্থায়ীভাবে ডিলিট হয়ে যাবে — এর সাথে যেকোনো অ্যাপ যেটা এই key ব্যবহার করছে সেটা আর কাজ করবে না। নিশ্চিত?')) return;
+  setError('apikeyError', '');
+  try {
+    await api('/chat/my-api-key', { method: 'DELETE', token: userToken });
+    loadApikeyTab();
+  } catch (err) {
+    setError('apikeyError', err.message);
+  }
 };
 
 document.getElementById('changeOwnPasswordBtn').onclick = async () => {
