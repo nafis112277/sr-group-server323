@@ -1524,8 +1524,22 @@
       <button class="modal-tab-btn active" data-modaltab="customize">Customize AI</button>
       <button class="modal-tab-btn" data-modaltab="skills">Skills</button>
       <button class="modal-tab-btn" data-modaltab="theme">Theme</button>
+      <button class="modal-tab-btn" data-modaltab="apikey">API Access</button>
       <button class="modal-tab-btn" data-modaltab="password">Change password</button>
     </div>
+    <div class="modal-section" id="modalSection-apikey">
+  <p class="hint">এই key দিয়ে তোমার নিজের অ্যাপ থেকে সরাসরি আমাদের chatbot API ব্যবহার করা যাবে। কারো সাথে শেয়ার করো না।</p>
+  <div id="apikeyError"></div>
+  <div id="apikeyDisplay" style="display:none; margin-bottom:14px;">
+    <div class="settings-field">
+      <label>তোমার API Key</label>
+      <input id="apikeyValue" type="text" readonly style="font-family:'JetBrains Mono',monospace; font-size:12.5px;">
+    </div>
+    <button class="btn-primary" id="copyApikeyBtn" style="margin-bottom:10px;">Copy key</button>
+  </div>
+  <button class="btn-primary" id="generateApikeyBtn">Generate API key</button>
+  <button class="btn-primary" id="regenerateApikeyBtn" style="display:none; background:linear-gradient(135deg,var(--danger),#E11D48);">Regenerate (পুরান key বাতিল হবে)</button>
+</div>
 
     <div class="modal-section active" id="modalSection-customize">
       <p class="hint">Tell the assistant how you'd like it to talk to you — e.g. tone you prefer, topics you mostly ask about, reply length. This only applies to your own chats and can never override SR Group's core rules for the assistant.</p>
@@ -2879,6 +2893,7 @@ document.querySelectorAll('.modal-tab-btn').forEach((btn) => {
     btn.classList.add('active');
     document.querySelectorAll('.modal-section').forEach((s) => s.classList.remove('active'));
     document.getElementById('modalSection-' + btn.dataset.modaltab).classList.add('active');
+    if (btn.dataset.modaltab === 'apikey') loadApikeyTab();
   };
 });
 
@@ -3037,6 +3052,59 @@ document.getElementById('openSkillsHeaderBtn').onclick = () => {
   document.querySelector('.modal-tab-btn[data-modaltab="skills"]').click();
 };
 
+/* ---------------- API key (self-service) ---------------- */
+async function loadApikeyTab() {
+  setError('apikeyError', '');
+  try {
+    const data = await api('/chat/my-api-key', { token: userToken });
+    const display = document.getElementById('apikeyDisplay');
+    const genBtn = document.getElementById('generateApikeyBtn');
+    const regenBtn = document.getElementById('regenerateApikeyBtn');
+    if (data.key && data.key.key) {
+      document.getElementById('apikeyValue').value = data.key.key;
+      display.style.display = 'block';
+      genBtn.style.display = 'none';
+      regenBtn.style.display = 'block';
+    } else {
+      display.style.display = 'none';
+      genBtn.style.display = 'block';
+      regenBtn.style.display = 'none';
+    }
+  } catch (err) {
+    setError('apikeyError', err.message);
+  }
+}
+
+document.getElementById('generateApikeyBtn').onclick = async () => {
+  setError('apikeyError', '');
+  try {
+    await api('/chat/my-api-key/generate', { method: 'POST', token: userToken });
+    loadApikeyTab();
+  } catch (err) {
+    setError('apikeyError', err.message);
+  }
+};
+
+document.getElementById('regenerateApikeyBtn').onclick = async () => {
+  if (!confirm('পুরান key কাজ করা বন্ধ হয়ে যাবে। নতুন key বানাতে চাও?')) return;
+  setError('apikeyError', '');
+  try {
+    await api('/chat/my-api-key/regenerate', { method: 'POST', token: userToken });
+    loadApikeyTab();
+  } catch (err) {
+    setError('apikeyError', err.message);
+  }
+};
+
+document.getElementById('copyApikeyBtn').onclick = async () => {
+  const val = document.getElementById('apikeyValue').value;
+  try { await navigator.clipboard.writeText(val); } catch (e) { /* ignore */ }
+  const btn = document.getElementById('copyApikeyBtn');
+  const original = btn.textContent;
+  btn.textContent = '✓ Copied';
+  setTimeout(() => { btn.textContent = original; }, 1500);
+};
+
 document.getElementById('changeOwnPasswordBtn').onclick = async () => {
   const currentPassword = document.getElementById('currentPasswordInput').value;
   const newPassword = document.getElementById('newPasswordInput').value;
@@ -3108,6 +3176,7 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
     if (btn.style.display === 'none') return;
     document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
+    if (btn.dataset.modaltab === 'apikey') loadApikeyTab();
     document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'settings') loadSettingsPanel();
