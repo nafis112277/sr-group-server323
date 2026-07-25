@@ -4703,6 +4703,12 @@ if (typeof enterChat === 'function') {
     };
   }
 
+  if (typeof currentUser !== 'undefined' && currentUser) {
+    link.style.display = 'block';
+  }
+  })(); 
+</script>
+
   // FIX: session আগে থেকেই restore হয়ে থাকলে (auto-login) এই স্ক্রিপ্ট লোড হওয়ার আগেই
   // enterChat() চলে যায় বলে link.style.display কখনো 'block' হয় না — তাই এখানে সরাসরি চেক করে দিই
   if (typeof currentUser !== 'undefined' && currentUser) {
