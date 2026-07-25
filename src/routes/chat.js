@@ -3,7 +3,7 @@ import { query, queryOne } from '../db.js';
 import { requireUser } from '../auth.js';
 import { callAI } from '../ai.js';
 import { getSettings, buildSystemPrompt, getBroadcast } from '../settings.js';
-import { getMaintenanceStatus } from './admin.js';
+import { getMaintenanceStatus, getPolicy } from './admin.js';
 
 const router = Router();
 router.use(requireUser);
@@ -70,7 +70,18 @@ router.get('/payment-status', async (req, res) => {
     res.status(500).json({ error: 'Could not load payment status.' });
   }
 });
+// ---- Policy/niti mala — customer যেকোনো সময় দেখতে পারবে (blocked/maintenance যাই হোক না কেন) ----
+router.get('/policy', async (req, res) => {
+  try {
+    const policy = await getPolicy();
+    res.json({ content: policy.content });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load policy.' });
+  }
+});
 
+async function blockIfPaymentOverdue(req, res, next) {
 async function blockIfPaymentOverdue(req, res, next) {
   try {
     const user = await queryOne(
