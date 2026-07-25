@@ -44,8 +44,70 @@ async function blockIfMaintenance(req, res, next) {
 }
 router.use(blockIfMaintenance);
 
-const MAX_HISTORY_MESSAGES = 24;
+// ---- Payment status: blocked/overdue হলেও এই route কাজ করবে (নিচের middleware-এর আগে) ----
+router.get('/payment-status', async (req, res) => {
+  try {
+    const user = await queryOne(
+      'SELECT plan, payment_due_date AS "paymentDueDate", blocked FROM users WHERE email = $1',
+      [req.userEmail]
+    );
+    if (!user) return res.status(404).json({ error: 'Account not found.' });
 
+    let daysLeft = null;
+    let overdue = false;
+    if (user.plan !== 'free' && user.paymentDueDate) {
+      const due = new Date(user.paymentDueDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      due.setHours(0, 0, 0, 0);
+      daysLeft = Math.round((due - today) / 86400000);
+      overdue = daysLeft < 0;
+    }
+
+    res.json({ plan: user.plan || 'free', dueDate: user.paymentDueDate, daysLeft, overdue, blocked: !!user.blocked });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load payment status.' });
+  }
+});
+
+async function blockIfPaymentOverdue(req, res, next) {
+  try {
+    const user = await queryOne(
+      'SELECT plan, payment_due_date AS "paymentDueDate", blocked FROM users WHERE email = $1',
+      [req.userEmail]
+    );
+    if (!user) return next();
+
+    if (user.blocked) {
+      return res.status(403).json({
+        error: 'আপনার অ্যাকাউন্ট সাময়িকভাবে বন্ধ আছে। পেমেন্ট সম্পন্ন করুন।',
+        paymentBlocked: true,
+      });
+    }
+
+    if (user.plan !== 'free' && user.paymentDueDate) {
+      const due = new Date(user.paymentDueDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      due.setHours(0, 0, 0, 0);
+      if (due < today) {
+        await query('UPDATE users SET blocked = true WHERE email = $1', [req.userEmail]);
+        return res.status(403).json({
+          error: 'পেমেন্টের নির্ধারিত সময় পার হয়ে গেছে, তাই অ্যাকাউন্ট সাময়িকভাবে বন্ধ করা হয়েছে। পেমেন্ট করলে আবার চালু হয়ে যাবে।',
+          paymentBlocked: true,
+        });
+      }
+    }
+    next();
+  } catch (err) {
+    console.error('Payment due check failed:', err);
+    next();
+  }
+}
+router.use(blockIfPaymentOverdue);
+
+const MAX_HISTORY_MESSAGES = 24;
 // FIX: message content-er upore ekta hard cap — age kono limit chilo na,
 // tai keu chaile huge payload pathiye DB bloat / cost abuse korte parto.
 const MAX_MESSAGE_LENGTH = 8000;
