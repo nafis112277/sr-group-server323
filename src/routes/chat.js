@@ -808,4 +808,18 @@ router.post('/my-api-key/regenerate', async (req, res) => {
     res.status(500).json({ error: 'Could not regenerate your key.' });
   }
 });
+
+router.delete('/my-api-key', async (req, res) => {
+  try {
+    const existing = await queryOne('SELECT id FROM api_keys WHERE user_email = $1', [req.userEmail]);
+    if (!existing) return res.status(404).json({ error: "You don't have a key to delete." });
+
+    await query('DELETE FROM api_keys WHERE user_email = $1', [req.userEmail]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not delete your key.' });
+  }
+});
+
 export default router;
