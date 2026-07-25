@@ -70,7 +70,7 @@ router.get('/customers', async (req, res) => {
   try {
     const rows = await query(
       `SELECT name, email, created_at AS "createdAt", last_login_at AS "lastLoginAt", blocked,
-              daily_limit AS "dailyLimit"
+              daily_limit AS "dailyLimit", payment_due_date AS "paymentDueDate"
        FROM users ORDER BY created_at DESC`
     );
     res.json({ customers: rows });
@@ -98,6 +98,27 @@ router.post('/customers/:email/plan', requireSuperAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not update plan.' });
+  }
+});
+router.post('/customers/:email/payment-due', requireSuperAdmin, async (req, res) => {
+  try {
+    const email = normalizeEmailParam(req.params.email);
+    let { dueDate } = req.body || {};
+
+    if (dueDate === null || dueDate === undefined || dueDate === '') {
+      dueDate = null;
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+      return res.status(400).json({ error: 'তারিখ সঠিক ফরম্যাটে দিন (YYYY-MM-DD)।' });
+    }
+
+    const user = await queryOne('SELECT id FROM users WHERE email = $1', [email]);
+    if (!user) return res.status(404).json({ error: 'Customer not found.' });
+
+    await query('UPDATE users SET payment_due_date = $1, blocked = false WHERE email = $2', [dueDate, email]);
+    res.json({ ok: true, dueDate });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not update payment due date.' });
   }
 });
 router.post('/customers/:email/block', requireSuperAdmin, async (req, res) => {
