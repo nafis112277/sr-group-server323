@@ -39,6 +39,14 @@
     border:1px solid var(--border-glass); color:var(--text-soft);
   }
   .srm-status-pill.live{ color:var(--danger); border-color:var(--danger); }
+  /* ---- Mobile-only fixes: notun rule, age-r kono rule change kora hoyni ---- */
+  html, body{ overflow-x:hidden; max-width:100vw; }
+  * { box-sizing: border-box; }
+  @media (max-width: 600px){
+    img, video, iframe, table, pre, code { max-width: 100% !important; }
+    pre, code { overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  }
+</style>  
 </style>
 <style>
   :root{
