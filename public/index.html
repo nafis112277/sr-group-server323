@@ -1472,7 +1472,17 @@
         </div>
         <!-- নতুন সংযোজন: ভয়েস ইনপুট বাটন। ব্রাউজারে Web Speech API সাপোর্ট না থাকলে JS নিজেই এটা
              লুকিয়ে রাখবে (নিচে display:none ডিফল্ট), তাই আনসাপোর্টেড ব্রাউজারে ভাঙা বাটন দেখা যাবে না। -->
-        <button class="mic-btn" id="micBtn" type="button" title="Voice input" style="display:none;">
+        <select id="micLangSelect" title="Voice language" style="max-width:76px; background:var(--panel); border:1px solid var(--border-glass); border-radius:8px; color:var(--text-primary); font-size:11px; padding:4px;">
+  <option value="bn-BD">বাংলা</option>
+  <option value="en-US">English</option>
+  <option value="hi-IN">हिन्दी</option>
+  <option value="ar-SA">العربية</option>
+  <option value="ur-PK">اردو</option>
+  <option value="es-ES">Español</option>
+  <option value="fr-FR">Français</option>
+  <option value="zh-CN">中文</option>
+</select>
+<button class="mic-btn" id="micBtn" type="button" title="Voice input" style="display:none;">
           <span class="mic-wave"></span>
           <span id="micIcon">🎤</span>
         </button>
@@ -4169,10 +4179,17 @@ try { if (typeof conversations !== 'undefined' && Array.isArray(conversations)) 
   let recognizing = false;
   let recognition = null;
   let baseText = '';
-
+const micLangSelect = document.getElementById('micLangSelect');
+const savedVoiceLang = localStorage.getItem('srgroup:voiceLang');
+if (micLangSelect && savedVoiceLang) micLangSelect.value = savedVoiceLang;
+if (micLangSelect) {
+  micLangSelect.addEventListener('change', () => {
+    localStorage.setItem('srgroup:voiceLang', micLangSelect.value);
+  });
+}
   function createRecognition() {
     const r = new SpeechRecognitionCtor();
-    r.lang = navigator.language || 'bn-BD';
+    r.lang = (micLangSelect && micLangSelect.value) || 'bn-BD';
     r.continuous = true;
     r.interimResults = true;
 
