@@ -3,7 +3,7 @@ import { query, queryOne } from '../db.js';
 import { requireUser } from '../auth.js';
 import { callAI } from '../ai.js';
 import { getSettings, buildSystemPrompt, getBroadcast } from '../settings.js';
-import { getMaintenanceStatus, getPolicy } from './admin.js';
+import { getMaintenanceStatus, getPolicy, getApiAccessStatus } from './admin.js';
 
 const router = Router();
 router.use(requireUser);
@@ -765,6 +765,30 @@ function generateApiKey() {
   return 'sk-' + [...Array(40)].map(() => Math.random().toString(36)[2] || '0').join('');
 }
 
+// ---- API Access Toggle — admin panel থেকে on/off করা যায়, apikey ট্যাব খোলার সময় frontend এটা চেক করে ----
+async function blockIfApiAccessDisabled(req, res, next) {
+  try {
+    const status = await getApiAccessStatus();
+    if (!status.enabled) {
+      return res.status(403).json({
+        error: 'API access is currently turned off by the admin. Please try again later.',
+        apiAccessDisabled: true,
+      });
+    }
+    next();
+  } catch (err) {
+    next(); // চেক ব্যর্থ হলেও ফিচার ব্লক করি না
+  }
+}
+
+router.get('/api-access-status', async (req, res) => {
+  try {
+    res.json(await getApiAccessStatus());
+  } catch (err) {
+    res.json({ enabled: true });
+  }
+});
+
 router.get('/my-api-key', async (req, res) => {
   try {
     const row = await queryOne(
@@ -778,11 +802,10 @@ router.get('/my-api-key', async (req, res) => {
   }
 });
 
-router.post('/my-api-key/generate', async (req, res) => {
+router.post('/my-api-key/generate', blockIfApiAccessDisabled, async (req, res) => {
   try {
     const existing = await queryOne('SELECT id FROM api_keys WHERE user_email = $1', [req.userEmail]);
     if (existing) return res.status(409).json({ error: 'You already have a key. Use regenerate instead.' });
-
     const key = generateApiKey();
     await query(
       'INSERT INTO api_keys (label, key, user_email, daily_limit) VALUES ($1, $2, $3, $4)',
@@ -795,11 +818,10 @@ router.post('/my-api-key/generate', async (req, res) => {
   }
 });
 
-router.post('/my-api-key/regenerate', async (req, res) => {
+router.post('/my-api-key/regenerate', blockIfApiAccessDisabled, async (req, res) => {
   try {
     const existing = await queryOne('SELECT id FROM api_keys WHERE user_email = $1', [req.userEmail]);
     if (!existing) return res.status(404).json({ error: "You don't have a key yet. Generate one first." });
-
     const key = generateApiKey();
     await query('UPDATE api_keys SET key = $1, active = true WHERE user_email = $2', [key, req.userEmail]);
     res.json({ ok: true, key });
