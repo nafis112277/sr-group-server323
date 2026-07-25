@@ -46,7 +46,21 @@
     img, video, iframe, table, pre, code { max-width: 100% !important; }
     pre, code { overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
   }
-</style>  
+    
+@media (max-width: 600px){
+    div:has(> #userInput){
+      flex-wrap: wrap;
+      row-gap: 6px;
+    }
+    div:has(> #userInput) > *{
+      flex-shrink: 0;
+    }
+    #userInput{
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+  }
+</style>
 </style>
 <style>
   :root{
