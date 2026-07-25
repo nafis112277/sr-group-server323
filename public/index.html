@@ -4717,9 +4717,10 @@ async function renderTakeoverBar(conv) {
   const TIER_MODEL = { free: null, pro: null, max: 'deepseek' };
 
 function isLocked(tier) {
-    // FIX: শুধু customer-এর নিজের exact plan-এর tier unlocked থাকবে —
-    // এর নিচের বা উপরের কোনো tier ব্যবহার করতে পারবে না, সব লক
-    return tier !== currentPlan;
+    // FIX: backend-এ Free আর Pro একই মডেল access পায় (MODEL_ACCESS.free === MODEL_ACCESS.pro),
+    // তাই tier-এর order অনুযায়ী check করি — নিজের plan-এর tier বা তার নিচের tier unlocked,
+    // শুধু উপরের (বেশি দামি) tier লক থাকবে।
+    return TIER_ORDER[tier] > TIER_ORDER[currentPlan];
   }
   const plusMenu = document.getElementById('composerPlusMenu');
   const composerRow = document.querySelector('.composer-row');
@@ -5152,6 +5153,7 @@ function isLocked(tier) {
 
 <script id="sr-added-payment-alert">
 (function initPaymentAlert() {
+  let __paymentIntervalStarted = false;
   const overlay = document.createElement('div');
   overlay.id = 'paymentBlockedOverlay';
   overlay.style.cssText = 'display:none; position:fixed; inset:0; z-index:301; align-items:center; justify-content:center; padding:24px; background:rgba(6,9,15,0.72); backdrop-filter:blur(3px);';
@@ -5193,12 +5195,15 @@ function isLocked(tier) {
     } catch (err) { /* silent */ }
   }
 
-  if (typeof enterChat === 'function') {
+if (typeof enterChat === 'function') {
     const __originalEnterChatForPayment = enterChat;
     enterChat = async function () {
       await __originalEnterChatForPayment();
       checkPaymentStatus();
-      setInterval(checkPaymentStatus, 60000);
+      if (!__paymentIntervalStarted) {
+        __paymentIntervalStarted = true;
+        setInterval(checkPaymentStatus, 60000);
+      }
     };
   }
 })();
@@ -5313,9 +5318,95 @@ function isLocked(tier) {
       link.style.display = 'block';
     };
   }
+  })(); 
+</script>
+
+<!-- ==================================================================
+     ১০) Admin: API Access ON/OFF টগল — কাস্টমারদের self-service API key
+     generate/regenerate ফিচার বন্ধ/চালু করার জন্য। সম্পূর্ণ নতুন,
+     স্বনির্ভর ব্লক — এর আগের কোনো লাইন স্পর্শ করা হয়নি।
+     ================================================================== -->
+<script id="sr-added-api-access-toggle">
+(function initApiAccessToggle() {
+  const tabsBar = document.querySelector('.admin-tabs');
+  const adminsBtn = document.getElementById('tabBtnAdmins');
+  const tabBtn = document.createElement('button');
+  tabBtn.className = 'tab-btn';
+  tabBtn.id = 'tabBtnApiAccess';
+  tabBtn.dataset.tab = 'apiaccess';
+  tabBtn.style.display = 'none';
+  tabBtn.textContent = '🔑 API Access';
+  if (tabsBar) tabsBar.insertBefore(tabBtn, adminsBtn || null);
+
+  const adminBody = document.querySelector('.admin-body');
+  const panel = document.createElement('div');
+  panel.className = 'admin-panel';
+  panel.id = 'panel-apiaccess';
+  panel.innerHTML = `
+    <div style="max-width:560px;">
+      <p class="hint" style="margin-bottom:6px; color:var(--text-soft); font-size:12.5px;">
+        বন্ধ করলে কোনো কাস্টমার নতুন API key জেনারেট বা রিজেনারেট করতে পারবে না (যাদের আগে থেকে key আছে, সেটা কাজ করতেই থাকবে — শুধু generate/regenerate বাটন ব্লক হবে)।
+        <span id="apiAccessStatusPill" class="srm-status-pill">On</span>
+      </p>
+      <div id="apiAccessError"></div>
+      <div class="srm-toggle-row">
+        <input type="checkbox" id="apiAccessToggle">
+        <label for="apiAccessToggle">API Access চালু রাখুন (customers key generate/regenerate করতে পারবে)</label>
+      </div>
+      <button class="btn-primary" style="max-width:220px;" id="saveApiAccessBtn">Save</button>
+      <div class="save-note" id="apiAccessSaveNote" style="display:none;">✓ Saved.</div>
+    </div>`;
+  if (adminBody) adminBody.appendChild(panel);
+
+  async function loadApiAccessPanel() {
+    setError('apiAccessError', '');
+    try {
+      const data = await api('/admin/api-access', { token: adminToken });
+      document.getElementById('apiAccessToggle').checked = !!data.enabled;
+      const pill = document.getElementById('apiAccessStatusPill');
+      pill.textContent = data.enabled ? 'On' : '🔴 Off';
+      pill.classList.toggle('live', !data.enabled);
+    } catch (err) {
+      setError('apiAccessError', "লোড করা যায়নি: " + err.message);
+    }
+  }
+
+  document.getElementById('saveApiAccessBtn').onclick = async () => {
+    const enabled = document.getElementById('apiAccessToggle').checked;
+    setError('apiAccessError', '');
+    try {
+      await api('/admin/api-access', { method: 'POST', body: { enabled }, token: adminToken });
+      const pill = document.getElementById('apiAccessStatusPill');
+      pill.textContent = enabled ? 'On' : '🔴 Off';
+      pill.classList.toggle('live', !enabled);
+      const note = document.getElementById('apiAccessSaveNote');
+      note.style.display = 'block';
+      setTimeout(() => (note.style.display = 'none'), 2000);
+    } catch (err) {
+      setError('apiAccessError', err.message);
+    }
+  };
+
+  tabBtn.onclick = () => {
+    if (tabBtn.style.display === 'none') return;
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    tabBtn.classList.add('active');
+    document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
+    panel.classList.add('active');
+    loadApiAccessPanel();
+  };
+
+  // super_admin হলেই ট্যাব দেখাবে
+  if (typeof applyAdminRoleUI === 'function') {
+    const __orig = applyAdminRoleUI;
+    applyAdminRoleUI = function () {
+      __orig();
+      tabBtn.style.display =
+        (typeof adminRole !== 'undefined' && adminRole === 'super_admin') ? '' : 'none';
+    };
+  }
 })();
 </script>
 </body>
 </html>
-
 
