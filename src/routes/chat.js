@@ -672,5 +672,21 @@ router.post('/messages/:id/feedback', async (req, res) => {
     res.status(500).json({ error: 'Could not save feedback.' });
   }
 });
-
+// শুধু নতুন feature — reply-তে 👍/👎 feedback save করে, existing কোনো route/logic touch করে না
+router.post('/feedback', requireUser, async (req, res) => {
+  try {
+    const { conversationId, messageIndex, rating } = req.body || {};
+    if (!conversationId || messageIndex === undefined || !['up', 'down'].includes(rating)) {
+      return res.status(400).json({ error: 'Invalid feedback data.' });
+    }
+    await query(
+      `INSERT INTO message_feedback (conversation_id, message_index, user_email, rating) VALUES ($1, $2, $3, $4)`,
+      [conversationId, messageIndex, req.userEmail, rating]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not save feedback.' });
+  }
+});
 export default router;
