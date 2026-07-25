@@ -42,6 +42,58 @@ router.get('/maintenance-status', async (req, res) => {
 });
 // এর নিচের সব রুটে admin token লাগবে
 router.use(requireAdmin);
+// ---- API keys (super admin only) ----
+router.get('/api-keys', requireSuperAdmin, async (req, res) => {
+  try {
+    const rows = await query(
+      `SELECT id, label, key, active, daily_limit AS "dailyLimit", requests_today AS "requestsToday",
+              created_at AS "createdAt", last_used_at AS "lastUsedAt"
+       FROM api_keys ORDER BY created_at DESC`
+    );
+    res.json({ keys: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load API keys.' });
+  }
+});
+
+router.post('/api-keys', requireSuperAdmin, async (req, res) => {
+  try {
+    const { label, dailyLimit } = req.body || {};
+    if (!label) return res.status(400).json({ error: 'Enter a label for this key.' });
+
+    const key = 'sk-' + [...Array(40)].map(() => Math.random().toString(36)[2] || '0').join('');
+    const limit = parseInt(dailyLimit, 10) || 200;
+
+    await query('INSERT INTO api_keys (label, key, daily_limit) VALUES ($1, $2, $3)', [label, key, limit]);
+    res.json({ ok: true, key });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not create API key.' });
+  }
+});
+
+router.post('/api-keys/:id/toggle', requireSuperAdmin, async (req, res) => {
+  try {
+    const row = await queryOne('SELECT active FROM api_keys WHERE id = $1', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Key not found.' });
+    await query('UPDATE api_keys SET active = $1 WHERE id = $2', [!row.active, req.params.id]);
+    res.json({ ok: true, active: !row.active });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not update key.' });
+  }
+});
+
+router.delete('/api-keys/:id', requireSuperAdmin, async (req, res) => {
+  try {
+    await query('DELETE FROM api_keys WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not delete key.' });
+  }
+});
 
 // Admin panel theke shorashori assistant test korar jonno — kono conversation save hoy na,
 // kono customer quota-o count hoy na, shudhu current AI settings diye ekbar reply dey.
