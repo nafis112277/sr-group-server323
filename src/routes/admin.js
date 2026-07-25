@@ -432,6 +432,59 @@ router.get('/analytics', async (req, res) => {
   }
 });
 // ==================================================================
+// Policy / Niti Mala — সম্পূর্ণ নতুন, স্বনির্ভর ব্লক। উপরের কোনো রুট/কোড
+// স্পর্শ করা হয়নি। নিজস্ব আলাদা টেবিল ব্যবহার করে।
+// ==================================================================
+let __policyTableReady = false;
+async function ensurePolicyTable() {
+  if (__policyTableReady) return;
+  await query(`
+    CREATE TABLE IF NOT EXISTS policy_rules (
+      id INT PRIMARY KEY DEFAULT 1,
+      content TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMP NOT NULL DEFAULT now(),
+      CHECK (id = 1)
+    )
+  `);
+  await query(
+    `INSERT INTO policy_rules (id, content) VALUES (1, '') ON CONFLICT (id) DO NOTHING`
+  );
+  __policyTableReady = true;
+}
+
+// chat.js থেকে ইমপোর্ট করে ব্যবহার হবে
+export async function getPolicy() {
+  await ensurePolicyTable();
+  const row = await queryOne('SELECT content FROM policy_rules WHERE id = 1');
+  return { content: (row && row.content) || '' };
+}
+
+router.get('/policy', requireSuperAdmin, async (req, res) => {
+  try {
+    res.json(await getPolicy());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load policy.' });
+  }
+});
+
+router.post('/policy', requireSuperAdmin, async (req, res) => {
+  try {
+    const { content } = req.body || {};
+    await ensurePolicyTable();
+    await query('UPDATE policy_rules SET content = $1, updated_at = now() WHERE id = 1', [
+      (content || '').slice(0, 20000),
+    ]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not save policy.' });
+  }
+});
+
+// ==================================================================
+// Maintenance Mode — সম্পূর্ণ নতুন, স্বনির্ভর ব্লক। উপরের কোনো রুট/কোড
+// ==================================================================
 // Maintenance Mode — সম্পূর্ণ নতুন, স্বনির্ভর ব্লক। উপরের কোনো রুট/কোড
 // স্পর্শ করা হয়নি। নিজস্ব আলাদা টেবিল ব্যবহার করে (settings.js/ai_settings
 // এর কিছুই ছোঁয়া হয়নি) — প্রথম কলেই টেবিল নিজে থেকে তৈরি হয়ে যায়।
