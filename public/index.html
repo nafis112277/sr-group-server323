@@ -4634,10 +4634,11 @@ async function renderTakeoverBar(conv) {
   // Free/Pro একই ফ্রি মডেল ব্যবহার করে (তাই null = auto fallback), Max হলে সরাসরি deepseek পাঠাই।
   const TIER_MODEL = { free: null, pro: null, max: 'deepseek' };
 
-  function isLocked(tier) {
-    return TIER_ORDER[tier] > TIER_ORDER[currentPlan];
+function isLocked(tier) {
+    // FIX: শুধু customer-এর নিজের exact plan-এর tier unlocked থাকবে —
+    // এর নিচের বা উপরের কোনো tier ব্যবহার করতে পারবে না, সব লক
+    return tier !== currentPlan;
   }
-
   const plusMenu = document.getElementById('composerPlusMenu');
   const composerRow = document.querySelector('.composer-row');
   const userInputEl = document.getElementById('userInput');
