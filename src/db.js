@@ -81,6 +81,18 @@ export async function initDb() {
       rating TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id SERIAL PRIMARY KEY,
+      label TEXT NOT NULL,
+      key TEXT UNIQUE NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT true,
+      daily_limit INTEGER NOT NULL DEFAULT 200,
+      requests_today INTEGER NOT NULL DEFAULT 0,
+      last_reset_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      last_used_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key);
     CREATE INDEX IF NOT EXISTS idx_message_feedback_conv ON message_feedback(conversation_id);
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_limit INTEGER;
