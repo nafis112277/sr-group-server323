@@ -5280,28 +5280,34 @@ if (typeof enterChat === 'function') {
   }
 
   /* ---- Customer: নীতিমালা দেখার লিংক + মোডাল ---- */
- const policyLinkStyle = document.createElement('style');
+const policyLinkStyle = document.createElement('style');
   policyLinkStyle.textContent = `
     #policyViewLink{
-      display:none; position:fixed; left:14px; z-index:200;
-      font-size:11.5px; font-family:"JetBrains Mono",monospace;
-      color:var(--text-soft); cursor:pointer;
-      background:var(--panel-solid); border:1px solid var(--border-glass);
-      padding:6px 10px; border-radius:8px;
-      bottom:14px;
+      display:none; align-items:center; justify-content:center;
+      cursor:pointer; font-size:15px; line-height:1;
+      background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+      border-radius:8px; padding:7px 9px;
     }
-    /* মোবাইলে composer অনেক উঁচু, তাই লিংকটা composer-এর উপরে সরিয়ে দিলাম
-       যাতে Send বাটন বা কম্পোজার ঢেকে না ফেলে */
-    @media (max-width:680px){
-      #policyViewLink{ bottom:150px; left:10px; font-size:10.5px; padding:5px 8px; }
-    }
+    #policyViewLink:hover{ border-color:var(--accent-a); color:var(--text-primary); }
   `;
   document.head.appendChild(policyLinkStyle);
 
-  const link = document.createElement('div');
+  // FIX: আগে এই লিংকটা fixed position (bottom:14px; left:14px) দিয়ে ভাসছিল, যেটা ডেস্কটপে
+  // সাইডবারের নিচের "Sign out" অংশের ঠিক উপর গিয়ে পড়ত (ঢাকা পড়ে যাচ্ছিল) এবং মোবাইলে composer-কে
+  // ঢেকে ফেলত। এখন সেটার বদলে হেডারে Skills/Search আইকনের পাশে একটা বাটন হিসেবে বসানো হলো —
+  // কোনো ওভারল্যাপ থাকবে না, ডেস্কটপ-মোবাইল দুই জায়গাতেই সবসময় দেখা ও চাপা যাবে।
+  const link = document.createElement('button');
   link.id = 'policyViewLink';
-  link.textContent = '📜 নীতিমালা';
-  document.body.appendChild(link);
+  link.type = 'button';
+  link.className = 'icon-btn';
+  link.title = 'নীতিমালা';
+  link.textContent = '📜';
+  const headerSearchBtnEl = document.getElementById('headerSearchBtn');
+  if (headerSearchBtnEl && headerSearchBtnEl.parentNode) {
+    headerSearchBtnEl.parentNode.insertBefore(link, headerSearchBtnEl);
+  } else {
+    document.body.appendChild(link);
+  } 
 
   const modal = document.createElement('div');
   modal.id = 'policyModal';
