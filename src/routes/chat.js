@@ -80,8 +80,6 @@ router.get('/policy', async (req, res) => {
     res.status(500).json({ error: 'Could not load policy.' });
   }
 });
-
-async function blockIfPaymentOverdue(req, res, next) {
 async function blockIfPaymentOverdue(req, res, next) {
   try {
     const user = await queryOne(
