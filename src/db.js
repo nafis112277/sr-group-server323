@@ -73,6 +73,15 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_conversations_email ON conversations(user_email);
     CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_user_skills_email ON user_skills(user_email);
+    CREATE TABLE IF NOT EXISTS message_feedback (
+      id SERIAL PRIMARY KEY,
+      conversation_id INTEGER NOT NULL,
+      message_index INTEGER NOT NULL,
+      user_email TEXT NOT NULL,
+      rating TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_message_feedback_conv ON message_feedback(conversation_id);
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_limit INTEGER;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_instructions TEXT NOT NULL DEFAULT '';
