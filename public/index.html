@@ -4739,11 +4739,16 @@ function isLocked(tier) {
     document.getElementById('modelBadgeLabel').textContent = selectedTier ? TIER_LABELS[selectedTier] : 'Auto';
   }
 
-  function buildModelMenuItems() {
+function buildModelMenuItems() {
     if (!plusMenu) return;
-    const existingDivider = plusMenu.querySelector('hr.plus-menu-divider');
+    // FIX: নিজেদের বসানো divider-এও "plus-menu-divider" ক্লাস থাকায় querySelector সেটাকেই
+    // ধরে ফেলত (কারণ এটা মূল static divider-এর আগে বসানো) — ফলে দ্বিতীয়বার এই ফাংশন চললে
+    // existingDivider নিজেদেরই আগের divider-কে পয়েন্ট করত, যেটা নিচের cleanup-এ মুছে যেত,
+    // আর insertBefore(divider, existingDivider) একটা already-removed node ধরে error থ্রো
+    // করত — এতে Auto/Free/Pro/Max পুরো মেনু থেকে উধাও হয়ে যেত। এখন :not(.model-menu-divider)
+    // দিয়ে সবসময় মূল static divider-টাই ধরা হচ্ছে।
+    const existingDivider = plusMenu.querySelector('hr.plus-menu-divider:not(.model-menu-divider)');
     if (!existingDivider) return;
-
     plusMenu.querySelectorAll('.model-item, .model-menu-divider, .model-tier-label').forEach((el) => el.remove());
 
     const divider = document.createElement('hr');
