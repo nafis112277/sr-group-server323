@@ -4717,10 +4717,10 @@ if (bannerCloseBtn) {
   const TIER_MODEL = { free: null, pro: null, max: 'deepseek' };
 
 function isLocked(tier) {
-    // FIX: backend-এ Free আর Pro একই মডেল access পায় (MODEL_ACCESS.free === MODEL_ACCESS.pro),
-    // তাই tier-এর order অনুযায়ী check করি — নিজের plan-এর tier বা তার নিচের tier unlocked,
-    // শুধু উপরের (বেশি দামি) tier লক থাকবে।
-    return TIER_ORDER[tier] > TIER_ORDER[currentPlan];
+    // এখন শুধু নিজের current plan-ই unlocked থাকবে — বাকি সব tier (উপরে বা নিচে যাই হোক)
+    // lock হয়ে যাবে। admin panel-এর Customer table থেকে যে plan সেট করা হবে (Free/Pro/Max),
+    // customer শুধু সেই একটা tier-ই ব্যবহার করতে পারবে, বাকি দুইটা lock দেখাবে।
+    return tier !== currentPlan;
   }
   const plusMenu = document.getElementById('composerPlusMenu');
   const composerRow = document.querySelector('.composer-row');
