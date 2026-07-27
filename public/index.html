@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>KRVOS AI Assistant </title>
+<title>KROVOS AI Assistant</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <!-- Added: jsPDF — শুধুমাত্র নতুন "PDF এ কনভার্ট" ফিচারের জন্য, আগের কোনো কিছুর সাথে সম্পর্ক নেই -->
@@ -1299,7 +1299,7 @@
 <div id="maintenanceOverlay">
   <div class="maintenance-card">
     <div class="mc-icon">⚠️🔧</div>
-    <div class="mc-title">SR Group KROVOS সাময়িকভাবে বন্ধ আছে</div>
+    <div class="mc-title">KROVOS সাময়িকভাবে বন্ধ আছে</div>
     <div class="mc-msg" id="maintenanceMsg"></div>
     <a href="#" id="maintenanceAdminLink" style="display:block; margin-top:18px; font-size:12px; color:var(--text-soft); text-decoration:underline;">Admin access →</a>
   </div>
@@ -1312,9 +1312,9 @@
   <div class="auth-wrap">
     <div class="auth-card">
       <div class="auth-head">
-        <div class="brandmark"><span class="dot"></span> SR Group</div>
+        <div class="brandmark"><span class="dot"></span> KROVOS</div>
         <h1>Welcome back</h1>
-        <p>Sign in to chat with the SR Group assistant.</p>
+        <p>Sign in to chat with the KROVOS assistant.</p>
       </div>
       <div id="loginError"></div>
       <div class="field"><label>Email</label><input id="loginEmail" type="email" placeholder="you@example.com"></div>
@@ -1332,7 +1332,7 @@
   <div class="auth-wrap">
     <div class="auth-card">
       <div class="auth-head">
-        <div class="brandmark"><span class="dot"></span> SR Group</div>
+        <div class="brandmark"><span class="dot"></span> KROVOS</div>
         <h1>Create your account</h1>
         <p>Takes a few seconds.</p>
       </div>
@@ -1355,7 +1355,7 @@
   <div class="auth-wrap">
     <div class="auth-card">
       <div class="auth-head">
-        <div class="brandmark"><span class="dot"></span> SR Group</div>
+        <div class="brandmark"><span class="dot"></span> KROVOS</div>
         <h1>Reset your password</h1>
         <p id="forgotSubtitle">Enter the email on your account.</p>
       </div>
@@ -1383,7 +1383,7 @@
   <div class="auth-wrap">
     <div class="auth-card">
       <div class="auth-head">
-        <div class="brandmark"><span class="dot"></span> SR Group</div>
+        <div class="brandmark"><span class="dot"></span> KROVOS</div>
         <h1>Admin access</h1>
         <p>Sign in with your admin account.</p>
       </div>
@@ -1401,7 +1401,7 @@
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <div class="chat-sidebar" id="chatSidebar">
     <div class="sidebar-top">
-      <div class="brandmark"><span class="dot"></span> SR Group</div>
+      <div class="brandmark"><span class="dot"></span> KROVOS</div>
       <button class="new-chat-btn" id="newChatBtn">+ New chat</button>
     </div>
     <!-- নতুন সংযোজন: পুরনো কথোপকথন খোঁজার সার্চ বার (টাইটেল অনুযায়ী instant filter) -->
@@ -1424,7 +1424,7 @@
     <div class="chat-header">
       <div style="display:flex; align-items:center; gap:10px;">
         <button class="sidebar-toggle-btn" id="sidebarToggleBtn">☰</button>
-        <div class="brandmark"><span class="dot"></span> SR Group Assistant</div>
+        <div class="brandmark"><span class="dot"></span> KROVOS Assistant</div>
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
         <button class="icon-btn" id="openSkillsHeaderBtn" title="Skills">🧩</button>
@@ -1465,6 +1465,9 @@
             <hr class="plus-menu-divider">
             <div class="plus-menu-item" id="menuWebSearch">
               <span class="pmi-icon">🌐</span><span class="pmi-label">Web search</span><span class="pmi-check">✓</span>
+            </div>
+            <div class="plus-menu-item" id="menuMathSolve">
+              <span class="pmi-icon">🧮</span><span class="pmi-label">Math solve</span><span class="pmi-check">✓</span>
             </div>
           </div>
         </div>
@@ -1542,7 +1545,7 @@
 </div>
 
     <div class="modal-section active" id="modalSection-customize">
-      <p class="hint">Tell the assistant how you'd like it to talk to you — e.g. tone you prefer, topics you mostly ask about, reply length. This only applies to your own chats and can never override SR Group's core rules for the assistant.</p>
+      <p class="hint">Tell the assistant how you'd like it to talk to you — e.g. tone you prefer, topics you mostly ask about, reply length. This only applies to your own chats and can never override KROVOS's core rules for the assistant.</p>
       <div id="customizeError"></div>
       <div class="settings-field">
         <label>Your preferences</label>
@@ -1553,7 +1556,7 @@
     </div>
 
     <div class="modal-section" id="modalSection-skills">
-      <p class="hint">Install skills to teach the assistant extra topic knowledge. A skill only activates on a message that contains one of its trigger words — trigger words are required. Skills are saved to your account (works across devices). Anything that looks like malicious code or a rule-breaking instruction is blocked automatically, both here and on the server, and can never override SR Group's core rules.</p>
+      <p class="hint">Install skills to teach the assistant extra topic knowledge. A skill only activates on a message that contains one of its trigger words — trigger words are required. Skills are saved to your account (works across devices). Anything that looks like malicious code or a rule-breaking instruction is blocked automatically, both here and on the server, and can never override KROVOS's core rules.</p>
       <div id="skillsError"></div>
       <div class="skill-list" id="skillList"></div>
 
@@ -1614,7 +1617,7 @@
 <!-- ADMIN DASHBOARD -->
 <div class="screen" id="screen-adminDashboard">
   <div class="admin-top">
-    <div class="brandmark"><span class="dot"></span> SR Group — Admin</div>
+    <div class="brandmark"><span class="dot"></span> KROVOS — Admin</div>
     <div style="display:flex; align-items:center; gap:12px;">
       <span class="who" id="adminWhoami"></span>
       <button class="logout-btn" id="adminLogoutBtn">Exit admin</button>
@@ -1672,7 +1675,7 @@
 
     <div class="admin-panel" id="panel-settings">
       <div class="settings-field">
-        <label>What SR Group does</label>
+        <label>What KROVOS does</label>
         <textarea id="setDesc" placeholder="Describe the business..."></textarea>
       </div>
       <div class="settings-field">
@@ -1936,7 +1939,7 @@ async function switchConversation(id) {
     const log = data.messages || [];
     log.forEach((m) => addMessage(m.role === 'user' ? 'user' : 'bot', m.content, { id: m.id, imageUrl: m.imageUrl }));
     if (log.length === 0) {
-      addMessage('note', "You're chatting with SR Group's AI assistant. It can answer questions about SR Group's services and help with coding requests, but it can't give medical, legal, or financial advice, process payments, or write harmful/malicious content.");
+      addMessage('note', "You're chatting with KROVOS's AI assistant. It can answer questions about KROVOS's services and help with coding requests, but it can't give medical, legal, or financial advice, process payments, or write harmful/malicious content.");
       addMessage('note', 'Say hello to get started.');
     }
   } catch (e) { /* empty/broken conversation view */ }
@@ -2407,7 +2410,7 @@ function toggleShareMenu(wrapEl, msgRecord) {
     nativeItem.innerHTML = '<span class="smi-icon">📱</span><span>More apps…</span>';
     nativeItem.onclick = async () => {
       closeShareMenu();
-      try { await navigator.share({ title: 'SR Group Assistant', text }); } catch (err) { /* ইউজার বাতিল করলে বা অ্যানসাপোর্টেড হলে চুপচাপ ইগনোর */ }
+      try { await navigator.share({ title: 'KROVOS Assistant', text }); } catch (err) { /* ইউজার বাতিল করলে বা অ্যানসাপোর্টেড হলে চুপচাপ ইগনোর */ }
     };
     menu.appendChild(nativeItem);
     const divider0 = document.createElement('hr');
@@ -2418,7 +2421,7 @@ function toggleShareMenu(wrapEl, msgRecord) {
   const quickItems = [
     { icon: '🟢', label: 'WhatsApp', action: () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank') },
     { icon: '✈️', label: 'Telegram', action: () => window.open('https://t.me/share/url?url=&text=' + encodeURIComponent(text), '_blank') },
-    { icon: '✉️', label: 'Email', action: () => { window.location.href = 'mailto:?subject=' + encodeURIComponent('SR Group Assistant — reply') + '&body=' + encodeURIComponent(text); } },
+    { icon: '✉️', label: 'Email', action: () => { window.location.href = 'mailto:?subject=' + encodeURIComponent('KROVOS Assistant — reply') + '&body=' + encodeURIComponent(text); } },
   ];
   quickItems.forEach((it) => {
     const el = document.createElement('div');
@@ -2482,7 +2485,7 @@ function buildMessagePdf(msgRecord) {
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  doc.text('SR Group Assistant', marginX, y);
+  doc.text('KROVOS Assistant', marginX, y);
   y += 16;
 
   doc.setFont('helvetica', 'normal');
@@ -2536,7 +2539,7 @@ async function sharePdfOfMessage(msgRecord) {
     try {
       const file = new File([blob], filename, { type: 'application/pdf' });
       if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'SR Group Assistant' });
+        await navigator.share({ files: [file], title: 'KROVOS Assistant' });
         return;
       }
     } catch (err) {
@@ -5439,6 +5442,171 @@ const policyLinkStyle = document.createElement('style');
   }
 })();
 </script>
+
+<!-- ==================================================================
+     নতুন সংযোজন: "Math Solve" ফিচার
+     - কাস্টমার (ক্লায়েন্ট) প্যানেলে "+" মেনুতে "Math solve" টগল বাটন (HTML-এ আগেই যোগ করা হয়েছে,
+       menuWebSearch এর ঠিক পাশে) — অন করলে অংক প্রশ্নের সাথে একটা ধাপে-ধাপে সমাধানের নির্দেশনা
+       জুড়ে backend-এ পাঠানো হবে, যাতে AI রোবটের মতো একলাফে উত্তর না দিয়ে মানুষ যেভাবে খাতায়
+       লাইন বাই লাইন হিসাব কষে ঠিক সেভাবে সমাধান করে।
+     - এডমিন প্যানেলে নতুন "Math Solve" ট্যাব — শুধুমাত্র এই নির্দেশনার টেমপ্লেট এডিট করার জন্য।
+       এটা browser localStorage-এ সেভ থাকে (এই ফিচারের জন্য আলাদা কোনো backend endpoint নেই),
+       তাই এডমিন আর কাস্টমার একই ব্রাউজার/ডিভাইসে থাকলে সেটিং শেয়ার হবে। এটা অন্য কোনো চ্যাট,
+       system prompt, বা settings-কে স্পর্শ করে না — শুধু Math solve টগল অন থাকলে তবেই কাজ করে।
+     - বিদ্যমান কোনো ফাংশন/লাইন পরিবর্তন করা হয়নি; sendMessage ও sendMessageWithStreaming যেহেতু
+       শেষমেশ window.fetch-ই কল করে, তাই শুধু fetch-কে wrap করে content-এ instruction বসানো হলো।
+     ================================================================== -->
+<script>
+(function () {
+  var MATH_INSTRUCTION_KEY = 'srgroup:mathSolveInstruction';
+  var DEFAULT_MATH_INSTRUCTION =
+"গণিতের যেকোনো সমস্যা রোবটের মতো একলাফে চূড়ান্ত উত্তর দিয়ে দিও না। বরং একজন মানুষ যেভাবে খাতায় ধাপে ধাপে অংক কষে, ঠিক সেভাবেই সমাধান করো:\n" +
+"- প্রতিটি ধাপ আলাদা আলাদা লাইনে লিখবে।\n" +
+"- প্রতিটি লাইনে হিসাবের দুই পাশ সমান (=) চিহ্ন দিয়ে সাজিয়ে দেখাবে, যাতে আগের ধাপ থেকে পরের ধাপে কীভাবে গেল সেটা স্পষ্ট বোঝা যায়।\n" +
+"- মাঝপথে কোনো ধাপ বাদ দিয়ে লাফিয়ে যাবে না, প্রতিটি হিসাব দেখাবে।\n" +
+"- সবগুলো ধাপ দেখানোর পর সবশেষে চূড়ান্ত উত্তরটি আলাদা লাইনে স্পষ্টভাবে উল্লেখ করবে।";
+
+  function getMathInstruction() {
+    try { return localStorage.getItem(MATH_INSTRUCTION_KEY) || DEFAULT_MATH_INSTRUCTION; }
+    catch (e) { return DEFAULT_MATH_INSTRUCTION; }
+  }
+
+  /* ---------------- FIX: গ্লোবাল সিঙ্ক (backend, math_instruction টেবিল) ----------------
+     উদ্দেশ্য পূরণের জন্য এখন backend-ই primary source — এডমিন যেকোনো ডিভাইস থেকে যা সেভ করবে,
+     customer সব ডিভাইসেই সেটা পাবে। localStorage শুধু cache/fallback হিসেবে থেকে যাচ্ছে, যাতে
+     backend fetch ব্যর্থ হলে বা এখনো সিঙ্ক না হলেও ফিচারটা আগের মতোই কাজ করে, কিছু ভাঙে না।
+     getMathInstruction() (উপরে) অপরিবর্তিত রাখা হলো — এটা সবসময় সবচেয়ে সাম্প্রতিক cached
+     value-ই দেয়, শুধু নিচের ফাংশনটা সেই cache-কে backend থেকে refresh করে। ---------------- */
+  async function syncMathInstructionFromServer() {
+    try {
+      var data = await api('/chat/math-instruction', { token: userToken });
+      if (data && typeof data.content === 'string' && data.content.trim()) {
+        localStorage.setItem(MATH_INSTRUCTION_KEY, data.content);
+      }
+    } catch (e) { /* backend থেকে আনা না গেলে localStorage-এ যা আছে (বা default) সেটাই থেকে যাবে */ }
+  }
+  // পেজ লোড হওয়ার সময় একবার সিঙ্ক করার চেষ্টা করি, যাতে টগল অন করার আগেই cache আপ-টু-ডেট থাকে
+  syncMathInstructionFromServer();
+
+  /* ---------------- ক্লায়েন্ট প্যানেল: "+" মেনুর "Math solve" টগল ---------------- */
+  window.mathSolveEnabled = false;
+  var mathMenuItem = document.getElementById('menuMathSolve');
+  if (mathMenuItem) {
+    mathMenuItem.onclick = function (e) {
+      e.stopPropagation();
+      window.mathSolveEnabled = !window.mathSolveEnabled;
+      mathMenuItem.classList.toggle('toggled', window.mathSolveEnabled);
+      // FIX: টগল অন করার সময় আবার backend থেকে সিঙ্ক করার চেষ্টা করি, যাতে এডমিন সম্প্রতি
+      // instruction বদলে থাকলে সেটা এই ডিভাইসেও দ্রুত প্রতিফলিত হয় (best-effort, ব্যর্থ হলেও কিছু ভাঙে না)
+      if (window.mathSolveEnabled) syncMathInstructionFromServer();
+    };
+  }
+
+  /* ---------------- আউটগোয়িং মেসেজে instruction জুড়ে দেওয়া (fetch patch) ----------------
+     শুধু .../chat/conversations/:id/message বা .../message/stream এন্ডপয়েন্টেই কাজ করবে —
+     মেসেজ এডিট/রিজেনারেট/অ্যাডমিন-চ্যাট এন্ডপয়েন্টগুলো অক্ষত থাকবে। */
+  var __srOriginalFetch = window.fetch.bind(window);
+  var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message(\/stream)?$/;
+  window.fetch = function (input, init) {
+    try {
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (window.mathSolveEnabled && MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string') {
+        var payload = JSON.parse(init.body);
+        if (payload && typeof payload.content === 'string' && payload.content.trim()) {
+          payload.content = getMathInstruction() + '\n\nপ্রশ্ন: ' + payload.content;
+          init = Object.assign({}, init, { body: JSON.stringify(payload) });
+        }
+      }
+    } catch (e) { /* কোনো সমস্যা হলে original request-ই পাঠানো হবে, কিছু ভাঙবে না */ }
+    return __srOriginalFetch(input, init);
+  };
+
+  /* ---------------- এডমিন প্যানেল: "Math Solve" নামে নতুন ট্যাব ---------------- */
+  var tabsBar = document.querySelector('.admin-tabs');
+  var adminsBtnRef = document.getElementById('tabBtnAdmins');
+  var mathTabBtn = document.createElement('button');
+  mathTabBtn.className = 'tab-btn';
+  mathTabBtn.id = 'tabBtnMathSolve';
+  mathTabBtn.dataset.tab = 'mathsolve';
+  mathTabBtn.textContent = 'Math Solve';
+  mathTabBtn.style.display = 'none'; // super_admin ছাড়া দেখা যাবে না — নিচে applyAdminRoleUI প্যাচে কন্ট্রোল হয়
+  if (tabsBar) tabsBar.insertBefore(mathTabBtn, adminsBtnRef || null);
+
+  var adminBody = document.querySelector('.admin-body');
+  var mathPanel = document.createElement('div');
+  mathPanel.className = 'admin-panel';
+  mathPanel.id = 'panel-mathsolve';
+  mathPanel.innerHTML =
+    '<div class="settings-field" style="max-width:640px;">' +
+      '<p class="hint" style="color:var(--text-soft); font-size:12.5px; margin:0 0 14px;">' +
+      'কাস্টমার প্যানেলের "+" মেনুতে থাকা "Math solve" টগল অন করলে অংক কীভাবে ধাপে ধাপে সমাধান হবে, ' +
+      'তার নির্দেশনা এখানে ঠিক করে দিন। এটা শুধুমাত্র Math solve টগল অন থাকা অবস্থায় কাজ করবে — অন্য কোনো ' +
+      'চ্যাট বা সেটিংসের সাথে এর কোনো সম্পর্ক নেই।' +
+      '</p>' +
+    '</div>' +
+    '<div class="settings-field">' +
+      '<label>Math solve instruction</label>' +
+      '<textarea id="mathInstructionText" style="min-height:220px;"></textarea>' +
+    '</div>' +
+    '<button class="btn-primary" style="max-width:200px;" id="saveMathInstructionBtn">Save</button>' +
+    '<button class="btn-primary" style="max-width:200px; background:rgba(255,255,255,0.06); margin-left:8px;" id="resetMathInstructionBtn">Reset to default</button>' +
+    '<div class="save-note" id="mathInstructionSaveNote" style="display:none;">Saved.</div>';
+  if (adminBody) adminBody.appendChild(mathPanel);
+
+  function loadMathInstructionPanel() {
+    var ta = document.getElementById('mathInstructionText');
+    if (ta) ta.value = getMathInstruction();
+    // FIX: এডমিন প্যানেল খোলার সময় backend থেকে global instruction টেনে এনে textarea
+    // আপডেট করি (অন্য কোনো ডিভাইস থেকে সেভ করা থাকলেও যেন এখানে সেটাই দেখা যায়)।
+    // ব্যর্থ হলে উপরের local value-ই থেকে যায়, কিছু ভাঙে না।
+    api('/admin/math-instruction', { token: adminToken }).then(function (data) {
+      if (ta && data && typeof data.content === 'string' && data.content.trim()) {
+        localStorage.setItem(MATH_INSTRUCTION_KEY, data.content);
+        ta.value = data.content;
+      }
+    }).catch(function () { /* ignore — local value থেকে যাবে */ });
+  }
+
+  document.getElementById('saveMathInstructionBtn').onclick = function () {
+    var ta = document.getElementById('mathInstructionText');
+    try { localStorage.setItem(MATH_INSTRUCTION_KEY, ta.value); } catch (e) { /* ignore */ }
+    var note = document.getElementById('mathInstructionSaveNote');
+    note.style.display = 'block';
+    setTimeout(function () { note.style.display = 'none'; }, 2000);
+    // FIX: এটাই মূল ফিক্স — backend-এর global math_instruction টেবিলেও সেভ করি, যাতে
+    // অন্য সব কাস্টমার/ডিভাইসে এই instruction পৌঁছায়। ব্যর্থ হলেও local সেভ থেকে যায়, তাই
+    // এই ডিভাইসে/ব্রাউজারে ফিচারটা আগের মতোই কাজ করবে।
+    api('/admin/math-instruction', { method: 'POST', body: { content: ta.value }, token: adminToken })
+      .catch(function (err) { alert('সতর্কতা: এই instruction গ্লোবালি (সব কাস্টমারের জন্য) সেভ করা যায়নি — ' + err.message + '। শুধু এই ব্রাউজারে সেভ হয়েছে।'); });
+  };
+  document.getElementById('resetMathInstructionBtn').onclick = function () {
+    try { localStorage.removeItem(MATH_INSTRUCTION_KEY); } catch (e) { /* ignore */ }
+    // FIX: গ্লোবাল reset — backend-এও ডিফল্ট instruction সেভ করে দিই যাতে সব কাস্টমারের
+    // জন্য একসাথে রিসেট হয়, শুধু এই ব্রাউজারের জন্য না।
+    api('/admin/math-instruction', { method: 'POST', body: { content: DEFAULT_MATH_INSTRUCTION }, token: adminToken })
+      .catch(function () { /* ব্যর্থ হলেও local reset তো হয়েই গেছে */ });
+    loadMathInstructionPanel();
+  };
+
+  mathTabBtn.onclick = function () {
+    if (mathTabBtn.style.display === 'none') return;
+    document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+    mathTabBtn.classList.add('active');
+    document.querySelectorAll('.admin-panel').forEach(function (p) { p.classList.remove('active'); });
+    mathPanel.classList.add('active');
+    loadMathInstructionPanel();
+  };
+
+  // super_admin হলেই ট্যাব দেখাবে — বাকি নতুন ট্যাবগুলোর মতোই applyAdminRoleUI প্যাচ করা হলো
+  if (typeof applyAdminRoleUI === 'function') {
+    var __origForMath = applyAdminRoleUI;
+    applyAdminRoleUI = function () {
+      __origForMath();
+      mathTabBtn.style.display =
+        (typeof adminRole !== 'undefined' && adminRole === 'super_admin') ? '' : 'none';
+    };
+  }
+})();
+</script>
 </body>
 </html>
-
