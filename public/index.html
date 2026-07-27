@@ -5682,5 +5682,173 @@ if (typeof applyAdminRoleUI === 'function') {
   };
 })();
 </script>
+
+<!-- ==================================================================
+     নতুন সংযোজন: Customers ট্যাবে ইমেইল দিয়ে সার্চ + একটা কাস্টমারের
+     সব ডিটেইল দেখানোর মোডাল (Joined, Last signed in, Status, Plan +
+     কবে/কে আপগ্রেড করেছে, Daily limit, Payment due, ID যদি সার্ভার
+     থেকে আসে)। সম্পূর্ণ frontend-only, কোনো backend endpoint বা আগের
+     কোনো লাইন স্পর্শ করা হয়নি।
+     নোট: সার্ভার কখনো signup location/IP বা device তথ্য সংরক্ষণ করে না,
+     তাই এই দুইটা মোডালে "Not tracked by server" হিসেবে দেখাবে — এইটা
+     দেখাতে হলে backend-এ signup/login-এর সময় IP ও user-agent সেভ করার
+     কোড যোগ করতে হবে, যেটা এই ফিচারের আওতার বাইরে।
+     ================================================================== -->
+<script id="sr-added-customer-search">
+(function initCustomerSearchFeature() {
+  var style = document.createElement('style');
+  style.textContent = `
+    #srCustomerSearchWrap{ margin-bottom:16px; max-width:420px; }
+    #srCustomerSearchInput{
+      width:100%; background:var(--panel); border:1px solid var(--border-glass); border-radius:9px;
+      padding:10px 13px; color:var(--text-primary); font-size:13.5px; font-family:'Inter',sans-serif;
+    }
+    #srCustomerSearchInput:focus{ outline:2px solid var(--accent-a); outline-offset:1px; }
+    .srcs-details-link{ color:var(--accent-glow); cursor:pointer; font-size:12.5px; }
+    .srcs-details-link:hover{ text-decoration:underline; }
+    #srCustomerDetailModal{
+      display:none; position:fixed; inset:0; z-index:303; align-items:center; justify-content:center;
+      padding:24px; background:rgba(6,9,15,0.72); backdrop-filter:blur(3px);
+    }
+    #srCustomerDetailModal.show{ display:flex; }
+    .srcs-modal-card{
+      max-width:480px; width:100%; max-height:86vh; overflow-y:auto;
+      background:var(--panel-solid); border:1px solid var(--border-glass);
+      border-radius:18px; padding:26px;
+    }
+    .srcs-modal-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+    .srcs-modal-head div{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:17px; }
+    .srcs-modal-close{ cursor:pointer; color:var(--text-soft); font-size:19px; }
+    .srcs-modal-close:hover{ color:var(--text-primary); }
+    .srcs-row{
+      display:flex; justify-content:space-between; gap:14px; padding:9px 0;
+      border-bottom:1px solid var(--border-glass); font-size:13px;
+    }
+    .srcs-row:last-child{ border-bottom:none; }
+    .srcs-row .srcs-label{ color:var(--text-soft); font-family:'JetBrains Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; flex-shrink:0; }
+    .srcs-row .srcs-value{ color:var(--text-primary); text-align:right; word-break:break-word; }
+    .srcs-value.srcs-muted{ color:var(--text-soft); font-style:italic; }
+  `;
+  document.head.appendChild(style);
+
+  // ---- সার্চ বক্স Customers প্যানেলের উপরে বসানো ----
+  var listWrap = document.getElementById('customerListWrap');
+  var searchWrap = document.createElement('div');
+  searchWrap.id = 'srCustomerSearchWrap';
+  searchWrap.innerHTML = '<input type="text" id="srCustomerSearchInput" placeholder="Search by email or name...">';
+  if (listWrap && listWrap.parentNode) {
+    listWrap.parentNode.insertBefore(searchWrap, listWrap);
+  }
+
+  // ---- মোডাল DOM (একবারই তৈরি হয়, খালি থাকে যতক্ষণ না খোলা হয়) ----
+  var modal = document.createElement('div');
+  modal.id = 'srCustomerDetailModal';
+  modal.innerHTML =
+    '<div class="srcs-modal-card">' +
+      '<div class="srcs-modal-head"><div>Customer details</div><span class="srcs-modal-close" id="srcsModalCloseBtn">✕</span></div>' +
+      '<div id="srcsModalBody"></div>' +
+    '</div>';
+  document.body.appendChild(modal);
+  document.getElementById('srcsModalCloseBtn').onclick = function () { modal.classList.remove('show'); };
+  modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.remove('show'); });
+
+  // ---- সবশেষ /admin/customers রেসপন্স ক্যাশে রাখি, যাতে মোডালে সব ফিল্ড দেখানো যায় ----
+  var customerCache = [];
+
+  function getPlanHistoryFor(email) {
+    try {
+      var h = JSON.parse(localStorage.getItem('srgroup:planHistory') || '{}');
+      return h[email] || null;
+    } catch (e) { return null; }
+  }
+  var PLAN_LABELS = { free: 'Free', pro: 'Pro', max: 'Max' };
+  function formatDateTime(iso) {
+    if (!iso) return null;
+    try {
+      var d = new Date(iso);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return iso; }
+  }
+
+  function buildRow(label, value, muted) {
+    return '<div class="srcs-row"><span class="srcs-label">' + escapeHtml(label) + '</span>' +
+      '<span class="srcs-value' + (muted ? ' srcs-muted' : '') + '">' + value + '</span></div>';
+  }
+
+  function openDetailModal(email) {
+    var u = customerCache.find(function (c) { return c.email === email; });
+    var body = document.getElementById('srcsModalBody');
+    if (!u) {
+      body.innerHTML = '<div class="empty-state">Could not find this customer\'s details.</div>';
+      modal.classList.add('show');
+      return;
+    }
+    var planHist = getPlanHistoryFor(u.email);
+    var planHistText = planHist
+      ? (PLAN_LABELS[planHist.plan] || planHist.plan) + ' — ' + escapeHtml(planHist.changedBy) + ' · ' + formatDateTime(planHist.changedAt)
+      : null;
+
+    var html = '';
+    html += buildRow('Name', escapeHtml(u.name || '—'));
+    html += buildRow('Email', escapeHtml(u.email || '—'));
+    html += buildRow('Account ID', u.id != null ? escapeHtml(String(u.id)) : 'Not returned by server', u.id == null);
+    html += buildRow('Joined', u.createdAt ? formatDateTime(u.createdAt) : '—');
+    html += buildRow('Last signed in', u.lastLoginAt ? formatDateTime(u.lastLoginAt) : 'Never (signed up only)', !u.lastLoginAt);
+    html += buildRow('Status', u.blocked ? 'Blocked' : 'Active');
+    html += buildRow('Current plan', PLAN_LABELS[u.plan || 'free'] || u.plan);
+    html += buildRow('Plan last changed', planHistText || 'No record (either always been this plan, or changed before this tracking was added)', !planHistText);
+    html += buildRow('Daily message limit', (u.dailyLimit !== null && u.dailyLimit !== undefined) ? u.dailyLimit : 'Default (global setting)');
+    html += buildRow('Payment due date', u.paymentDueDate ? new Date(u.paymentDueDate).toLocaleDateString() : '—');
+    html += buildRow('Signup location / IP', 'Not tracked by server', true);
+    html += buildRow('Signup device', 'Not tracked by server', true);
+
+    body.innerHTML = html;
+    modal.classList.add('show');
+  }
+
+  // ---- সার্চ ইনপুট: টাইপ করলেই টেবিলের row filter হবে (row-গুলোতে আগে থেকেই data-email আছে) ----
+  var searchInput = document.getElementById('srCustomerSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', function () {
+      var q = searchInput.value.trim().toLowerCase();
+      document.querySelectorAll('#customerListWrap tbody tr').forEach(function (tr) {
+        var text = tr.textContent.toLowerCase();
+        tr.style.display = (!q || text.indexOf(q) !== -1) ? '' : 'none';
+      });
+    });
+  }
+
+  // ---- প্রতিটা row-এ "Details" লিংক যোগ করা + customerCache আপডেট রাখা ----
+  // loadCustomerList আবার wrap করা হলো (আগের কোনো ফাংশন/লজিক স্পর্শ না করে) — টেবিল রিফ্রেশ
+  // হওয়ার পরই এখানে আসল ডেটা (সব ফিল্ড সহ) আবার fetch করে cache আপডেট হয় এবং প্রতিটা
+  // Email cell-এর নিচে একটা "🔍 Details" লিংক বসানো হয়।
+  var __originalLoadCustomerListForSearch = loadCustomerList;
+  loadCustomerList = async function () {
+    await __originalLoadCustomerListForSearch();
+    try {
+      var data = await api('/admin/customers', { token: adminToken });
+      customerCache = data.customers || [];
+    } catch (e) { /* fetch ব্যর্থ হলেও পুরনো cache থেকে যাবে, মোডাল কাজ করতে থাকবে */ }
+
+    document.querySelectorAll('#customerListWrap tbody tr').forEach(function (tr) {
+      var email = tr.dataset.email;
+      if (!email) return;
+      var emailCell = tr.children[1];
+      if (!emailCell || emailCell.querySelector('.srcs-details-link')) return;
+      var link = document.createElement('div');
+      link.className = 'srcs-details-link';
+      link.style.marginTop = '3px';
+      link.textContent = '🔍 Details';
+      link.onclick = function () { openDetailModal(email); };
+      emailCell.appendChild(link);
+    });
+
+    // সার্চ বক্সে যদি আগে থেকে কিছু টাইপ করা থাকে (ট্যাব বদলে ফিরে আসার পর), সেই filter আবার apply করি
+    if (searchInput && searchInput.value.trim()) {
+      searchInput.dispatchEvent(new Event('input'));
+    }
+  };
+})();
+</script>
 </body>
 </html>
