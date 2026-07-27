@@ -5598,7 +5598,7 @@ const policyLinkStyle = document.createElement('style');
   };
 
   // super_admin হলেই ট্যাব দেখাবে — বাকি নতুন ট্যাবগুলোর মতোই applyAdminRoleUI প্যাচ করা হলো
-  if (typeof applyAdminRoleUI === 'function') {
+if (typeof applyAdminRoleUI === 'function') {
     var __origForMath = applyAdminRoleUI;
     applyAdminRoleUI = function () {
       __origForMath();
@@ -5606,6 +5606,80 @@ const policyLinkStyle = document.createElement('style');
         (typeof adminRole !== 'undefined' && adminRole === 'super_admin') ? '' : 'none';
     };
   }
+})();
+</script>
+
+<!-- ==================================================================
+     নতুন সংযোজন: কোন অ্যাডমিন কোন কাস্টমারকে কবে কোন প্ল্যান দিয়েছে —
+     সেটা Customers টেবিলে ইমেইলের নিচে ছোট নোট হিসেবে দেখানো।
+     সম্পূর্ণ frontend-only (localStorage-ভিত্তিক), কোনো backend endpoint লাগে না,
+     আগের কোনো কোড স্পর্শ করা হয়নি। শুধু এখন থেকে যেসব প্ল্যান পরিবর্তন হবে
+     সেগুলোর সময়/অ্যাডমিন-নাম রেকর্ড হবে — আগে থেকে সেট করা প্ল্যানের কোনো
+     ইতিহাস নেই বলে সেগুলোর জন্য কোনো নোট দেখাবে না। এই history শুধু এই
+     browser/device-এই থাকে (localStorage), অন্য ডিভাইসে আলাদা।
+     ================================================================== -->
+<script id="sr-added-plan-history">
+(function initPlanHistoryFeature() {
+  var PLAN_LABELS = { free: 'Free', pro: 'Pro', max: 'Max' };
+  var STORAGE_KEY = 'srgroup:planHistory';
+
+  function loadHistory() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+    catch (e) { return {}; }
+  }
+  function saveHistory(h) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(h)); } catch (e) { /* ignore */ }
+  }
+  function formatDate(iso) {
+    try {
+      var d = new Date(iso);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return iso; }
+  }
+
+  // plan-select বদলালে original onchange handler-এর পাশাপাশি এই listener-ও চলবে (দুটোই coexist করে,
+  // একে অপরকে override করে না) — শুধু কে/কবে/কী প্ল্যান দিলো সেটা রেকর্ড করে।
+  document.addEventListener('change', function (e) {
+    var sel = e.target.closest('.plan-select');
+    if (!sel) return;
+    var history = loadHistory();
+    history[sel.dataset.email] = {
+      plan: sel.value,
+      changedAt: new Date().toISOString(),
+      changedBy: (typeof adminName !== 'undefined' && adminName) ? adminName : 'Admin',
+    };
+    saveHistory(history);
+    setTimeout(function () { renderPlanNoteForRow(sel); }, 50);
+  }, true);
+
+  function renderPlanNoteForRow(sel) {
+    var row = sel.closest('tr');
+    if (!row) return;
+    var emailCell = row.children[1]; // Name, Email — index 1 = Email column
+    if (!emailCell) return;
+    var existing = emailCell.querySelector('.srph-note');
+    if (existing) existing.remove();
+    var history = loadHistory();
+    var rec = history[sel.dataset.email];
+    if (!rec) return;
+    var note = document.createElement('div');
+    note.className = 'srph-note';
+    note.style.cssText = 'font-size:10.5px; color:var(--accent-glow); margin-top:3px; font-family:"JetBrains Mono",monospace;';
+    note.textContent = (PLAN_LABELS[rec.plan] || rec.plan) + ' প্ল্যান দিয়েছেন ' + rec.changedBy + ' · ' + formatDate(rec.changedAt);
+    emailCell.appendChild(note);
+  }
+
+  // Customers টেবিল রিফ্রেশ হওয়ার পর সব row-তে নোট আবার বসিয়ে দিই (loadCustomerList
+  // ইতিমধ্যে অন্য স্ক্রিপ্ট দিয়ে override হয়ে থাকলেও, সেই সর্বশেষ ভার্সনটাই এখানে wrap হচ্ছে)
+  var __originalLoadCustomerListForPlanHistory = loadCustomerList;
+  loadCustomerList = async function () {
+    await __originalLoadCustomerListForPlanHistory();
+    setTimeout(function () {
+      document.querySelectorAll('.plan-select').forEach(function (sel) {
+        renderPlanNoteForRow(sel);
+      });
+    }, 30);
+  };
 })();
 </script>
 </body>
