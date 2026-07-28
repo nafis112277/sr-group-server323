@@ -1438,7 +1438,8 @@
         <button class="sidebar-toggle-btn" id="sidebarToggleBtn">☰</button>
         <div class="brandmark"><span class="dot"></span> KROVOS Assistant</div>
       </div>
-      <div style="display:flex; align-items:center; gap:10px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <button class="icon-btn" id="openDesignModeBtn" title="Design">🎨</button>
         <button class="icon-btn" id="openSkillsHeaderBtn" title="Skills">🧩</button>
         <!-- নতুন সংযোজন: হেডারেও একটা সার্চ আইকন — ট্যাপ করলে সাইডবার খুলে সরাসরি সার্চ বক্সে
              ফোকাস করে দেয়, যাতে ইউজারকে হ্যামবার্গার মেনুতে গিয়ে খুঁজতে না হয় -->
@@ -5950,6 +5951,58 @@ if (typeof applyAdminRoleUI === 'function') {
   };
 })();
 </script>
+
+<script id="sr-added-design-mode-feature">
+(function () {
+  var DESIGN_INSTRUCTION =
+"তুমি এখন একজন প্রোডাক্ট ডিজাইনার হিসেবে কাজ করবে। ইউজার যা ডিজাইন করতে চায় (ওয়েবসাইট সেকশন, ল্যান্ডিং পেজ, UI কম্পোনেন্ট, মকআপ, প্রোটোটাইপ ইত্যাদি) সেটার জন্য একটা সম্পূর্ণ, স্বয়ংসম্পূর্ণ HTML ফাইল বানিয়ে দিবে যেখানে সব CSS একই ফাইলের ভিতরে <style> ট্যাগে থাকবে (বাইরের কোনো ফাইল লাগবে না)।\n\n" +
+"নির্দেশনা:\n" +
+"- আধুনিক, পরিষ্কার, visually আকর্ষণীয় ডিজাইন — জেনেরিক টেমপ্লেট মনে না হয়।\n" +
+"- Responsive হতে হবে (মোবাইল ও ডেস্কটপ দুই জায়গাতেই ঠিকঠাক দেখাবে)।\n" +
+"- সম্পূর্ণ কোডটা একটা মাত্র ```html ফেন্সড কোড ব্লকে দিবে, যাতে এটা সরাসরি রান করে প্রিভিউ দেখা যায়।\n" +
+"- কোড দেওয়ার আগে ২-৩ লাইনে সংক্ষেপে বলবে কী ডিজাইন করেছ এবং কেন এই পছন্দগুলো করেছ (কালার, লেআউট ইত্যাদি)।\n" +
+"- ইউজার কোনো নির্দিষ্ট স্টাইল/রঙ/ব্র্যান্ড না বললে, নিজের সেরা judgment ব্যবহার করে একটা professional ডিজাইন বানাবে, প্রশ্ন করে সময় নষ্ট করবে না।";
+
+  window.designModeActive = false;
+
+  var btn = document.getElementById('openDesignModeBtn');
+  var input = document.getElementById('userInput');
+  if (!btn) return;
+
+  function setDesignMode(active) {
+    window.designModeActive = active;
+    btn.style.color = active ? 'var(--accent-glow)' : '';
+    btn.style.borderColor = active ? 'var(--accent-glow)' : '';
+    btn.title = active ? 'Design mode: ON (click to turn off)' : 'Design';
+    if (input) {
+      input.placeholder = active ? 'Describe what you want to design...' : 'Type a message...';
+    }
+  }
+
+  btn.onclick = function () {
+    setDesignMode(!window.designModeActive);
+    if (window.designModeActive && input) input.focus();
+  };
+
+  // মেসেজ পাঠানোর পর design mode অটো-অফ হয়ে যায় (এক-বারের জন্য), যাতে পরের normal মেসেজে
+  // ভুল করে instruction জুড়ে না যায় — ঠিক Web Search টগলের মতো persistent না রেখে one-shot রাখা হলো
+  var __srOriginalFetchForDesign = window.fetch.bind(window);
+  var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message(\/stream)?$/;
+  window.fetch = function (fetchInput, init) {
+    try {
+      var url = typeof fetchInput === 'string' ? fetchInput : (fetchInput && fetchInput.url) || '';
+      if (window.designModeActive && MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string') {
+        var payload = JSON.parse(init.body);
+        if (payload && typeof payload.content === 'string' && payload.content.trim()) {
+          payload.content = DESIGN_INSTRUCTION + '\n\nডিজাইন রিকোয়েস্ট: ' + payload.content;
+          init = Object.assign({}, init, { body: JSON.stringify(payload) });
+        }
+        setDesignMode(false);
+      }
+    } catch (e) { /* silent fallback */ }
+    return __srOriginalFetchForDesign(fetchInput, init);
+  };
+})();
+</script>
 </body>
 </html>
-   
