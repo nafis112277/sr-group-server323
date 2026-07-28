@@ -344,10 +344,22 @@
     padding:13px 15px; color:var(--text-primary); font-size:14.5px;
   }
   .composer-row input[type="text"]:focus{ outline:2px solid var(--accent-a); outline-offset:1px; }
-  .composer-row button.send-btn{
+ .composer-row button.send-btn{
     background:linear-gradient(135deg, var(--accent-a), var(--accent-b)); border:none; border-radius:10px;
     color:#fff; padding:0 22px; height:44px; font-weight:600; cursor:pointer;
   }
+  .powered-by-badge{
+    display:flex; align-items:center; justify-content:center; gap:5px;
+    margin-top:8px; font-size:10.5px; color:var(--text-soft);
+    font-family:'JetBrains Mono', monospace; letter-spacing:0.02em;
+    opacity:0.65; user-select:none;
+  }
+  .powered-by-badge .pb-dot{
+    width:5px; height:5px; border-radius:50%;
+    background:linear-gradient(135deg, var(--accent-a), var(--accent-b));
+    flex-shrink:0;
+  }
+  .powered-by-badge .pb-model{ color:var(--text-primary); font-weight:600; opacity:0.85; }
   .attach-btn{
     background:var(--panel); border:1px solid var(--border-glass); color:var(--text-soft);
     border-radius:10px; width:44px; height:44px; min-width:44px; font-size:18px; cursor:pointer;
@@ -1487,13 +1499,16 @@
           <span class="mic-wave"></span>
           <span id="micIcon">🎤</span>
         </button>
-        <input id="userInput" type="text" placeholder="Type a message...">
+     <input id="userInput" type="text" placeholder="Type a message...">
         <button class="send-btn" id="sendBtn">Send</button>
+      </div>
+      <div class="powered-by-badge">
+        <span class="pb-dot"></span><span>Powered by <span class="pb-model">Nova1</span></span>
       </div>
     </div>
   </div>
 
-  <div class="artifact-backdrop" id="artifactBackdrop"></div>
+  <div class="artifact-backdrop" id="artifactBackdrop"></div>  
   <div class="artifact-panel" id="artifactPanel">
     <div class="artifact-panel-header">
       <span class="lang-label" id="artifactLangLabel">code</span>
