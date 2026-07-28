@@ -1464,12 +1464,19 @@
 </div>
       <div class="composer-attachments" id="composerAttachments"></div>
       <div class="composer-row">
-        <input type="file" id="imageFileInput" accept="image/*" style="display:none;">
+<input type="file" id="imageFileInput" accept="image/*" style="display:none;">
+        <input type="file" id="codeFileInput" accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.php,.rb,.go,.rs,.html,.css,.json,.sql,.txt,.md" style="display:none;">
         <div class="plus-menu-wrap">
           <button class="attach-btn" id="composerPlusBtn" type="button" title="Add">+</button>
           <div class="plus-menu" id="composerPlusMenu">
             <div class="plus-menu-item" id="menuAddPhoto">
               <span class="pmi-icon">📷</span><span class="pmi-label">Add photo</span>
+            </div>
+            <div class="plus-menu-item" id="menuAddCode">
+              <span class="pmi-icon">📄</span><span class="pmi-label">Attach code file</span>
+            </div>
+            <div class="plus-menu-item" id="menuCodeReview">
+              <span class="pmi-icon">🔍</span><span class="pmi-label">Code Review mode</span><span class="pmi-check">✓</span>
             </div>
             <div class="plus-menu-item" id="menuOpenSkills">
               <span class="pmi-icon">🧩</span><span class="pmi-label">Skills</span>
@@ -5857,13 +5864,92 @@ if (typeof applyAdminRoleUI === 'function') {
       link.onclick = function () { openDetailModal(email); };
       emailCell.appendChild(link);
     });
-
-    // সার্চ বক্সে যদি আগে থেকে কিছু টাইপ করা থাকে (ট্যাব বদলে ফিরে আসার পর), সেই filter আবার apply করি
+// সার্চ বক্সে যদি আগে থেকে কিছু টাইপ করা থাকে (ট্যাব বদলে ফিরে আসার পর), সেই filter আবার apply করি
     if (searchInput && searchInput.value.trim()) {
       searchInput.dispatchEvent(new Event('input'));
     }
   };
 })();
 </script>
+
+<script id="sr-added-code-review-feature">
+(function () {
+  window.codeReviewEnabled = false;
+  var pendingCodeFile = null; // { name, content }
+
+  var CODE_REVIEW_INSTRUCTION =
+"তুমি এখন একজন সিনিয়র কোড রিভিউয়ার হিসেবে কাজ করবে। ইউজার যে কোড দিবে (৩০০০ লাইন পর্যন্ত হতে পারে), সেটা পুরোপুরি স্ক্যান করে নিচের ফরম্যাটে রিপোর্ট দিবে:\n\n" +
+"১) সংক্ষিপ্ত সারাংশ — কোড কী করে, overall quality কেমন।\n" +
+"২) বাগ/এরর লিস্ট — প্রতিটার জন্য: লাইন নম্বর (approximate), সমস্যা কী, কেন এটা bug/error।\n" +
+"৩) প্রতিটা fix-এর জন্য FIND এবং REPLACE কোড ব্লক আলাদা করে দিবে, ঠিক এভাবে:\n\n" +
+"**FIND:**\n```\n[exact existing code snippet]\n```\n\n**REPLACE WITH:**\n```\n[fixed code snippet]\n```\n\n" +
+"৪) কোনো bug না পেলে সেটাও স্পষ্টভাবে বলবে, কল্পনা করে সমস্যা বানাবে না।\n" +
+"৫) কোড অনেক বড় হলে, সবচেয়ে গুরুত্বপূর্ণ (crash/security/logic-breaking) বাগ আগে দেখাবে, ছোটখাটো style issue শেষে।";
+
+  var menuCodeReview = document.getElementById('menuCodeReview');
+  if (menuCodeReview) {
+    menuCodeReview.onclick = function (e) {
+      e.stopPropagation();
+      window.codeReviewEnabled = !window.codeReviewEnabled;
+      menuCodeReview.classList.toggle('toggled', window.codeReviewEnabled);
+    };
+  }
+
+  var menuAddCode = document.getElementById('menuAddCode');
+  var codeFileInput = document.getElementById('codeFileInput');
+  if (menuAddCode && codeFileInput) {
+    menuAddCode.onclick = function () {
+      if (typeof togglePlusMenu === 'function') togglePlusMenu(false);
+      codeFileInput.click();
+    };
+    codeFileInput.onchange = function (e) {
+      var file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) { alert('ফাইল অনেক বড় (max 2MB)।'); return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        pendingCodeFile = { name: file.name, content: reader.result };
+        var wrap = document.getElementById('composerAttachments');
+        wrap.classList.add('show');
+        var thumb = document.createElement('div');
+        thumb.style.cssText = 'display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--border-glass); border-radius:9px; padding:8px 12px; font-size:12.5px; color:var(--text-primary);';
+        thumb.innerHTML = '<span>📄 ' + file.name + '</span>';
+        var removeBtn = document.createElement('button');
+        removeBtn.textContent = '✕';
+        removeBtn.style.cssText = 'background:none; border:none; color:var(--text-soft); cursor:pointer; font-size:12px;';
+        removeBtn.onclick = function () { pendingCodeFile = null; thumb.remove(); if (!wrap.children.length) wrap.classList.remove('show'); };
+        thumb.appendChild(removeBtn);
+        wrap.appendChild(thumb);
+      };
+      reader.readAsText(file);
+    };
+  }
+
+  // আউটগোয়িং মেসেজে code review instruction + attached code জুড়ে দেওয়া
+  var __srOriginalFetchForCodeReview = window.fetch.bind(window);
+  var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message(\/stream)?$/;
+  window.fetch = function (input, init) {
+    try {
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string') {
+        var payload = JSON.parse(init.body);
+        if (payload && typeof payload.content === 'string') {
+          if (pendingCodeFile) {
+            payload.content = payload.content + '\n\n--- Attached file: ' + pendingCodeFile.name + ' ---\n```\n' + pendingCodeFile.content + '\n```';
+            pendingCodeFile = null;
+          }
+          if (window.codeReviewEnabled && payload.content.trim()) {
+            payload.content = CODE_REVIEW_INSTRUCTION + '\n\n' + payload.content;
+          }
+          init = Object.assign({}, init, { body: JSON.stringify(payload) });
+        }
+      }
+    } catch (e) { /* silent fallback */ }
+    return __srOriginalFetchForCodeReview(input, init);
+  };
+})();
+</script>
 </body>
 </html>
+   
