@@ -2,6 +2,7 @@ import { callGemini } from './providers/gemini.js';
 import { callOpenAI } from './providers/openai.js';
 import { callAnthropicAI } from './providers/anthropic.js';
 import { callGroq } from './providers/groq.js';
+import { callLocal } from './providers/local.js';
 import { callDeepSeek } from './providers/deepseek.js';
 
 const PROVIDERS = {
