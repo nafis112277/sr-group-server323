@@ -11,6 +11,7 @@ const PROVIDERS = {
   anthropic: callAnthropicAI,
   groq: callGroq,
   deepseek: callDeepSeek,
+  local: callLocal,
 };
 
 // কোন provider আগে ট্রাই হবে, কমা দিয়ে .env-এ সেট করা যায়:
