@@ -12,6 +12,11 @@ The model loads once at startup (module import time) and is shared across
 requests. Conversation history is persisted via memory/store.py (SQLite),
 one browser session = one conversation_id (kept client-side in the page,
 sent back with every request).
+
+/api/generate — stateless endpoint used by an external backend (e.g. the
+Node.js sr-group-server323 chatbot) that already manages its own system
+prompt and conversation history. It bypasses persona.yaml and the SQLite
+store entirely — the caller sends the full message list every time.
 """
 
 from __future__ import annotations
@@ -59,6 +64,36 @@ def chat(req: ChatRequest) -> ChatResponse:
 def reset() -> ChatResponse:
     conversation_id = _store.create_conversation()
     return ChatResponse(reply="", conversation_id=conversation_id)
+
+
+# ------------------------------------------------------------------
+# /api/generate — externa Node.js backend (sr-group-server323) এর জন্য।
+# এটা _engine.chat()/persona.yaml/SQLite store কিছুই ব্যবহার করে না —
+# caller নিজেই system prompt + পুরো message history পাঠায়, এটা শুধু
+# একবার model কল করে reply ফেরত দেয় (stateless, অন্য provider যেমন
+# gemini/deepseek কাজ করে ঠিক সেভাবেই)।
+# ------------------------------------------------------------------
+class GenerateRequest(BaseModel):
+    system: str
+    messages: list[dict]  # [{"role": "user"/"assistant", "content": "..."}, ...]
+
+
+class GenerateResponse(BaseModel):
+    text: str
+
+
+@app.post("/api/generate", response_model=GenerateResponse)
+def generate(req: GenerateRequest) -> GenerateResponse:
+    messages = [{"role": "system", "content": req.system}]
+    messages.extend({"role": m["role"], "content": m["content"]} for m in req.messages)
+
+    result = _engine.llm.create_chat_completion(
+        messages=messages,
+        temperature=_engine.temperature,
+        max_tokens=_engine.max_new_tokens,
+    )
+    text = result["choices"][0]["message"]["content"]
+    return GenerateResponse(text=text)
 
 
 _PAGE = """<!DOCTYPE html>
