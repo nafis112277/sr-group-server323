@@ -1,0 +1,17 @@
+# local-ai-assistant — sample config
+# আসল ব্যবহারের জন্য এই ফাইল কপি করে config.yaml বানাও, তারপর ভ্যালু বসাও।
+
+model:
+  backend: "llama.cpp"        # llama.cpp | ollama
+  path: "./models/model.gguf" # quantized GGUF মডেলের path
+  context_size: 4096
+  threads: 4                  # nproc অনুযায়ী বসাও
+  temperature: 0.6
+
+memory:
+  vector_store: "sqlite"       # এখন memory/store.py-এর plain SQLite ব্যবহার হয়
+  storage_path: "./data/memory.db"
+
+server:
+  host: "127.0.0.1"
+  port: 8000

@@ -1,0 +1,26 @@
+# local-ai-assistant — pinned dependencies (CPU-only, no CUDA)
+# ইনস্টল: bash setup_venv.sh  (অথবা: pip install -r requirements.txt)
+#
+# নোট (গুরুত্বপূর্ণ পরিবর্তন): chromadb ও sentence-transformers বাদ দেওয়া হয়েছে।
+# কোডের কোথাও এগুলো আসলে ব্যবহার হচ্ছিল না, আর sentence-transformers নিজের সাথে
+# torch (~800MB-2GB) টেনে নিয়ে আসত — এই দুইটাই ছিল আসল স্পেস-খেকো, model file না।
+# বাদ দেওয়ায় পুরো venv এখন ~100-200MB (আগে ছিল কয়েক GB)। মেমরি (conversation
+# history + facts) memory/store.py-এর plain SQLite দিয়েই হয়, কোনো vector DB লাগে না।
+#
+# নোট: llama-cpp-python এর wheel নিজে নিজে সোর্স থেকে বিল্ড হতে পারে।
+# setup_venv.sh CMAKE_ARGS="-DGGML_CUDA=off -DGGML_METAL=off" সেট করে
+# রাখে যাতে ভুলে GPU ব্যাকএন্ড বিল্ড না হয়।
+
+llama-cpp-python==0.3.34
+fastapi==0.141.1
+uvicorn==0.52.0
+pydantic==2.13.4
+python-dotenv==1.2.2
+rich==15.0.0
+pyyaml==6.0.2
+
+# টেস্টের জন্য (make test)
+pytest==8.4.2
+
+# মডেল ডাউনলোডের জন্য (download_model.sh এ hf CLI ব্যবহার হয়)
+huggingface_hub[cli]==1.26.0

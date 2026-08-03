@@ -1,0 +1,24 @@
+# local-ai-assistant — active config
+# নির্বাচিত মডেল: Qwen2.5-1.5B-Instruct GGUF (Q4_K_M) — মোট ফুটপ্রিন্ট ~1GB এর
+# টার্গেটে রাখার জন্য বেছে নেওয়া হয়েছে (14B এর বদলে)। ছাত্রছাত্রীদের সাধারণ
+# বিষয় (science/arts/commerce) প্রশ্ন আর basic-to-medium কোডিং হেল্পের জন্য
+# এই সাইজে Qwen2.5 সিরিজ সবচেয়ে ভালো পারফর্ম করে — তবে 14B এর মতো গভীর
+# reasoning/knowledge আশা করা যাবে না, এটা একটা ছোট, হালকা, পুরোপুরি লোকাল মডেল।
+
+model:
+  backend: "llama.cpp"
+  path: "./models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"
+  context_size: 4096       # ছোট মডেল, কম RAM লাগে — 4096 বেশিরভাগ কথোপকথন/কোডের জন্য যথেষ্ট
+  threads: 4                # নিয়ম: (nproc) - 2, কম কোরেও এই সাইজ মডেল ভালো চলে
+                            # `nproc` চালিয়ে নিজের কোর সংখ্যা দেখে ঠিক করো
+  temperature: 0.6          # সাধারণ প্রশ্নোত্তর/reasoning এর জন্য একটু কম রাখা হয়েছে,
+                            # ছোট মডেল বেশি temperature-এ এলোমেলো উত্তর দিতে পারে
+                            # কোডিং টাস্কে 0.2 ব্যবহার করলে আরও consistent output পাবে
+
+memory:
+  vector_store: "sqlite"   # আগে chroma ছিল, এখন memory/store.py-এর plain SQLite ব্যবহার হয়
+  storage_path: "./data/memory.db"
+
+server:
+  host: "127.0.0.1"
+  port: 8000
