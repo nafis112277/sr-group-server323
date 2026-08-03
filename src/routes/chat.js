@@ -134,9 +134,9 @@ const PLAN_LIMITS = {
 // Kon plan-e kon model access pabe. Ei list frontend-e o pathano hobe (GET /available-models),
 // jate composer-er "+" menu-te shothik model dekhano jay (lock/unlock soho).
 const MODEL_ACCESS = {
-  free: ['gemini', 'groq'],
-  pro: ['gemini', 'groq'],
-  max: ['gemini', 'groq', 'deepseek'],
+  free: ['gemini', 'groq', 'local'],
+  pro: ['gemini', 'groq', 'local'],
+  max: ['gemini', 'groq', 'deepseek', 'local'],
 };
 
 // UI-te dekhanor jonno display info
@@ -144,6 +144,7 @@ const MODEL_INFO = {
   gemini: { label: 'Gemini' },
   groq: { label: 'Groq' },
   deepseek: { label: 'DeepSeek' },
+  local: { label: 'Local AI (offline)' },
 };
 
 function isModelAllowed(plan, modelName) {
