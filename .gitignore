@@ -3,3 +3,8 @@ node_modules/
 data.sqlite
 data.sqlite-*
 *.log
+local-ai/.venv/
+local-ai/models/*.gguf
+local-ai/data/*.db
+local-ai/__pycache__/
+local-ai/**/__pycache__/
