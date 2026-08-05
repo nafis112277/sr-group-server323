@@ -1,3 +1,4 @@
+console.log("✅ LOCAL.JS LOADED");
 // providers/local.js
 //
 // Ei provider kono external API/key chara chole — Node.js process-er bhetorei
