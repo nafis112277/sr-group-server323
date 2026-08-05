@@ -1,126 +1,86 @@
-// File: routes/ai.js
-// Add this to your sr-group-server backend
-// No external API keys needed - uses Anthropic API internally
+import { callGemini } from './providers/gemini.js';
+import { callOpenAI } from './providers/openai.js';
+import { callAnthropicAI } from './providers/anthropic.js';
+import { callGroq } from './providers/groq.js';
+import { callLocal } from './providers/local.js';
+import { callDeepSeek } from './providers/deepseek.js';
 
-const express = require('express');
-const router = express.Router();
+const PROVIDERS = {
+  gemini: callGemini,
+  openai: callOpenAI,
+  anthropic: callAnthropicAI,
+  groq: callGroq,
+  deepseek: callDeepSeek,
+  local: callLocal,
+};
 
-// In-memory chat history (optional - use MongoDB if you want persistence)
-const chatSessions = new Map();
-
-/**
- * POST /api/ai/chat
- * Self-hosted AI endpoint without exposing API keys
- * 
- * Request body:
- * {
- *   "prompt": "user question here",
- *   "sessionId": "optional - for multi-turn conversations"
- * }
- * 
- * Response:
- * {
- *   "response": "AI answer here",
- *   "sessionId": "conversation session ID"
- * }
- */
-router.post('/chat', async (req, res) => {
-    try {
-        const { prompt, sessionId } = req.body;
-
-        // Validate input
-        if (!prompt || prompt.trim().length === 0) {
-            return res.status(400).json({
-                error: 'Prompt is required'
-            });
-        }
-
-        // Get or create session
-        const id = sessionId || `session-${Date.now()}`;
-        
-        if (!chatSessions.has(id)) {
-            chatSessions.set(id, []);
-        }
-
-        const history = chatSessions.get(id);
-
-        // Build messages with history
-        const messages = [
-            ...history,
-            { role: 'user', content: prompt }
-        ];
-
-        // Call Anthropic API (backend only - no client exposure)
-        const response = await callAnthropicAPI(messages);
-
-        // Store in history
-        history.push({ role: 'user', content: prompt });
-        history.push({ role: 'assistant', content: response });
-
-        // Keep history reasonable size (last 20 messages)
-        if (history.length > 20) {
-            history.shift();
-            history.shift();
-        }
-
-        res.json({
-            response: response,
-            sessionId: id
-        });
-
-    } catch (error) {
-        console.error('AI Chat Error:', error);
-        res.status(500).json({
-            error: 'Failed to process request',
-            message: error.message
-        });
-    }
-});
+// Default provider order - can be overridden by AI_PROVIDER_ORDER env var
+// AI_PROVIDER_ORDER=gemini,openai,anthropic,groq
+const order = (process.env.AI_PROVIDER_ORDER || 'gemini,openai,anthropic,groq')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter((name) => PROVIDERS[name]);
 
 /**
- * Call Anthropic API with messages
- * API key stored safely on backend only
+ * Main AI call function
+ * @param {string} systemPrompt - System message for AI
+ * @param {Array} history - Chat history [{ role: 'user'|'assistant', content: string }]
+ * @param {Object} options - { webSearch?: boolean, forceProvider?: string }
+ * @returns {Object} { ok: boolean, response?: string, error?: string }
  */
-async function callAnthropicAPI(messages) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    
-    if (!apiKey) {
-        throw new Error('ANTHROPIC_API_KEY not configured on server');
-    }
+export async function callAI(systemPrompt, history, options = {}) {
+  const { webSearch = false, forceProvider = null } = options;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-            model: 'claude-opus-4-1', // Or use claude-sonnet-4 for speed
-            max_tokens: 1024,
-            system: `আপনি SR Group Assistant। সবসময় বাংলায় উত্তর দিন যদি প্রশ্ন বাংলায় হয়। বন্ধুত্বপূর্ণ, সাহায্যকর এবং পেশাদার থাকুন।`,
-            messages: messages
-        })
-    });
+  let lastError =
+    'No AI provider is configured on the server. Add at least one API key in the Environment Variables (Render dashboard or .env).';
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`Anthropic API error: ${error.error?.message || 'Unknown error'}`);
-    }
+  // If a specific provider is forced, only try that one
+  const tryOrder = forceProvider && PROVIDERS[forceProvider] ? [forceProvider] : order;
 
-    const data = await response.json();
-    return data.content[0].text;
+  for (const name of tryOrder) {
+    const fn = PROVIDERS[name];
+    const result = await fn(systemPrompt, history, { webSearch });
+
+    console.log(`[AI] ${name}:`, result.ok ? 'SUCCESS' : result.error);
+
+    if (result.ok) return result;
+
+    lastError = result.error || lastError;
+  }
+
+  return { ok: false, error: lastError };
 }
 
-// Optional: Clear old sessions (run periodically)
-setInterval(() => {
-    const now = Date.now();
-    for (const [sessionId, messages] of chatSessions.entries()) {
-        // Remove sessions inactive for 1 hour
-        if (messages.length === 0 || (now - parseInt(sessionId.split('-')[1])) > 3600000) {
-            chatSessions.delete(sessionId);
-        }
-    }
-}, 3600000); // Run every hour
+/**
+ * Get list of configured providers
+ * @returns {Array} List of provider names that have API keys
+ */
+export function configuredProviders() {
+  return order;
+}
 
-module.exports = router;
+/**
+ * Check if a specific provider is available
+ * @param {string} providerName - Provider name to check
+ * @returns {boolean}
+ */
+export function isProviderAvailable(providerName) {
+  return order.includes(providerName.toLowerCase());
+}
+
+/**
+ * Get all available providers
+ * @returns {Object} { name: boolean }
+ */
+export function getAllProvidersStatus() {
+  const hasKey = (...envVars) => envVars.some((v) => process.env[v] && process.env[v].trim());
+
+  return {
+    gemini: hasKey('GEMINI_API_KEY', 'GEMINI_API_KEYS'),
+    openai: hasKey('OPENAI_API_KEY', 'OPENAI_API_KEYS'),
+    anthropic: hasKey('ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEYS'),
+    groq: hasKey('GROQ_API_KEY', 'GROQ_API_KEYS'),
+    deepseek: hasKey('DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEYS'),
+    local: true, // Local always available
+  };
+}
