@@ -16,7 +16,10 @@ const PROVIDERS = {
 
 // Default provider order - can be overridden by AI_PROVIDER_ORDER env var
 // AI_PROVIDER_ORDER=gemini,openai,anthropic,groq
-const order = (process.env.AI_PROVIDER_ORDER || 'gemini,openai,anthropic,groq')
+const order = (
+  process.env.AI_PROVIDER_ORDER ||
+  'gemini,openai,anthropic,groq,deepseek,local'
+)
   .split(',')
   .map((s) => s.trim().toLowerCase())
   .filter((name) => PROVIDERS[name]);
