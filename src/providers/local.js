@@ -6,8 +6,8 @@
 // gele, ei ta last-resort fallback hishebe kaj kore jate client kokhono
 // "shob provider fail" error na dekhe.
 //
-// SETUP (project root-e run koro):
-//   npm install @xenova/transformers
+// SETUP (project root-e run koro, ba GitHub-e package.json edit kore):
+//   npm install @huggingface/transformers
 //
 // NOTE:
 // - Prothom call-e model download hoy (~300-500MB), tai first request slow hobe.
@@ -20,7 +20,7 @@
 // - Quality Gemini/GPT-er tulonay onek kom — eta shudhu "kichu na paoyar
 //   cheye kichu paoya bhalo" — ekta emergency fallback, primary provider na.
 
-import { pipeline } from '@xenova/transformers';
+import { pipeline } from '@huggingface/transformers';
 
 const LOCAL_MODEL = process.env.LOCAL_MODEL || 'Xenova/Qwen1.5-0.5B-Chat';
 const MAX_NEW_TOKENS = 400; // choto model, beshi token dile onek slow hoye jay
