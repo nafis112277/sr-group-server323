@@ -23,7 +23,8 @@ console.log("✅ LOCAL.JS LOADED");
 
 import { pipeline } from '@huggingface/transformers';
 
-const LOCAL_MODEL = process.env.LOCAL_MODEL || 'Xenova/Qwen1.5-0.5B-Chat';
+const LOCAL_MODEL =
+  process.env.LOCAL_MODEL || 'Xenova/Qwen1.5-0.5B-Chat';
 const MAX_NEW_TOKENS = 400; // choto model, beshi token dile onek slow hoye jay
 
 // Model ekbari load kore memory-te rekhe dei (singleton), pratibar call-e
