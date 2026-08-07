@@ -6071,7 +6071,7 @@ if (typeof applyAdminRoleUI === 'function') {
       );
       if (noteDiv && noteDiv.parentNode) noteDiv.remove();
 
-      var fallbackPayload = Object.assign({}, payload, { model: 'local', localReply: reply });
+     var fallbackPayload = Object.assign({}, payload, { model: 'local', localReply: reply });
       var retryInit = Object.assign({}, init, { body: JSON.stringify(fallbackPayload) });
       return __srOriginalFetchForLocalAi(input, retryInit);
     } catch (genErr) {
