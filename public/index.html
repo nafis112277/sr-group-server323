@@ -6026,7 +6026,17 @@ try {
     if (noteDiv && noteDiv.parentNode)
         noteDiv.remove();
 
-    return res;
+    console.error('[WebLLM] local fallback failed:', genErr);
+    return new Response(
+        JSON.stringify({
+            reply: 'দুঃখিত, উত্তর তৈরি করা যায়নি (local AI download সমস্যা হয়েছে) — আবার চেষ্টা করুন।',
+            assistantMessageId: null,
+            replyImageUrl: null,
+            local: true,
+            error: true
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+    );
 
 }
   };
