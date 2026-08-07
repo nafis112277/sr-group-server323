@@ -4085,26 +4085,51 @@ async function sendMessageWithStreaming() {
 
       hideTyping();
 
-      const reply = await window.LocalAI.generateReply(
-        LOCAL_SYSTEM_PROMPT,
-        currentHistoryForLocalAi(),
-        text
-      );
+const reply = await window.LocalAI.generateReply(
+    LOCAL_SYSTEM_PROMPT,
+    currentHistoryForLocalAi(),
+    text
+);
 
-      if (userEntry && userEntry.record) {
-        userEntry.record.id = null;
-      }
+const saveRes = await fetch(
+    `/api/chat/conversations/${currentConvId}/message`,
+    {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + userToken
+        },
+        body: JSON.stringify({
+            content: text,
+            model: "local",
+            localReply: reply,
+            image: attachment ? attachment.dataUrl : undefined,
+            webSearch: webSearchEnabled
+        })
+    }
+);
 
-      addMessage("bot", reply, {
-        id: null,
-        imageUrl: null
-      });
+const data = await saveRes.json();
 
-      sending = false;
-      document.getElementById("sendBtn").disabled = false;
-      input.focus();
+if (!saveRes.ok) {
+    throw new Error(data.error || "Local save failed");
+}
 
-      return;
+if (userEntry && data.userMessageId != null) {
+    userEntry.record.id = data.userMessageId;
+    userEntry.row.dataset.msgId = data.userMessageId;
+}
+
+addMessage("bot", data.reply, {
+    id: data.assistantMessageId,
+    imageUrl: data.replyImageUrl || null
+});
+
+sending = false;
+document.getElementById("sendBtn").disabled = false;
+input.focus();
+
+return;
     }
   }
 
