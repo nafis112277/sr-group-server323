@@ -60,7 +60,6 @@ async function loadEngine(modelId = DEFAULT_MODEL, onProgress) {
 // userMessage: string (এখন যা type kore pathacche)
 async function generateReply(systemPrompt, history, userMessage, onProgress) {
   const engine = await loadEngine(DEFAULT_MODEL, onProgress);
-
   const messages = [];
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
   for (const m of history) {
@@ -78,6 +77,16 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   if (!text) throw new Error('Local AI কোনো উত্তর দিতে পারেনি। আবার চেষ্টা করুন।');
   return text;
 }
+window.listModels = async function() {
+  try {
+    const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+    const models = webllm.prebuiltAppConfig?.model_list || [];
+    console.log('Available models:');
+    models.forEach(m => console.log('  ' + m.model_id));
+  } catch (err) {
+    console.error('Error:', err.message);
+  }
+};
 
 if (isSupported()) {
   loadEngine().catch(() => { enginePromise = null; });
