@@ -7,15 +7,10 @@ import { getMaintenanceStatus, getPolicy, getApiAccessStatus } from './admin.js'
 
 const router = Router();
 router.use(requireUser);
-// ============================================================
-// BROADCAST CHAT LOCK
-// Broadcast Active থাকলে customer নতুন message/edit/regenerate
-// করতে পারবে না।
-// ============================================================
+
 async function blockIfBroadcastActive(req, res, next) {
   try {
     const broadcast = await getBroadcast();
-
     if (broadcast.active) {
       return res.status(503).json({
         error: broadcast.message || 'Chat is temporarily unavailable.',
@@ -23,7 +18,6 @@ async function blockIfBroadcastActive(req, res, next) {
         broadcastTitle: broadcast.title || ''
       });
     }
-
     next();
   } catch (err) {
     console.error('Broadcast check failed:', err);
@@ -31,8 +25,6 @@ async function blockIfBroadcastActive(req, res, next) {
   }
 }
 
-// FIX: maintenance mode চালু থাকলে চ্যাট-সংক্রান্ত সব রুট ব্লক করে দেয় (503)।
-// requireUser-এর পরে বসানো হয়েছে যাতে আগে auth চেক হয়, তারপর maintenance।
 async function blockIfMaintenance(req, res, next) {
   try {
     const status = await getMaintenanceStatus();
@@ -44,7 +36,6 @@ async function blockIfMaintenance(req, res, next) {
 }
 router.use(blockIfMaintenance);
 
-// ---- Payment status: blocked/overdue হলেও এই route কাজ করবে (নিচের middleware-এর আগে) ----
 router.get('/payment-status', async (req, res) => {
   try {
     const user = await queryOne(
@@ -70,7 +61,7 @@ router.get('/payment-status', async (req, res) => {
     res.status(500).json({ error: 'Could not load payment status.' });
   }
 });
-// ---- Policy/niti mala — customer যেকোনো সময় দেখতে পারবে (blocked/maintenance যাই হোক না কেন) ----
+
 router.get('/policy', async (req, res) => {
   try {
     const policy = await getPolicy();
@@ -80,6 +71,7 @@ router.get('/policy', async (req, res) => {
     res.status(500).json({ error: 'Could not load policy.' });
   }
 });
+
 async function blockIfPaymentOverdue(req, res, next) {
   try {
     const user = await queryOne(
@@ -117,55 +109,42 @@ async function blockIfPaymentOverdue(req, res, next) {
 router.use(blockIfPaymentOverdue);
 
 const MAX_HISTORY_MESSAGES = 24;
-// FIX: message content-er upore ekta hard cap — age kono limit chilo na,
-// tai keu chaile huge payload pathiye DB bloat / cost abuse korte parto.
 const MAX_MESSAGE_LENGTH = 8000;
 
-/* ============================================================
- * DAILY QUOTA CHECK — অপরিবর্তিত
- * ============================================================ */
-// Plan onujayi daily message limit — .env theke customize kora jay,
-// na dile ei default gula use hobe.
 const PLAN_LIMITS = {
   free: Number(process.env.PLAN_LIMIT_FREE) || 40,
   pro: Number(process.env.PLAN_LIMIT_PRO) || 300,
   max: Number(process.env.PLAN_LIMIT_MAX) || 1000,
 };
-// Kon plan-e kon model access pabe. Ei list frontend-e o pathano hobe (GET /available-models),
-// jate composer-er "+" menu-te shothik model dekhano jay (lock/unlock soho).
 const MODEL_ACCESS = {
   free: ['gemini', 'groq', 'local'],
   pro: ['gemini', 'groq', 'local'],
   max: ['gemini', 'groq', 'deepseek', 'local'],
 };
 
-// UI-te dekhanor jonno display info
+// FIX: label ta clear kore dewa hoyeche — ei model ekhon server-e na, browser-e (WebLLM) chole
 const MODEL_INFO = {
   gemini: { label: 'Gemini' },
   groq: { label: 'Groq' },
   deepseek: { label: 'DeepSeek' },
-  local: { label: 'Local AI (offline)' },
+  local: { label: 'Local AI (device-e chole, offline)' },
 };
+
+// FIX: kon model-gulo server-e callAI() diye process hoy — 'local' ei list-e nai,
+// karon local model-er reply client (browser, WebLLM) nijei generate kore pathay.
+const SERVER_PROVIDER_MODELS = ['gemini', 'groq', 'deepseek'];
 
 function isModelAllowed(plan, modelName) {
   const allowed = MODEL_ACCESS[plan] || MODEL_ACCESS.free;
   return allowed.includes(modelName);
 }
 
-// FIX: frontend-er model-picker ekhon "tier" field diye Free/Pro/Max grup kore dekhay,
-// tai prottekta model kon tier-e "first appear" kore seta ber kora dorkar.
-// Ex: 'gemini' free+pro+max shob-jaygay ache -> tier hobe 'free' (sob-thk niche tier).
-// 'anthropic' shudhu max-e ache -> tier hobe 'max'.
 function tierOfModel(modelName) {
   if (MODEL_ACCESS.free.includes(modelName)) return 'free';
   if (MODEL_ACCESS.pro.includes(modelName)) return 'pro';
   return 'max';
 }
 
-// FIX: ei helper age likha chilo kintu kothao call hocchilo na. Ekhon eta
-// message/edit/regenerate — tin jaygatei call kore plan onujayi model
-// enforce kora hocche. deepseek-er jonno kono provider file dekhi nai,
-// tai oi case-e "not configured" error e return kora hocche (silent bypass na).
 async function resolveModelChoice(userEmail, requestedModel) {
   const user = await queryOne('SELECT plan FROM users WHERE email = $1', [userEmail]);
   const plan = user?.plan || 'free';
@@ -179,11 +158,9 @@ async function resolveModelChoice(userEmail, requestedModel) {
   if (!isModelAllowed(plan, requestedModel)) {
     return { ok: false, status: 403, error: 'This model is not available on your current plan.' };
   }
-  // FIX: deepseek এখন আসলেই ব্যবহৃত হবে (paid API, Max plan), তাই আর ব্লক করা হচ্ছে না।
-  // ⚠️ শর্ত: ai.js ফাইলে deepseek-এর জন্য provider function (callDeepSeek) থাকতে হবে,
-  // নাহলে callAI() এই মডেল খুঁজে পাবে না এবং error দেবে।
   return { ok: true, plan, forceProvider: requestedModel };
 }
+
 async function checkDailyQuota(userEmail, settings) {
   const user = await queryOne(
     'SELECT daily_limit AS "dailyLimit", plan FROM users WHERE email = $1',
@@ -191,7 +168,6 @@ async function checkDailyQuota(userEmail, settings) {
   );
   const plan = user?.plan || 'free';
 
-  // priority: user-specific manual override (daily_limit column) > plan-based default > global settings
   const effectiveLimit =
     user && user.dailyLimit !== null && user.dailyLimit !== undefined
       ? user.dailyLimit
@@ -236,8 +212,6 @@ async function getMatchingSkillInstructions(userEmail, userText) {
   return block;
 }
 
-// images column e [{ base64, mimeType }, ...] jsonb thake (AI-generated ba user-uploaded, dutoi).
-// frontend shudhu ekta imageUrl (data URL) ashe kore, tai first image thke seta banie dei.
 function firstImageAsDataUrl(images) {
   if (!images) return null;
   const arr = typeof images === 'string' ? JSON.parse(images) : images;
@@ -248,7 +222,6 @@ function firstImageAsDataUrl(images) {
   return `data:${mime};base64,${img.base64}`;
 }
 
-// frontend theke asha data URL ("data:image/png;base64,....") ke DB-te rakhar {base64, mimeType} shape e vangi.
 function dataUrlToImageRecord(dataUrl) {
   if (!dataUrl || typeof dataUrl !== 'string') return null;
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -256,8 +229,6 @@ function dataUrlToImageRecord(dataUrl) {
   return { mimeType: match[1], base64: match[2] };
 }
 
-// DB theke asha raw "images" (jsonb string ba array/null) ke সবসময় array-e normalize kore rakhi,
-// jate history AI-ke pathanor shomoy prottekta message er chobi soho jai.
 function normalizeImages(images) {
   if (!images) return null;
   const arr = typeof images === 'string' ? JSON.parse(images) : images;
@@ -287,12 +258,6 @@ router.get('/my-plan', async (req, res) => {
   }
 });
 
-// Composer-er "+" menu-te dekhanor jonno — shob model + user-er plan onujayi kon gula
-// unlocked/locked seta bole dey. Frontend eita diye UI decide korbe.
-// FIX: response-e ekhon "currentPlan" (frontend-er field naam-er sathe match kore) ebong
-// prottekta model-e "tier" (free/pro/max) o pathano hocche, jate composer-er model-picker
-// Free/Pro/Max grup kore dekhate pare. Purono "plan"/"locked" field gula o rekhe deya hoyeche
-// backward-compatibility-er jonno.
 router.get('/available-models', async (req, res) => {
   try {
     const user = await queryOne('SELECT plan FROM users WHERE email = $1', [req.userEmail]);
@@ -304,6 +269,9 @@ router.get('/available-models', async (req, res) => {
       label: MODEL_INFO[name].label,
       tier: tierOfModel(name),
       locked: !allowed.includes(name),
+      // FIX: frontend eta diye bujhte parbe "local" select korle server-e call na kore
+      // WebLLM diye nijei generate korte hobe, tarpor reply server-e save korte pathabe.
+      clientSide: name === 'local',
     }));
 
     res.json({ plan, currentPlan: plan, models });
@@ -313,10 +281,6 @@ router.get('/available-models', async (req, res) => {
   }
 });
 
-// ---- Broadcast banner — কাস্টমার সাইড। এন্টার-চ্যাট হওয়ার সময় ফ্রন্টএন্ড এটা কল করে
-// active broadcast আছে কিনা দেখে ব্যানার দেখাবে কিনা ঠিক করে। settings.js-এর getBroadcast
-// ব্যবহার করে, ai_settings টেবিলের broadcast_updated_at কে "id" হিসেবে পাঠানো হয় যাতে
-// ফ্রন্টএন্ড dismiss-tracking (একই broadcast দ্বিতীয়বার আর না দেখানো) করতে পারে।
 router.get('/broadcast', async (req, res) => {
   try {
     const b = await getBroadcast();
@@ -346,8 +310,6 @@ router.post('/conversations', async (req, res) => {
   }
 });
 
-// ---- id soho pathano hocche — eta na thakle frontend-er "edit message" feature kaj korte parbe na,
-// karon ei id diyei PUT /messages/:messageId call hoy. ----
 router.get('/conversations/:id/messages', async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
@@ -373,7 +335,6 @@ router.get('/conversations/:id/messages', async (req, res) => {
   }
 });
 
-// ---- pura conversation delete — sidebar-er delete button ei call hoy ----
 router.delete('/conversations/:id', async (req, res) => {
   try {
     const conv = await queryOne('SELECT id FROM conversations WHERE id = $1 AND user_email = $2', [
@@ -427,11 +388,13 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
 
     let text = ((req.body || {}).content || '').trim();
-    const incomingImage = (req.body || {}).image || null; // data URL, optional
-    const requestedModel = (req.body || {}).model || null; // FIX: composer-er "+" menu theke select kora model
+    const incomingImage = (req.body || {}).image || null;
+    const requestedModel = (req.body || {}).model || null;
+    // FIX: model === 'local' hole browser (WebLLM) age-e nijei reply generate kore
+    // ei field-e pathay. Thakle server callAI() ekdom skip kore, sudhu save kore.
+    const clientGeneratedReply = (req.body || {}).localReply || null;
     if (!text && !incomingImage) return res.status(400).json({ error: 'Message is empty.' });
 
-    // FIX: content length cap — age kono limit chilo na
     if (text.length > MAX_MESSAGE_LENGTH) {
       return res.status(400).json({ error: `Message is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
     }
@@ -445,12 +408,17 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
       });
     }
 
-    // FIX: model plan onujayi allowed kina check kora — age eta MODEL_ACCESS-e define
-    // kora thakleo kothao enforce hocchilo na, tai free user request-e model:'anthropic'
-    // pathale seta silently chole jeto.
     const modelCheck = await resolveModelChoice(req.userEmail, requestedModel);
     if (!modelCheck.ok) {
       return res.status(modelCheck.status).json({ error: modelCheck.error });
+    }
+
+    // FIX: local model chaile client obossoi tar generate kora reply pathabe,
+    // server-e kono AI call hobe na — na pathale clear error dei.
+    if (modelCheck.forceProvider === 'local' && !clientGeneratedReply) {
+      return res.status(400).json({
+        error: 'Local AI reply from the browser is missing. Make sure the model finished loading before sending.',
+      });
     }
 
     const userImageRecord = dataUrlToImageRecord(incomingImage);
@@ -460,43 +428,42 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
       [conv.id, 'user', text, userImageRecord ? JSON.stringify([userImageRecord]) : null]
     );
 
-    // ---- FIX: images column ta ageo select korte hobe, na hole AI-ke pathanor shomoy chobi hariye jay ----
-    const fullHistory = await query(
-      'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
-      [conv.id]
-    );
-    const history = fullHistory.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
-      role: m.role,
-      content: m.content,
-      images: normalizeImages(m.images),
-    }));
+    let result;
+    if (modelCheck.forceProvider === 'local') {
+      // FIX: server-e kichu call kora hocche na — browser-er WebLLM output-i shorashori use hocche.
+      result = { ok: true, text: clientGeneratedReply, images: null, provider: 'local' };
+    } else {
+      const fullHistory = await query(
+        'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
+        [conv.id]
+      );
+      const history = fullHistory.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
+        role: m.role,
+        content: m.content,
+        images: normalizeImages(m.images),
+      }));
 
-    const customerRow = await queryOne(
-      'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
-      [req.userEmail]
-    );
+      const customerRow = await queryOne(
+        'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
+        [req.userEmail]
+      );
 
-    const baseSystem = buildSystemPrompt(settings, customerRow?.customInstructions);
-    const skillBlock = await getMatchingSkillInstructions(req.userEmail, text);
-    const system = baseSystem + skillBlock;
+      const baseSystem = buildSystemPrompt(settings, customerRow?.customInstructions);
+      const skillBlock = await getMatchingSkillInstructions(req.userEmail, text);
+      const system = baseSystem + skillBlock;
 
-    // FIX: forceProvider pass kora hocche jate user-er selected model-e i reply ashe,
-    // fallback chain skip hoye. model select na korle age-er moto full fallback chain cholbe.
-    const result = await callAI(system, history, {
-      webSearch: !!(req.body || {}).webSearch,
-      forceProvider: modelCheck.forceProvider,
-    });
+      result = await callAI(system, history, {
+        webSearch: !!(req.body || {}).webSearch,
+        forceProvider: modelCheck.forceProvider,
+      });
+    }
 
     if (!result.ok) {
       return res.status(502).json({ error: result.error });
     }
 
-    // callGemini already [{ base64, mimeType }] shape e normalize kore pathay
     const images = result.images || null;
 
-    // ---- FIX: RETURNING id যোগ করা হলো — এর আগে এই id কখনোই ফেরত আসতো না, তাই ফ্রন্টএন্ডের
-    // data.assistantMessageId সবসময় undefined হতো, আর Regenerate/Feedback দুটোই "missing id"
-    // এরর দিত। এটাই ছিল মূল কারণ। ----
     const insertedAssistantMsg = await queryOne(
       `INSERT INTO messages (conversation_id, role, content, images) VALUES ($1, $2, $3, $4)
        RETURNING id`,
@@ -514,7 +481,7 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
       replyImageUrl: firstImageAsDataUrl(images),
       title,
       userMessageId: insertedUserMsg.id,
-      assistantMessageId: insertedAssistantMsg.id, // FIX: আগে এটা রেসপন্সেই ছিল না
+      assistantMessageId: insertedAssistantMsg.id,
     });
   } catch (err) {
     console.error(err);
@@ -522,8 +489,6 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
   }
 });
 
-// ---- age pathano ekta user message edit kore, tar por theke shob delete kore,
-// notun kore AI reply generate kore. Frontend-er "Save & regenerate" ei call hoy. ----
 router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
@@ -533,10 +498,10 @@ router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, asy
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
 
     const newContent = ((req.body || {}).content || '').trim();
-    const requestedModel = (req.body || {}).model || null; // FIX
+    const requestedModel = (req.body || {}).model || null;
+    const clientGeneratedReply = (req.body || {}).localReply || null; // FIX
     if (!newContent) return res.status(400).json({ error: 'Message is empty.' });
 
-    // FIX: content length cap edit-eo lagbe
     if (newContent.length > MAX_MESSAGE_LENGTH) {
       return res.status(400).json({ error: `Message is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
     }
@@ -550,8 +515,6 @@ router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, asy
 
     const settings = await getSettings();
 
-    // edit kora eta ekta "notun" message hishebe count hobe na quota-te,
-    // shudhu regenerate check kori jate purono limit pass kora keu abuse na kore
     const quota = await checkDailyQuota(req.userEmail, settings);
     if (!quota.allowed) {
       return res.status(429).json({
@@ -559,47 +522,52 @@ router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, asy
       });
     }
 
-    // FIX: eikhaneo model-access check
     const modelCheck = await resolveModelChoice(req.userEmail, requestedModel);
     if (!modelCheck.ok) {
       return res.status(modelCheck.status).json({ error: modelCheck.error });
     }
+    if (modelCheck.forceProvider === 'local' && !clientGeneratedReply) {
+      return res.status(400).json({ error: 'Local AI reply from the browser is missing.' });
+    }
 
     await query('UPDATE messages SET content = $1 WHERE id = $2', [newContent, target.id]);
-    // ei message-er por ja ja eshechilo (purono bot reply shoho) shob mucche dei — Claude-er moto edit behavior
     await query('DELETE FROM messages WHERE conversation_id = $1 AND id > $2', [conv.id, target.id]);
 
-    // ---- FIX: eikhaneo images column select kora dorkar ----
-    const fullHistory = await query(
-      'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
-      [conv.id]
-    );
-    const history = fullHistory.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
-      role: m.role,
-      content: m.content,
-      images: normalizeImages(m.images),
-    }));
+    let result;
+    if (modelCheck.forceProvider === 'local') {
+      result = { ok: true, text: clientGeneratedReply, images: null, provider: 'local' };
+    } else {
+      const fullHistory = await query(
+        'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
+        [conv.id]
+      );
+      const history = fullHistory.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
+        role: m.role,
+        content: m.content,
+        images: normalizeImages(m.images),
+      }));
 
-    const customerRow = await queryOne(
-      'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
-      [req.userEmail]
-    );
+      const customerRow = await queryOne(
+        'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
+        [req.userEmail]
+      );
 
-    const baseSystem = buildSystemPrompt(settings, customerRow?.customInstructions);
-    const skillBlock = await getMatchingSkillInstructions(req.userEmail, newContent);
-    const system = baseSystem + skillBlock;
+      const baseSystem = buildSystemPrompt(settings, customerRow?.customInstructions);
+      const skillBlock = await getMatchingSkillInstructions(req.userEmail, newContent);
+      const system = baseSystem + skillBlock;
 
-    const result = await callAI(system, history, {
-      webSearch: !!(req.body || {}).webSearch,
-      forceProvider: modelCheck.forceProvider, // FIX
-    });
+      result = await callAI(system, history, {
+        webSearch: !!(req.body || {}).webSearch,
+        forceProvider: modelCheck.forceProvider,
+      });
+    }
+
     if (!result.ok) {
       return res.status(502).json({ error: result.error });
     }
 
     const images = result.images || null;
 
-    // ---- FIX: এখানেও RETURNING id + assistantMessageId রেসপন্সে যোগ করা হলো ----
     const insertedAssistantMsg = await queryOne(
       `INSERT INTO messages (conversation_id, role, content, images) VALUES ($1, $2, $3, $4)
        RETURNING id`,
@@ -615,7 +583,7 @@ router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, asy
       images,
       replyImageUrl: firstImageAsDataUrl(images),
       title,
-      assistantMessageId: insertedAssistantMsg.id, // FIX: আগে এটা রেসপন্সেই ছিল না
+      assistantMessageId: insertedAssistantMsg.id,
     });
   } catch (err) {
     console.error(err);
@@ -623,14 +591,6 @@ router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, asy
   }
 });
 
-/* ============================================================================================
-   FIX — নতুন যোগ করা রুট: Regenerate
-   ফ্রন্টএন্ডের regenerateBotMessage() ফাংশন এই ঠিকানায় কল করে:
-     POST /chat/conversations/:id/messages/:messageId/regenerate
-   কিন্তু এই রুটটা ব্যাকএন্ডে একদমই ছিল না — তাই Regenerate বাটন কখনো কাজই করেনি (id মিসিং না
-   হলেও, 404 দিত)। এই রুট এই assistant reply আর তার পরের সবকিছু মুছে নতুন করে reply বানায়,
-   ঠিক PUT /messages/:messageId (user-message edit) এর মতোই যুক্তি অনুসরণ করে।
-   ============================================================================================ */
 router.post('/conversations/:id/messages/:messageId/regenerate', blockIfBroadcastActive, async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
@@ -656,37 +616,44 @@ router.post('/conversations/:id/messages/:messageId/regenerate', blockIfBroadcas
       });
     }
 
-    // FIX: regenerate-eo user chaile onno model diye try korte pare (composer-e model
-    // switch kore "Regenerate with..." dile), tai ekhane o check kora holo.
     const requestedModel = (req.body || {}).model || null;
+    const clientGeneratedReply = (req.body || {}).localReply || null; // FIX
     const modelCheck = await resolveModelChoice(req.userEmail, requestedModel);
     if (!modelCheck.ok) {
       return res.status(modelCheck.status).json({ error: modelCheck.error });
     }
+    if (modelCheck.forceProvider === 'local' && !clientGeneratedReply) {
+      return res.status(400).json({ error: 'Local AI reply from the browser is missing.' });
+    }
 
-    // এই reply আর তার পরে যা যা এসেছে (থাকলে) সব মুছে দিই — এর জায়গায় নতুন reply বসবে
     await query('DELETE FROM messages WHERE conversation_id = $1 AND id >= $2', [conv.id, target.id]);
 
-    const fullHistory = await query(
-      'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
-      [conv.id]
-    );
-    const history = fullHistory.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
-      role: m.role,
-      content: m.content,
-      images: normalizeImages(m.images),
-    }));
+    let result;
+    if (modelCheck.forceProvider === 'local') {
+      result = { ok: true, text: clientGeneratedReply, images: null, provider: 'local' };
+    } else {
+      const fullHistory = await query(
+        'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
+        [conv.id]
+      );
+      const history = fullHistory.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
+        role: m.role,
+        content: m.content,
+        images: normalizeImages(m.images),
+      }));
 
-    const customerRow = await queryOne(
-      'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
-      [req.userEmail]
-    );
-    const baseSystem = buildSystemPrompt(settings, customerRow?.customInstructions);
-    const lastUserMsg = [...fullHistory].reverse().find((m) => m.role === 'user');
-    const skillBlock = await getMatchingSkillInstructions(req.userEmail, lastUserMsg ? lastUserMsg.content : '');
-    const system = baseSystem + skillBlock;
+      const customerRow = await queryOne(
+        'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
+        [req.userEmail]
+      );
+      const baseSystem = buildSystemPrompt(settings, customerRow?.customInstructions);
+      const lastUserMsg = [...fullHistory].reverse().find((m) => m.role === 'user');
+      const skillBlock = await getMatchingSkillInstructions(req.userEmail, lastUserMsg ? lastUserMsg.content : '');
+      const system = baseSystem + skillBlock;
 
-    const result = await callAI(system, history, { forceProvider: modelCheck.forceProvider }); // FIX
+      result = await callAI(system, history, { forceProvider: modelCheck.forceProvider });
+    }
+
     if (!result.ok) return res.status(502).json({ error: result.error });
 
     const images = result.images || null;
@@ -710,17 +677,6 @@ router.post('/conversations/:id/messages/:messageId/regenerate', blockIfBroadcas
   }
 });
 
-/* ============================================================================================
-   FIX — নতুন যোগ করা রুট: Feedback (👍/👎)
-   ফ্রন্টএন্ড কল করে: POST /chat/messages/:id/feedback   body: { rating: 'up' | 'down' | null }
-   এই রুটও ব্যাকএন্ডে ছিল না। এটা ব্যবহার করতে হলে messages টেবিলে একটা নতুন কলাম লাগবে —
-   নিচের মাইগ্রেশনটা একবার আপনার ডাটাবেজে রান করে নিন (psql / your DB admin tool থেকে):
-
-     ALTER TABLE messages ADD COLUMN IF NOT EXISTS feedback_rating TEXT;
-
-   কলামটা না থাকলে এই রুট 500 এরর দেবে, কিন্তু বাকি চ্যাট আগের মতোই স্বাভাবিক কাজ করবে —
-   এটা best-effort, ফিডব্যাক সেভ ব্যর্থ হলেও চ্যাট ব্লক হবে না।
-   ============================================================================================ */
 router.post('/messages/:id/feedback', async (req, res) => {
   try {
     const { rating } = req.body || {};
@@ -728,7 +684,6 @@ router.post('/messages/:id/feedback', async (req, res) => {
       return res.status(400).json({ error: 'Invalid rating.' });
     }
 
-    // এই মেসেজটা যেন সত্যিই এই ইউজারেরই কোনো কথোপকথনের অংশ হয়, সেটা যাচাই করে নিই
     const msg = await queryOne(
       `SELECT m.id FROM messages m
        JOIN conversations c ON c.id = m.conversation_id
@@ -744,7 +699,7 @@ router.post('/messages/:id/feedback', async (req, res) => {
     res.status(500).json({ error: 'Could not save feedback.' });
   }
 });
-// শুধু নতুন feature — reply-তে 👍/👎 feedback save করে, existing কোনো route/logic touch করে না
+
 router.post('/feedback', requireUser, async (req, res) => {
   try {
     const { conversationId, messageIndex, rating } = req.body || {};
@@ -761,12 +716,11 @@ router.post('/feedback', requireUser, async (req, res) => {
     res.status(500).json({ error: 'Could not save feedback.' });
   }
 });
-// ---- Self-service API key (customer নিজের জন্য) ----
+
 function generateApiKey() {
   return 'sk-' + [...Array(40)].map(() => Math.random().toString(36)[2] || '0').join('');
 }
 
-// ---- API Access Toggle — admin panel থেকে on/off করা যায়, apikey ট্যাব খোলার সময় frontend এটা চেক করে ----
 async function blockIfApiAccessDisabled(req, res, next) {
   try {
     const status = await getApiAccessStatus();
@@ -778,7 +732,7 @@ async function blockIfApiAccessDisabled(req, res, next) {
     }
     next();
   } catch (err) {
-    next(); // চেক ব্যর্থ হলেও ফিচার ব্লক করি না
+    next();
   }
 }
 
