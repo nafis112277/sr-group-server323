@@ -1489,6 +1489,9 @@
             <div class="plus-menu-item" id="menuMathSolve">
               <span class="pmi-icon">🧮</span><span class="pmi-label">Math solve</span><span class="pmi-check">✓</span>
             </div>
+            <div class="plus-menu-item" id="menuLocalAi">
+              <span class="pmi-icon">🔒</span><span class="pmi-label">Local AI (offline, this device)</span><span class="pmi-check">✓</span>
+            </div>
           </div>
         </div>
         <!-- নতুন সংযোজন: ভয়েস ইনপুট বাটন। ব্রাউজারে Web Speech API সাপোর্ট না থাকলে JS নিজেই এটা
@@ -6001,6 +6004,76 @@ if (typeof applyAdminRoleUI === 'function') {
       }
     } catch (e) { /* silent fallback */ }
     return __srOriginalFetchForDesign(fetchInput, init);
+  };
+})();
+</script>
+<script src="/webllm-local.js"></script>
+<script id="sr-added-local-ai-feature">
+(function () {
+  window.localAiEnabled = false;
+
+  var menuItem = document.getElementById('menuLocalAi');
+  if (menuItem) {
+    menuItem.onclick = function (e) {
+      e.stopPropagation();
+      if (!window.LocalAI || !window.LocalAI.isSupported()) {
+        alert('এই ডিভাইস/ব্রাউজারে Local AI চলবে না। Chrome বা Edge (desktop) দিয়ে চেষ্টা করুন — WebGPU দরকার।');
+        return;
+      }
+      window.localAiEnabled = !window.localAiEnabled;
+      menuItem.classList.toggle('toggled', window.localAiEnabled);
+    };
+  }
+
+  function currentHistoryForLocalAi() {
+    if (typeof currentMessages === 'undefined') return [];
+    var all = currentMessages.slice(0, -1); // shesh (already-added) user message বাদ, ওটা আলাদা পাঠানো হয়
+    return all.map(function (m) {
+      return { role: (m.role === 'assistant' || m.role === 'bot') ? 'assistant' : 'user', content: m.content || '' };
+    });
+  }
+
+  var LOCAL_SYSTEM_PROMPT =
+    "You are a helpful, patient student tutor. Answer clearly and simply, step by step when helpful.";
+
+  var __srOriginalFetchForLocalAi = window.fetch.bind(window);
+  // শুধু আসল /message endpoint ধরি (/message/stream না), নাহলে streaming attempt +
+  // fallback — দুইবার local model চালানো লাগবে
+  var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message$/;
+
+  window.fetch = async function (input, init) {
+    try {
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (window.localAiEnabled && MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string') {
+        var payload = JSON.parse(init.body);
+        if (payload && typeof payload.content === 'string' && payload.content.trim() && !payload.model) {
+          var noteDiv = document.createElement('div');
+          noteDiv.className = 'msg note';
+          noteDiv.textContent = 'Local AI মডেল লোড হচ্ছে...';
+          var box = document.getElementById('messages');
+          if (box) { box.appendChild(noteDiv); box.scrollTop = box.scrollHeight; }
+
+          try {
+            var reply = await window.LocalAI.generateReply(
+              LOCAL_SYSTEM_PROMPT,
+              currentHistoryForLocalAi(),
+              payload.content,
+              function (text) { if (noteDiv) noteDiv.textContent = text; }
+            );
+            payload.model = 'local';
+            payload.localReply = reply;
+            init = Object.assign({}, init, { body: JSON.stringify(payload) });
+          } catch (genErr) {
+            if (noteDiv && noteDiv.parentNode) noteDiv.remove();
+            throw genErr;
+          }
+          if (noteDiv && noteDiv.parentNode) noteDiv.remove();
+        }
+      }
+    } catch (e) {
+      if (e && e.message && /WebGPU|Local AI/.test(e.message)) throw e;
+    }
+    return __srOriginalFetchForLocalAi(input, init);
   };
 })();
 </script>
