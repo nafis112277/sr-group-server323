@@ -6034,11 +6034,14 @@ if (typeof applyAdminRoleUI === 'function') {
       return __srOriginalFetchForLocalAi(input, init);
     }
 
-    var payload;
+  var payload;
     try { payload = JSON.parse(init.body); } catch (e) { payload = null; }
 
-    // ইউজার নিজে থেকেই কোনো model চেয়ে থাকলে (ভবিষ্যতে menu থাকলে) সেটাই সম্মান করি, এখানে হাত দিই না
-    if (!payload || payload.model) {
+    // FIX: আগে এখানে payload.model থাকলে (ইউজার/model-picker থেকে forced provider,
+    // যেমন Max প্ল্যানের deepseek) fallback স্কিপ করা হতো। এখন সব ক্ষেত্রেই (auto বা
+    // forced, যেকোনো plan/model) 502 পেলে local fallback হবে — ক্লায়েন্ট কখনো খালি
+    // হাতে ফিরবে না, তা সে যে model-ই বেছে থাকুক।
+    if (!payload) {
       return __srOriginalFetchForLocalAi(input, init);
     }
 
