@@ -5579,6 +5579,7 @@ const policyLinkStyle = document.createElement('style');
      মেসেজ এডিট/রিজেনারেট/অ্যাডমিন-চ্যাট এন্ডপয়েন্টগুলো অক্ষত থাকবে। */
   var __srOriginalFetch = window.fetch.bind(window);
   var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message(\/stream)?$/;
+  console.log("[WebLLM] fetch called:", input);
   window.fetch = function (input, init) {
     try {
       var url = typeof input === 'string' ? input : (input && input.url) || '';
@@ -6076,9 +6077,10 @@ if (typeof applyAdminRoleUI === 'function') {
   var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/(message|messages\/[^/]+|messages\/[^/]+\/regenerate)$/;
 
   window.fetch = async function (input, init) {
+    console.log("[WebLLM] FETCH:", input);
     var url = typeof input === 'string' ? input : (input && input.url) || '';
     var isTargetEndpoint = MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string';
-
+console.log("[WebLLM] TARGET:", isTargetEndpoint);
     if (!isTargetEndpoint) {
       return __srOriginalFetchForLocalAi(input, init);
     }
@@ -6095,11 +6097,17 @@ if (typeof applyAdminRoleUI === 'function') {
     }
 
     var res = await __srOriginalFetchForLocalAi(input, init);
+    console.log("[WebLLM] STATUS:", res.status);
     console.log("STATUS =", res.status);
     // শুধু 502 (chat.js-এর callAI সব provider-e fail করলে ঠিক এই কোডই পাঠায়) ধরি —
     // 400/403/429/404 এগুলো legit user-facing error (quota শেষ, model lock ইত্যাদি), fallback করব না
     console.log("FETCH FALLBACK HIT");
-    if (res.status !== 502) return res;
+   if (res.status !== 502) {
+    console.log("[WebLLM] NOT 502");
+    return res;
+}
+
+console.log("[WebLLM] STARTING LOCAL FALLBACK");
     if (!window.LocalAI || !window.LocalAI.isSupported()) return res; // fallback করার উপায় নাই, আসল error-ই দেখাই
 
     var promptText = payload.content || (function () {
