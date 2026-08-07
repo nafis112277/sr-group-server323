@@ -6054,12 +6054,11 @@ if (typeof applyAdminRoleUI === 'function') {
     })();
     if (!promptText) return res;
 
-    var box = document.getElementById('messages');
+  // FIX: client-কে এই fallback নোটিশ আর দেখানো হচ্ছে না — চুপচাপ ব্যাকগ্রাউন্ডে হচ্ছে,
+    // showTyping() থেকে যে "..." typing bubble টা আগে থেকেই দেখাচ্ছে সেটাই যথেষ্ট।
+    // noteDiv কে DOM-এ append করা হচ্ছে না, শুধু ভ্যারিয়েবল হিসেবে রাখা হলো যাতে নিচের
+    // progress-callback আর remove() কলগুলো error না দিয়ে চুপচাপ কাজ করে (unattached node, no-op)।
     var noteDiv = document.createElement('div');
-    noteDiv.className = 'msg note';
-    noteDiv.textContent = 'মূল AI সার্ভিস এই মুহূর্তে সাড়া দিচ্ছে না — ডিভাইসে ব্যাকআপ AI দিয়ে উত্তর তৈরি হচ্ছে...';
-    if (box) { box.appendChild(noteDiv); box.scrollTop = box.scrollHeight; }
-
     try {
       var reply = await window.LocalAI.generateReply(
         LOCAL_SYSTEM_PROMPT,
