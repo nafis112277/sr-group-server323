@@ -4072,11 +4072,51 @@ async function sendMessageWithStreaming() {
       document.getElementById('sendBtn').disabled = false;
       return __originalSendMessage();
     }
-    if (!res.ok) {
-      let errMsg = 'কিছু একটা ভুল হয়েছে।';
-      try { const j = await res.json(); errMsg = j.error || errMsg; } catch (e) { /* body ছিল না বা JSON না */ }
-      throw new Error(errMsg);
+   if (!res.ok) {
+
+  // ===== WebLLM Local Fallback =====
+  if (
+    res.status === 500 ||
+    res.status === 502 ||
+    res.status === 503
+  ) {
+
+    if (window.LocalAI && window.LocalAI.isSupported()) {
+
+      hideTyping();
+
+      const reply = await window.LocalAI.generateReply(
+        LOCAL_SYSTEM_PROMPT,
+        currentHistoryForLocalAi(),
+        text
+      );
+
+      if (userEntry && userEntry.record) {
+        userEntry.record.id = null;
+      }
+
+      addMessage("bot", reply, {
+        id: null,
+        imageUrl: null
+      });
+
+      sending = false;
+      document.getElementById("sendBtn").disabled = false;
+      input.focus();
+
+      return;
     }
+  }
+
+  let errMsg = "কিছু একটা ভুল হয়েছে।";
+
+  try {
+    const j = await res.json();
+    errMsg = j.error || errMsg;
+  } catch (e) {}
+
+  throw new Error(errMsg);
+}
 
     hideTyping();
     const box = document.getElementById('messages');
