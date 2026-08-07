@@ -12,7 +12,7 @@ let currentModelId = null;
 
 // Choto, fast model — quality ChatGPT/Gemini-er cheye onek kom, kintu
 // student-level shohoj explanation-er jonno thik ache.
-const DEFAULT_MODEL = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+const DEFAULT_MODEL = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
 
 function isSupported() {
   return typeof navigator !== 'undefined' && !!navigator.gpu;
@@ -29,18 +29,28 @@ async function loadEngine(modelId = DEFAULT_MODEL, onProgress) {
     enginePromise = null;
   }
   currentModelId = modelId;
-
   if (!enginePromise) {
-    enginePromise = import(
-      'https://esm.run/@mlc-ai/web-llm'
-    ).then(async (webllm) => {
+    enginePromise = (async () => {
+      const webllm = await import('https://esm.run/@mlc-ai/web-llm');
       const engine = new webllm.MLCEngine();
       engine.setInitProgressCallback((report) => {
         if (onProgress) onProgress(report.text, report.progress);
       });
-      await engine.reload(modelId);
-      return engine;
-    });
+      const MAX_RETRIES = 3;
+      let lastErr;
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          await engine.reload(modelId);
+          return engine;
+        } catch (err) {
+          lastErr = err;
+          if (onProgress) onProgress('Download attempt ' + attempt + ' failed, retrying...', 0);
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+        }
+      }
+      enginePromise = null;
+      throw lastErr;
+    })();
   }
   return enginePromise;
 }
@@ -67,6 +77,10 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   const text = reply?.choices?.[0]?.message?.content?.trim();
   if (!text) throw new Error('Local AI কোনো উত্তর দিতে পারেনি। আবার চেষ্টা করুন।');
   return text;
+}
+
+if (isSupported()) {
+  loadEngine().catch(() => { enginePromise = null; });
 }
 
 window.LocalAI = { isSupported, loadEngine, generateReply };
