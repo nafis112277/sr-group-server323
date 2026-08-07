@@ -5440,8 +5440,7 @@ const policyLinkStyle = document.createElement('style');
      শুধু .../chat/conversations/:id/message বা .../message/stream এন্ডপয়েন্টেই কাজ করবে —
      মেসেজ এডিট/রিজেনারেট/অ্যাডমিন-চ্যাট এন্ডপয়েন্টগুলো অক্ষত থাকবে। */
   var __srOriginalFetch = window.fetch.bind(window);
-  var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message(\/stream)?$/;
-  console.log("[WebLLM] fetch called:", input);
+   var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message(\/stream)?$/;
   window.fetch = function (input, init) {
     try {
       var url = typeof input === 'string' ? input : (input && input.url) || '';
