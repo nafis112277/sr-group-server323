@@ -6076,13 +6076,24 @@ if (typeof applyAdminRoleUI === 'function') {
   // message/edit/regenerate — তিনটাতেই server callAI() ফেইল করলে (502) fallback ধরবে
   var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/(message|messages\/[^/]+|messages\/[^/]+\/regenerate)$/;
 
-  window.fetch = async function (input, init) {
+window.fetch = async function (input, init) {
+
     console.log("[WebLLM] FETCH:", input);
-    var url = typeof input === 'string' ? input : (input && input.url) || '';
-    var isTargetEndpoint = MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string';
-console.log("[WebLLM] TARGET:", isTargetEndpoint);
+
+    var url = typeof input === 'string'
+        ? input
+        : (input && input.url) || '';
+
+    var isTargetEndpoint =
+        MESSAGE_ENDPOINT_RE.test(url) &&
+        init &&
+        typeof init.body === 'string';
+
+    console.log("[WebLLM] URL:", url);
+    console.log("[WebLLM] TARGET:", isTargetEndpoint);
+
     if (!isTargetEndpoint) {
-      return __srOriginalFetchForLocalAi(input, init);
+        return __srOriginalFetchForLocalAi(input, init);
     }
 
   var payload;
@@ -6097,7 +6108,8 @@ console.log("[WebLLM] TARGET:", isTargetEndpoint);
     }
 
     var res = await __srOriginalFetchForLocalAi(input, init);
-    console.log("[WebLLM] STATUS:", res.status);
+
+console.log("[WebLLM] STATUS:", res.status);
     console.log("STATUS =", res.status);
     // শুধু 502 (chat.js-এর callAI সব provider-e fail করলে ঠিক এই কোডই পাঠায়) ধরি —
     // 400/403/429/404 এগুলো legit user-facing error (quota শেষ, model lock ইত্যাদি), fallback করব না
