@@ -12,7 +12,7 @@ let currentModelId = null;
 
 // Choto, fast model — quality ChatGPT/Gemini-er cheye onek kom, kintu
 // student-level shohoj explanation-er jonno thik ache.
-const DEFAULT_MODEL = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
+const DEFAULT_MODEL = 'TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC';
 
 function isSupported() {
   return typeof navigator !== 'undefined' && !!navigator.gpu;
