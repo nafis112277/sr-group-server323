@@ -1489,9 +1489,6 @@
             <div class="plus-menu-item" id="menuMathSolve">
               <span class="pmi-icon">🧮</span><span class="pmi-label">Math solve</span><span class="pmi-check">✓</span>
             </div>
-            <div class="plus-menu-item" id="menuLocalAi">
-              <span class="pmi-icon">🔒</span><span class="pmi-label">Local AI (offline, this device)</span><span class="pmi-check">✓</span>
-            </div>
           </div>
         </div>
         <!-- নতুন সংযোজন: ভয়েস ইনপুট বাটন। ব্রাউজারে Web Speech API সাপোর্ট না থাকলে JS নিজেই এটা
@@ -6010,70 +6007,75 @@ if (typeof applyAdminRoleUI === 'function') {
 <script src="/webllm-local.js"></script>
 <script id="sr-added-local-ai-feature">
 (function () {
-  window.localAiEnabled = false;
-
-  var menuItem = document.getElementById('menuLocalAi');
-  if (menuItem) {
-    menuItem.onclick = function (e) {
-      e.stopPropagation();
-      if (!window.LocalAI || !window.LocalAI.isSupported()) {
-        alert('এই ডিভাইস/ব্রাউজারে Local AI চলবে না। Chrome বা Edge (desktop) দিয়ে চেষ্টা করুন — WebGPU দরকার।');
-        return;
-      }
-      window.localAiEnabled = !window.localAiEnabled;
-      menuItem.classList.toggle('toggled', window.localAiEnabled);
-    };
-  }
+  // FIX: আগে এটা ইউজারের "+" মেনু টগলে চলত। এখন সেটা সরিয়ে fully automatic করা হলো —
+  // Gemini/Groq/Anthropic/DeepSeek সব fail করলে (server 502 দিলে) নিঃশব্দে WebLLM দিয়ে
+  // fallback reply বানিয়ে পাঠানো হয়, ইউজার শুধু একটু দেরি টের পায়, খালি হাতে ফেরত যায় না।
 
   function currentHistoryForLocalAi() {
     if (typeof currentMessages === 'undefined') return [];
-    var all = currentMessages.slice(0, -1); // shesh (already-added) user message বাদ, ওটা আলাদা পাঠানো হয়
-    return all.map(function (m) {
+    return currentMessages.map(function (m) {
       return { role: (m.role === 'assistant' || m.role === 'bot') ? 'assistant' : 'user', content: m.content || '' };
     });
   }
 
   var LOCAL_SYSTEM_PROMPT =
-    "You are a helpful, patient student tutor. Answer clearly and simply, step by step when helpful.";
+    "You are a helpful, patient student tutor. Answer clearly and simply, step by step when helpful. " +
+    "This reply is being generated as a backup because the main AI service is temporarily unavailable.";
 
   var __srOriginalFetchForLocalAi = window.fetch.bind(window);
-  // শুধু আসল /message endpoint ধরি (/message/stream না), নাহলে streaming attempt +
-  // fallback — দুইবার local model চালানো লাগবে
-  var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message$/;
+  // message/edit/regenerate — তিনটাতেই server callAI() ফেইল করলে (502) fallback ধরবে
+  var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/(message|messages\/[^/]+|messages\/[^/]+\/regenerate)$/;
 
   window.fetch = async function (input, init) {
-    try {
-      var url = typeof input === 'string' ? input : (input && input.url) || '';
-      if (window.localAiEnabled && MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string') {
-        var payload = JSON.parse(init.body);
-        if (payload && typeof payload.content === 'string' && payload.content.trim() && !payload.model) {
-          var noteDiv = document.createElement('div');
-          noteDiv.className = 'msg note';
-          noteDiv.textContent = 'Local AI মডেল লোড হচ্ছে...';
-          var box = document.getElementById('messages');
-          if (box) { box.appendChild(noteDiv); box.scrollTop = box.scrollHeight; }
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+    var isTargetEndpoint = MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string';
 
-          try {
-            var reply = await window.LocalAI.generateReply(
-              LOCAL_SYSTEM_PROMPT,
-              currentHistoryForLocalAi(),
-              payload.content,
-              function (text) { if (noteDiv) noteDiv.textContent = text; }
-            );
-            payload.model = 'local';
-            payload.localReply = reply;
-            init = Object.assign({}, init, { body: JSON.stringify(payload) });
-          } catch (genErr) {
-            if (noteDiv && noteDiv.parentNode) noteDiv.remove();
-            throw genErr;
-          }
-          if (noteDiv && noteDiv.parentNode) noteDiv.remove();
-        }
-      }
-    } catch (e) {
-      if (e && e.message && /WebGPU|Local AI/.test(e.message)) throw e;
+    if (!isTargetEndpoint) {
+      return __srOriginalFetchForLocalAi(input, init);
     }
-    return __srOriginalFetchForLocalAi(input, init);
+
+    var payload;
+    try { payload = JSON.parse(init.body); } catch (e) { payload = null; }
+
+    // ইউজার নিজে থেকেই কোনো model চেয়ে থাকলে (ভবিষ্যতে menu থাকলে) সেটাই সম্মান করি, এখানে হাত দিই না
+    if (!payload || payload.model) {
+      return __srOriginalFetchForLocalAi(input, init);
+    }
+
+    var res = await __srOriginalFetchForLocalAi(input, init);
+    // শুধু 502 (chat.js-এর callAI সব provider-e fail করলে ঠিক এই কোডই পাঠায়) ধরি —
+    // 400/403/429/404 এগুলো legit user-facing error (quota শেষ, model lock ইত্যাদি), fallback করব না
+    if (res.status !== 502) return res;
+    if (!window.LocalAI || !window.LocalAI.isSupported()) return res; // fallback করার উপায় নাই, আসল error-ই দেখাই
+
+    var promptText = payload.content || (function () {
+      var last = [...(currentMessages || [])].reverse().find(function (m) { return m.role === 'user'; });
+      return last ? last.content : '';
+    })();
+    if (!promptText) return res;
+
+    var box = document.getElementById('messages');
+    var noteDiv = document.createElement('div');
+    noteDiv.className = 'msg note';
+    noteDiv.textContent = 'মূল AI সার্ভিস এই মুহূর্তে সাড়া দিচ্ছে না — ডিভাইসে ব্যাকআপ AI দিয়ে উত্তর তৈরি হচ্ছে...';
+    if (box) { box.appendChild(noteDiv); box.scrollTop = box.scrollHeight; }
+
+    try {
+      var reply = await window.LocalAI.generateReply(
+        LOCAL_SYSTEM_PROMPT,
+        currentHistoryForLocalAi(),
+        promptText,
+        function (text) { if (noteDiv) noteDiv.textContent = text; }
+      );
+      if (noteDiv && noteDiv.parentNode) noteDiv.remove();
+
+      var fallbackPayload = Object.assign({}, payload, { model: 'local', localReply: reply });
+      var retryInit = Object.assign({}, init, { body: JSON.stringify(fallbackPayload) });
+      return __srOriginalFetchForLocalAi(input, retryInit);
+    } catch (genErr) {
+      if (noteDiv && noteDiv.parentNode) noteDiv.remove();
+      return res; // local-ও fail করলে, আসল 502 error-ই দেখাই — মিথ্যা সাফল্য দেখাব না
+    }
   };
 })();
 </script>
