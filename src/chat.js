@@ -486,6 +486,7 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
     const result = await callAI(system, history, {
       webSearch: !!(req.body || {}).webSearch,
       forceProvider: modelCheck.forceProvider,
+      userPlan: modelCheck.plan,
     });
 
     if (!result.ok) {
@@ -593,6 +594,7 @@ router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, asy
     const result = await callAI(system, history, {
       webSearch: !!(req.body || {}).webSearch,
       forceProvider: modelCheck.forceProvider, // FIX
+      userPlan: modelCheck.plan,
     });
     if (!result.ok) {
       return res.status(502).json({ error: result.error });
@@ -687,7 +689,10 @@ router.post('/conversations/:id/messages/:messageId/regenerate', blockIfBroadcas
     const skillBlock = await getMatchingSkillInstructions(req.userEmail, lastUserMsg ? lastUserMsg.content : '');
     const system = baseSystem + skillBlock;
 
-    const result = await callAI(system, history, { forceProvider: modelCheck.forceProvider }); // FIX
+    const result = await callAI(system, history, {
+      forceProvider: modelCheck.forceProvider,
+      userPlan: modelCheck.plan,
+    }); // FIX
     if (!result.ok) return res.status(502).json({ error: result.error });
 
     const images = result.images || null;
