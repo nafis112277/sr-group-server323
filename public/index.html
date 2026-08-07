@@ -6095,8 +6095,10 @@ if (typeof applyAdminRoleUI === 'function') {
     }
 
     var res = await __srOriginalFetchForLocalAi(input, init);
+    console.log("STATUS =", res.status);
     // শুধু 502 (chat.js-এর callAI সব provider-e fail করলে ঠিক এই কোডই পাঠায়) ধরি —
     // 400/403/429/404 এগুলো legit user-facing error (quota শেষ, model lock ইত্যাদি), fallback করব না
+    console.log("FETCH FALLBACK HIT");
     if (res.status !== 502) return res;
     if (!window.LocalAI || !window.LocalAI.isSupported()) return res; // fallback করার উপায় নাই, আসল error-ই দেখাই
 
@@ -6110,23 +6112,43 @@ if (typeof applyAdminRoleUI === 'function') {
     // showTyping() থেকে যে "..." typing bubble টা আগে থেকেই দেখাচ্ছে সেটাই যথেষ্ট।
     // noteDiv কে DOM-এ append করা হচ্ছে না, শুধু ভ্যারিয়েবল হিসেবে রাখা হলো যাতে নিচের
     // progress-callback আর remove() কলগুলো error না দিয়ে চুপচাপ কাজ করে (unattached node, no-op)।
-    var noteDiv = document.createElement('div');
-    try {
-    return new Response(
-    JSON.stringify({
-        reply: reply,
-        assistantMessageId: null,
-        replyImageUrl: null,
-        local: true
-    }),
-    {
-        status: 200,
-        headers: {
-            "Content-Type": "application/json"
+   var noteDiv = document.createElement('div');
+
+try {
+
+    var reply = await window.LocalAI.generateReply(
+        LOCAL_SYSTEM_PROMPT,
+        currentHistoryForLocalAi(),
+        promptText,
+        function (text) {
+            if (noteDiv) noteDiv.textContent = text;
         }
-    }
-);
-    } catch (genErr) {
+    );
+
+    return new Response(
+        JSON.stringify({
+            reply: reply,
+            assistantMessageId: null,
+            replyImageUrl: null,
+            local: true
+        }),
+        {
+            status: 200,
+            headers: {
+                "Content-Type": "application/json"
+            }
+        }
+    );
+
+} catch (genErr) {
+
+    if (noteDiv && noteDiv.parentNode)
+        noteDiv.remove();
+
+    return res;
+
+}
+    
       if (noteDiv && noteDiv.parentNode) noteDiv.remove();
       return res; // local-ও fail করলে, আসল 502 error-ই দেখাই — মিথ্যা সাফল্য দেখাব না
     }
