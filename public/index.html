@@ -2937,11 +2937,60 @@ document.getElementById('saveCustomizeBtn').onclick = async () => {
     const note = document.getElementById('customizeSaveNote');
     note.style.display = 'block';
     setTimeout(() => (note.style.display = 'none'), 2000);
-  } catch (err) {
-    setError('customizeError', err.message);
-  }
-};
+ } catch (err) {
+  hideTyping();
 
+  console.error("Cloud AI failed:", err);
+
+  // Browser Local AI fallback
+  if (window.LocalAI && window.LocalAI.isSupported()) {
+    try {
+      addMessage("note", "Cloud AI unavailable. Switching to Local AI...");
+
+      // Local AI load (only first time)
+      await window.LocalAI.loadEngine();
+
+      // Conversation history build
+      const history = [];
+
+      document.querySelectorAll(".message").forEach(el => {
+        if (el.classList.contains("user")) {
+          history.push({
+            role: "user",
+            content: el.innerText
+          });
+        } else if (el.classList.contains("bot")) {
+          history.push({
+            role: "assistant",
+            content: el.innerText
+          });
+        }
+      });
+
+      const reply = await window.LocalAI.generateReply(
+        "",
+        history,
+        text
+      );
+
+      addMessage("bot", reply);
+
+    } catch (localErr) {
+      console.error(localErr);
+
+      addMessage(
+        "note",
+        "Local AI also failed: " + localErr.message
+      );
+    }
+  } else {
+    addMessage(
+      "note",
+      "Couldn't get a reply: " + err.message
+    );
+  }
+}
+  };
 /* ---------------- Theme (client-side only, saved in localStorage per device) ----------------
    html ট্যাগে data-theme="..." বসিয়ে দেওয়া হয়, আর CSS-এর html[data-theme="..."] রুলগুলো
    শুধু কালার ভ্যারিয়েবল override করে দেয় — বাকি পুরো সাইটের লে-আউট/ফিচার অপরিবর্তিত থাকে। */
@@ -6063,17 +6112,20 @@ if (typeof applyAdminRoleUI === 'function') {
     // progress-callback আর remove() কলগুলো error না দিয়ে চুপচাপ কাজ করে (unattached node, no-op)।
     var noteDiv = document.createElement('div');
     try {
-      var reply = await window.LocalAI.generateReply(
-        LOCAL_SYSTEM_PROMPT,
-        currentHistoryForLocalAi(),
-        promptText,
-        function (text) { if (noteDiv) noteDiv.textContent = text; }
-      );
-      if (noteDiv && noteDiv.parentNode) noteDiv.remove();
-
-     var fallbackPayload = Object.assign({}, payload, { model: 'local', localReply: reply });
-      var retryInit = Object.assign({}, init, { body: JSON.stringify(fallbackPayload) });
-      return __srOriginalFetchForLocalAi(input, retryInit);
+    return new Response(
+    JSON.stringify({
+        reply: reply,
+        assistantMessageId: null,
+        replyImageUrl: null,
+        local: true
+    }),
+    {
+        status: 200,
+        headers: {
+            "Content-Type": "application/json"
+        }
+    }
+);
     } catch (genErr) {
       if (noteDiv && noteDiv.parentNode) noteDiv.remove();
       return res; // local-ও fail করলে, আসল 502 error-ই দেখাই — মিথ্যা সাফল্য দেখাব না
