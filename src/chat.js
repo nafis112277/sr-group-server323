@@ -418,7 +418,6 @@ router.post('/preferences', async (req, res) => {
     res.status(500).json({ error: 'Could not save your preferences.' });
   }
 });
-
 router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
@@ -435,6 +434,12 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
     // FIX: content length cap — age kono limit chilo na
     if (text.length > MAX_MESSAGE_LENGTH) {
       return res.status(400).json({ error: `Message is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
+    }
+    if (incomingImage && (typeof incomingImage !== 'string' || incomingImage.length > 8 * 1024 * 1024)) {
+      return res.status(413).json({ error: 'Image is too large or invalid.' });
+    }
+    if (incomingImage && !/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(incomingImage)) {
+      return res.status(400).json({ error: 'Invalid image format.' });
     }
 
     const settings = await getSettings();
@@ -460,6 +465,30 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
        RETURNING id`,
       [conv.id, 'user', text, userImageRecord ? JSON.stringify([userImageRecord]) : null]
     );
+
+    // Local model replies are generated outside callAI. Store the user message first,
+    // then store the supplied local reply so conversation history remains consistent.
+    if (req.body?.model === 'local' && typeof req.body?.localReply === 'string' && req.body.localReply.length > 0) {
+      if (req.body.localReply.length > MAX_MESSAGE_LENGTH) {
+        return res.status(400).json({ error: `Local reply is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
+      }
+      const insertedAssistantMsg = await queryOne(
+        `INSERT INTO messages (conversation_id, role, content)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+        [conv.id, 'assistant', req.body.localReply]
+      );
+      let title = conv.title;
+      if (title === 'New chat') title = (text || 'Photo').slice(0, 40);
+      await query('UPDATE conversations SET updated_at = now(), title = $1 WHERE id = $2', [title, conv.id]);
+      return res.json({
+        reply: req.body.localReply,
+        userMessageId: insertedUserMsg.id,
+        assistantMessageId: insertedAssistantMsg.id,
+        replyImageUrl: null,
+        title,
+      });
+    }
 
     // ---- FIX: images column ta ageo select korte hobe, na hole AI-ke pathanor shomoy chobi hariye jay ----
     const fullHistory = await query(
@@ -667,12 +696,15 @@ router.post('/conversations/:id/messages/:messageId/regenerate', blockIfBroadcas
       return res.status(modelCheck.status).json({ error: modelCheck.error });
     }
 
-    // এই reply আর তার পরে যা যা এসেছে (থাকলে) সব মুছে দিই — এর জায়গায় নতুন reply বসবে
-    await query('DELETE FROM messages WHERE conversation_id = $1 AND id >= $2', [conv.id, target.id]);
-
+    // Build the history before deleting the old reply. If the AI call fails,
+    // restore the deleted rows so regenerate never destroys the previous reply.
+    const rowsToDelete = await query(
+      'SELECT id, role, content, images FROM messages WHERE conversation_id = $1 AND id >= $2 ORDER BY id ASC',
+      [conv.id, target.id]
+    );
     const fullHistory = await query(
-      'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
-      [conv.id]
+      'SELECT role, content, images FROM messages WHERE conversation_id = $1 AND id < $2 ORDER BY id ASC',
+      [conv.id, target.id]
     );
     const history = fullHistory.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
       role: m.role,
@@ -690,10 +722,23 @@ router.post('/conversations/:id/messages/:messageId/regenerate', blockIfBroadcas
     const system = baseSystem + skillBlock;
 
     const result = await callAI(system, history, {
+      webSearch: !!(req.body || {}).webSearch,
       forceProvider: modelCheck.forceProvider,
       userPlan: modelCheck.plan,
-    }); // FIX
-    if (!result.ok) return res.status(502).json({ error: result.error });
+    });
+    if (!result.ok) {
+      // Restore the original assistant reply and any messages after it.
+      for (const row of rowsToDelete) {
+        await query(
+          'INSERT INTO messages (id, conversation_id, role, content, images) VALUES ($1, $2, $3, $4, $5)',
+          [row.id, conv.id, row.role, row.content, row.images]
+        );
+      }
+      return res.status(502).json({ error: result.error });
+    }
+
+    // AI succeeded, so now replace the old reply.
+    await query('DELETE FROM messages WHERE conversation_id = $1 AND id >= $2', [conv.id, target.id]);
 
     const images = result.images || null;
     const insertedAssistantMsg = await queryOne(
@@ -768,8 +813,10 @@ router.post('/feedback', requireUser, async (req, res) => {
   }
 });
 // ---- Self-service API key (customer নিজের জন্য) ----
+import crypto from 'node:crypto';
+
 function generateApiKey() {
-  return 'sk-' + [...Array(40)].map(() => Math.random().toString(36)[2] || '0').join('');
+  return 'sk-' + crypto.randomBytes(32).toString('hex');
 }
 
 // ---- API Access Toggle — admin panel থেকে on/off করা যায়, apikey ট্যাব খোলার সময় frontend এটা চেক করে ----
