@@ -1,42 +1,60 @@
 // public/webllm-local.js
 //
-// Local (offline) AI mode — WebGPU, multilingual support
-// Fallback logic: SmolLM2-360M → SmolLM2-135M → Qwen3-0.6B
-// Network fail হলে পরবর্তী ছোট model চেষ্টা করবে।
+// Local (offline) AI mode — WebGPU, multilingual (auto-detect) support
+// Fallback logic: Qwen2.5-1.5B → Qwen3-0.6B → SmolLM2-360M
 
 let enginePromise = null;
 let currentModelId = null;
-let selectedLanguage = 'bengali'; // default
+let selectedLanguage = 'english'; // last-detected language, auto-updates
 
-// Primary model
+const AI_NAME = 'KROVOS AI';
+const AI_MODEL_NAME = 'Nova1';
+const AI_CREATOR = 'SR Group';
+
 const DEFAULT_MODEL = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
 
-// Fallback models — ছোট থেকে বড় order
 const FALLBACK_MODELS = [
-  // Qwen সিরিজ SmolLM2-এর চেয়ে বেশি ভাষা (বাংলাসহ) বোঝে এবং instruction ভালো follow করে —
-  // তাই বড়/সক্ষম মডেলটাকে প্রথমে চেষ্টা করানো হচ্ছে, ছোটগুলো শুধু download/RAM fail-এ fallback
   'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
   'Qwen3-0.6B-q4f32_1-MLC',
   'SmolLM2-360M-Instruct-q4f16_1-MLC'
 ];
 
-// Language-specific system prompts
+// Identity + scope
+const IDENTITY_PROMPT = `তোমার নাম ${AI_NAME}। তোমার model-এর নাম ${AI_MODEL_NAME}। তোমাকে পরিচালনা করে ${AI_CREATOR}।
+তোমার কাজ: ${AI_CREATOR}-এর পণ্য/সেবা সম্পর্কিত প্রশ্নের উত্তর দেওয়া, সাধারণ কোডিং/টেকনিক্যাল সহায়তা দেওয়া, এবং সাধারণ তথ্য ও পরামর্শ প্রদান করা।
+তুমি কখনো নিজেকে Qwen, SmolLM, Alibaba, HuggingFace বা অন্য কোনো base model বলবে না।
+কেউ "তুমি কোন মডেল/AI" জিজ্ঞেস করলে শুধু বলবে: "আমি ${AI_MODEL_NAME}, ${AI_CREATOR}-এর ${AI_NAME}।"
+ব্যবহারকারী যে ভাষায় প্রশ্ন করবে, ঠিক সেই ভাষায় উত্তর দেবে — ব্যবহারকারী ভাষা পাল্টালে তুমিও পাল্টাবে।`;
+
+// SR Group org info — admin/contact question ashle eikhan theke bolbe
+const ORG_INFO = `SR Group প্রশাসক: Sadiqur Rahman, Sakirul Islam।
+যোগাযোগ ইমেইল: hossainalijms9@gmail.com
+ওয়েবসাইট: https://krovos.rf.gd/
+কেউ SR Group-এর admin/contact/website জিজ্ঞেস করলে এই তথ্য দিয়ে উত্তর দেবে।`;
+
+// Language-specific system prompts (fallback style guide, per detected language)
 const LANGUAGE_PROMPTS = {
   bengali: `আপনি একজন সহায়ক। শিক্ষার্থী-বান্ধব, সহজ ব্যাখ্যা দিন।
 সব উত্তর বাংলায় লিখুন।`,
-  
+
   english: `You are a helpful assistant. Provide student-friendly, clear explanations.
 Answer in complete English sentences.`,
-  
+
   hindi: `आप एक सहायक हैं। छात्र-अनुकूल, सरल व्याख्या दें।
 सभी उत्तर हिंदी में लिखें।`,
-  
+
+  chinese: `你是一个乐于助人的助手。请提供适合学生的清晰解释。
+请用中文回答所有问题。`,
+
+  japanese: `あなたは親切なアシスタントです。学生にわかりやすい説明を提供してください。
+すべての回答は日本語で書いてください。`,
+
   spanish: `Eres un asistente útil. Proporciona explicaciones claras y amigables para estudiantes.
 Responde en español completo.`,
-  
+
   french: `Vous êtes un assistant utile. Fournissez des explications claires et conviviales.
 Répondez en français complet.`,
-  
+
   urdu: `آپ ایک معاون ہیں۔ طالب علم کے لیے دوست انہ وضاحت دیں۔
 تمام جوابات اردو میں لکھیں۔`
 };
@@ -45,36 +63,46 @@ function isSupported() {
   return typeof navigator !== 'undefined' && !!navigator.gpu;
 }
 
+// User message er script/character dekhe language detect kore
+function detectLanguage(text) {
+  if (!text) return 'english';
+  if (/[\u3040-\u30FF]/.test(text)) return 'japanese';       // hiragana/katakana
+  if (/[\u4E00-\u9FFF]/.test(text)) return 'chinese';         // hanzi (japanese kanji-only text o eikhane pore, rare case)
+  if (/[\u0980-\u09FF]/.test(text)) return 'bengali';
+  if (/[\u0900-\u097F]/.test(text)) return 'hindi';
+  if (/[\u0600-\u06FF]/.test(text)) return 'urdu';
+  if (/[¿¡ñÑ]/.test(text)) return 'spanish';
+  if (/[àâçéèêëîïôùûüÀÂÇÉÈÊËÎÏÔÙÛÜ]/.test(text)) return 'french';
+  return 'english';
+}
+
 async function loadEngine(modelId = DEFAULT_MODEL, onProgress) {
   if (!isSupported()) {
     throw new Error(
       'এই ডিভাইসে Local AI চলবে না। Chrome বা Edge (desktop) দিয়ে চেষ্টা করুন — WebGPU দরকার।'
     );
   }
-  
-  // model change hole purono engine fela dei
+
   if (enginePromise && currentModelId !== modelId) {
     enginePromise = null;
   }
-  
-  // যদি আগেই loaded, রিটার্ন করো
+
   if (enginePromise && currentModelId === modelId) {
     return enginePromise;
   }
-  
+
   if (!enginePromise) {
     enginePromise = (async () => {
-      // Fallback logic: models sequence এ চেষ্টা করবে
       for (const model of FALLBACK_MODELS) {
         try {
           if (onProgress) onProgress(`Trying ${model.split('-')[0]}...`, 0);
-          
+
           const webllm = await import('https://esm.run/@mlc-ai/web-llm');
           const engine = new webllm.MLCEngine();
           engine.setInitProgressCallback((report) => {
             if (onProgress) onProgress(report.text, report.progress);
           });
-          
+
           const MAX_RETRIES = 3;
           let lastErr;
           for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -89,44 +117,49 @@ async function loadEngine(modelId = DEFAULT_MODEL, onProgress) {
               await new Promise((r) => setTimeout(r, 2000 * attempt));
             }
           }
-          // এই model fail, পরবর্তী চেষ্টা করবে
           if (onProgress) onProgress(`${model.split('-')[0]} failed, trying next model...`, 0);
           continue;
-          
+
         } catch (err) {
           if (onProgress) onProgress(`${model} error, trying next...`, 0);
           continue;
         }
       }
-      
-      // সব model fail
+
       enginePromise = null;
       throw new Error('সব models fail। Internet connection check করুন। Network stable নয়।');
-      
+
     })();
   }
-  
+
   return enginePromise;
+}
+
+function filterIdentityLeak(text) {
+  return text
+    .replace(/\bQwen2?\.?5?\b/gi, AI_MODEL_NAME)
+    .replace(/\bSmolLM2?\b/gi, AI_MODEL_NAME)
+    .replace(/\b(Alibaba|HuggingFace|MLC-AI)\b/gi, AI_CREATOR);
 }
 
 async function generateReply(systemPrompt, history, userMessage, onProgress) {
   const engine = await loadEngine(DEFAULT_MODEL, onProgress);
-  
-  // Language-specific prompt
-  const langPrompt = LANGUAGE_PROMPTS[selectedLanguage] || LANGUAGE_PROMPTS.english;
-  
-const messages = [];
-  // WebLLM শুধু একটা system message allow করে, সেটাও অবশ্যই messages[0]-এ থাকতে হবে —
-  // আগে langPrompt আর systemPrompt আলাদা দুইটা 'system' role message হিসেবে পুশ হতো,
-  // দ্বিতীয়টা (index 1) SystemMessageOrderError থ্রো করত। এখন দুইটাকে একটাই system
-  // message-এ merge করা হচ্ছে।
-  const combinedSystemPrompt = systemPrompt ? (langPrompt + '\n\n' + systemPrompt) : langPrompt;
+
+  // Prottek message e user er vasha auto-detect
+  const detectedLang = detectLanguage(userMessage);
+  selectedLanguage = detectedLang;
+  const langPrompt = LANGUAGE_PROMPTS[detectedLang] || LANGUAGE_PROMPTS.english;
+
+  const messages = [];
+  const combinedSystemPrompt =
+    IDENTITY_PROMPT + '\n\n' + ORG_INFO + '\n\n' + langPrompt +
+    (systemPrompt ? '\n\n' + systemPrompt : '');
   messages.push({ role: 'system', content: combinedSystemPrompt });
 
   for (const m of history) {
-    messages.push({ 
-      role: m.role === 'assistant' ? 'assistant' : 'user', 
-      content: m.content || '' 
+    messages.push({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.content || ''
     });
   }
   messages.push({ role: 'user', content: userMessage });
@@ -137,12 +170,13 @@ const messages = [];
     max_tokens: 400,
   });
 
-  const text = reply?.choices?.[0]?.message?.content?.trim();
-  if (!text) throw new Error('Local AI কোনো উত্তর দিতে পারেনি। আবার চেষ্টা করুন।');
-  return text;
+  const rawText = reply?.choices?.[0]?.message?.content?.trim();
+  if (!rawText) throw new Error('Local AI কোনো উত্তর দিতে পারেনি। আবার চেষ্টা করুন।');
+  return filterIdentityLeak(rawText);
 }
 
-// Language change
+// Manual override still available (UI theke call korle e-o kaj korbe,
+// kintu porer message e auto-detect abar overwrite kore dibe)
 function setLanguage(lang) {
   if (LANGUAGE_PROMPTS[lang]) {
     selectedLanguage = lang;
@@ -151,7 +185,6 @@ function setLanguage(lang) {
   return false;
 }
 
-// Model list দেখার জন্য
 window.listModels = async function() {
   try {
     const webllm = await import('https://esm.run/@mlc-ai/web-llm');
@@ -163,7 +196,6 @@ window.listModels = async function() {
   }
 };
 
-// Current model জানার জন্য
 window.getCurrentModel = function() {
   return currentModelId || 'Not loaded yet';
 };
@@ -172,11 +204,12 @@ if (isSupported()) {
   loadEngine().catch(() => { enginePromise = null; });
 }
 
-window.LocalAI = { 
-  isSupported, 
-  loadEngine, 
-  generateReply, 
+window.LocalAI = {
+  isSupported,
+  loadEngine,
+  generateReply,
   setLanguage,
+  detectLanguage,
   SUPPORTED_LANGUAGES: Object.keys(LANGUAGE_PROMPTS),
   FALLBACK_MODELS
 };
