@@ -1,44 +1,34 @@
 // public/webllm-local.js
 //
 // Local (offline) AI mode — WebGPU, multilingual support (Bengali, English, Hindi, etc)
-// Phi-3.5-mini: Small, fast, multilingual. CDN download করা সহজ।
+// SmolLM2-360M: সবচেয়ে ছোট, ১৫০MB, super fast download
 
 let enginePromise = null;
 let currentModelId = null;
 let selectedLanguage = 'bengali'; // default
 
-// Phi-3.5-mini: Size ছোট, fast download, Bengali/English/Hindi সব ভালো।
-const DEFAULT_MODEL = 'Phi-3.5-mini-instruct-q4f16_1-MLC';
+// SmolLM2-360M: সবচেয়ে ছোট model। ১५०MB, network এ সহজ।
+const DEFAULT_MODEL = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
 
 // Language-specific system prompts
 const LANGUAGE_PROMPTS = {
   bengali: `আপনি একজন সহায়ক। শিক্ষার্থী-বান্ধব, সহজ ব্যাখ্যা দিন।
-সব উত্তর বাংলায় লিখুন — সম্পূর্ণ শব্দ, character-by-character নয়।
-বাংলা ভাষা সঠিক রাখুন।`,
+সব উত্তর বাংলায় লিখুন।`,
   
   english: `You are a helpful assistant. Provide student-friendly, clear explanations.
-Answer in complete English sentences, not broken text.`,
+Answer in complete English sentences.`,
   
   hindi: `आप एक सहायक हैं। छात्र-अनुकूल, सरल व्याख्या दें।
-सभी उत्तर हिंदी में लिखें - पूर्ण शब्द, टूटे हुए टेक्स्ट नहीं।`,
+सभी उत्तर हिंदी में लिखें।`,
   
   spanish: `Eres un asistente útil. Proporciona explicaciones claras y amigables para estudiantes.
-Responde en español completo, no en texto fragmentado.`,
+Responde en español completo.`,
   
   french: `Vous êtes un assistant utile. Fournissez des explications claires et conviviales.
-Répondez en français complet, pas en texte fragmenté.`,
+Répondez en français complet.`,
   
   urdu: `آپ ایک معاون ہیں۔ طالب علم کے لیے دوست انہ وضاحت دیں۔
-تمام جوابات اردو میں لکھیں - مکمل الفاظ، حروف-در-حروف نہیں۔`,
-  
-  portuguese: `Você é um assistente útil. Forneça explicações claras e amigáveis para estudantes.
-Responda em português completo, não em texto fragmentado.`,
-  
-  japanese: `あなたはアシスタントです。学生向けの明確な説明を提供してください。
-完全な日本語で答えてください。不完全なテキストではありません。`,
-  
-  korean: `당신은 도우미입니다. 학생 친화적이고 명확한 설명을 제공하세요.
-완전한 한국어로 답변하세요. 깨진 텍스트가 아닙니다.`
+تمام جوابات اردو میں لکھیں۔`
 };
 
 function isSupported() {
@@ -63,7 +53,7 @@ async function loadEngine(modelId = DEFAULT_MODEL, onProgress) {
       engine.setInitProgressCallback((report) => {
         if (onProgress) onProgress(report.text, report.progress);
       });
-      const MAX_RETRIES = 5; // বাড়িয়ে দিলাম retry count
+      const MAX_RETRIES = 5;
       let lastErr;
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
@@ -72,7 +62,7 @@ async function loadEngine(modelId = DEFAULT_MODEL, onProgress) {
         } catch (err) {
           lastErr = err;
           if (onProgress) onProgress('Download attempt ' + attempt + ' failed, retrying...', 0);
-          await new Promise((r) => setTimeout(r, 3000 * attempt)); // বাড়িয়ে দিলাম wait time
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
         }
       }
       enginePromise = null;
@@ -82,9 +72,6 @@ async function loadEngine(modelId = DEFAULT_MODEL, onProgress) {
   return enginePromise;
 }
 
-// systemPrompt: string
-// history: [{ role: 'user'|'assistant', content: string }]  (age-er conversation, notun user message chhara)
-// userMessage: string (এখন যা type kore pathacche)
 async function generateReply(systemPrompt, history, userMessage, onProgress) {
   const engine = await loadEngine(DEFAULT_MODEL, onProgress);
   
@@ -106,7 +93,7 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   const reply = await engine.chat.completions.create({
     messages,
     temperature: 0.7,
-    max_tokens: 600,
+    max_tokens: 400,
   });
 
   const text = reply?.choices?.[0]?.message?.content?.trim();
