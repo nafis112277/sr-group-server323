@@ -1298,6 +1298,91 @@
   }
   .thinking-toggle.open + .thinking-body{ display:block; }
 </style>
+<style id="sr-added-voice-chat-ui">
+  #voiceChatBtn{
+    background:var(--panel); border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:8px; padding:7px 9px; font-size:14px; cursor:pointer; line-height:1;
+  }
+  #voiceChatBtn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+  #voiceChatBtn.vc-active{
+    background:linear-gradient(135deg,var(--accent-a),var(--accent-b));
+    border-color:transparent; color:#fff;
+    animation:vc-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes vc-pulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(79,140,255,0.4); }
+    50%{ box-shadow:0 0 0 8px rgba(79,140,255,0); }
+  }
+  #voiceChatModal{
+    display:none; position:fixed; inset:0; z-index:310;
+    align-items:center; justify-content:center; padding:24px;
+    background:rgba(6,9,15,0.8); backdrop-filter:blur(6px);
+  }
+  #voiceChatModal.show{ display:flex; }
+  .vc-card{
+    max-width:380px; width:100%; text-align:center;
+    background:var(--panel-solid); border:1px solid var(--border-glass);
+    border-radius:22px; padding:36px 28px;
+    box-shadow:0 24px 60px rgba(0,0,0,0.55);
+  }
+  .vc-avatar{
+    width:80px; height:80px; border-radius:50%; margin:0 auto 18px;
+    background:linear-gradient(135deg,var(--accent-a),var(--accent-b));
+    display:flex; align-items:center; justify-content:center;
+    font-size:34px; position:relative;
+  }
+  .vc-avatar.speaking::after{
+    content:''; position:absolute; inset:-6px; border-radius:50%;
+    border:2px solid var(--accent-a); opacity:0.6;
+    animation:vc-ring 1.2s ease-out infinite;
+  }
+  .vc-avatar.listening{
+    background:linear-gradient(135deg,var(--danger),#E11D48);
+    animation:vc-pulse 1s ease-in-out infinite;
+  }
+  @keyframes vc-ring{
+    0%{ transform:scale(1); opacity:0.6; }
+    100%{ transform:scale(1.35); opacity:0; }
+  }
+  .vc-status{
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:16px;
+    margin-bottom:6px;
+  }
+  .vc-sub{
+    color:var(--text-soft); font-size:13px; min-height:36px;
+    line-height:1.5; margin-bottom:22px; white-space:pre-wrap;
+  }
+  .vc-controls{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .vc-btn{
+    border:1px solid var(--border-glass); border-radius:12px;
+    padding:11px 22px; font-size:13.5px; cursor:pointer;
+    font-family:'Inter',sans-serif; font-weight:600;
+    background:rgba(255,255,255,0.05); color:var(--text-primary);
+  }
+  .vc-btn:hover{ border-color:var(--accent-a); background:rgba(79,140,255,0.1); }
+  .vc-btn.vc-end{
+    background:linear-gradient(135deg,var(--danger),#E11D48);
+    border-color:transparent; color:#fff;
+  }
+  .vc-btn.vc-end:hover{ filter:brightness(1.1); }
+  .vc-lang-row{
+    display:flex; align-items:center; gap:8px; justify-content:center;
+    margin-bottom:20px;
+  }
+  .vc-lang-row label{ font-size:12px; color:var(--text-soft); }
+  .vc-lang-row select{
+    background:rgba(255,255,255,0.05); border:1px solid var(--border-glass);
+    border-radius:8px; padding:5px 8px; color:var(--text-primary);
+    font-size:12px; font-family:'Inter',sans-serif;
+  }
+  .vc-transcript{
+    max-height:100px; overflow-y:auto; font-size:12px; color:var(--text-soft);
+    margin-bottom:16px; line-height:1.5; text-align:left;
+    background:rgba(255,255,255,0.03); border-radius:8px; padding:8px 10px;
+    display:none;
+  }
+  .vc-transcript.show{ display:block; }
+</style>
 <style id="sr-added-model-picker">
   .plus-menu-item.model-item{ justify-content:space-between; }
   .plus-menu-item.model-item.locked{ opacity:0.5; cursor:not-allowed; }
@@ -1467,7 +1552,8 @@
         <div class="brandmark"><span class="dot"></span> KROVOS Assistant</div>
       </div>
     <div style="display:flex; align-items:center; gap:10px;">
-        <button class="icon-btn" id="openDesignModeBtn" title="Design">🎨</button>
+        <button class="icon-btn" id="voiceChatBtn" title="Voice chat">🎙️</button>    
+      <button class="icon-btn" id="openDesignModeBtn" title="Design">🎨</button>
         <button class="icon-btn" id="openSkillsHeaderBtn" title="Skills">🧩</button>
         <!-- নতুন সংযোজন: হেডারেও একটা সার্চ আইকন — ট্যাপ করলে সাইডবার খুলে সরাসরি সার্চ বক্সে
              ফোকাস করে দেয়, যাতে ইউজারকে হ্যামবার্গার মেনুতে গিয়ে খুঁজতে না হয় -->
@@ -3925,6 +4011,281 @@ init();
      ডাইনামিকালি তৈরি হওয়া বাটনেও (থিম সোয়াচ, স্কিল কার্ড ইত্যাদি) কাজ
      করবে। preventDefault/stopPropagation কিছুই করা হয়নি বলে আগের কোনো
      onclick হ্যান্ডলার এতে বিন্দুমাত্র প্রভাবিত হয় না। ============================================================ -->
+<!-- Voice Chat Modal -->
+<div id="voiceChatModal">
+  <div class="vc-card">
+    <div class="vc-avatar" id="vcAvatar">🤖</div>
+    <div class="vc-status" id="vcStatus">Voice Chat</div>
+    <div class="vc-lang-row">
+      <label>Language:</label>
+      <select id="vcLangSelect">
+        <option value="bn-BD">বাংলা</option>
+        <option value="en-US">English</option>
+        <option value="hi-IN">हिन्दी</option>
+        <option value="ar-SA">العربية</option>
+        <option value="ur-PK">اردو</option>
+      </select>
+    </div>
+    <div class="vc-transcript" id="vcTranscript"></div>
+    <div class="vc-sub" id="vcSub">Press "Start" to begin speaking</div>
+    <div class="vc-controls">
+      <button class="vc-btn" id="vcMicBtn">🎤 Start</button>
+      <button class="vc-btn" id="vcSkipBtn" style="display:none;">⏭ Skip</button>
+      <button class="vc-btn vc-end" id="vcEndBtn">✕ End</button>
+    </div>
+  </div>
+</div>
+
+<script id="sr-added-voice-chat-script">
+(function initVoiceChat() {
+  var modal = document.getElementById('voiceChatModal');
+  var avatar = document.getElementById('vcAvatar');
+  var statusEl = document.getElementById('vcStatus');
+  var subEl = document.getElementById('vcSub');
+  var transcriptEl = document.getElementById('vcTranscript');
+  var micBtn = document.getElementById('vcMicBtn');
+  var skipBtn = document.getElementById('vcSkipBtn');
+  var endBtn = document.getElementById('vcEndBtn');
+  var langSelect = document.getElementById('vcLangSelect');
+  var openBtn = document.getElementById('voiceChatBtn');
+
+  var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var tts = window.speechSynthesis;
+
+  var vcActive = false;
+  var listening = false;
+  var speaking = false;
+  var recognition = null;
+  var currentUtterance = null;
+
+  // lang sync with existing mic
+  try {
+    var saved = localStorage.getItem('srgroup:voiceLang');
+    if (saved) langSelect.value = saved;
+  } catch(e){}
+  langSelect.onchange = function() {
+    try { localStorage.setItem('srgroup:voiceLang', langSelect.value); } catch(e){}
+  };
+
+  function setAvatar(state) {
+    avatar.className = 'vc-avatar' + (state === 'speaking' ? ' speaking' : state === 'listening' ? ' listening' : '');
+    avatar.textContent = state === 'listening' ? '👂' : '🤖';
+  }
+
+  function setStatus(main, sub) {
+    statusEl.textContent = main;
+    subEl.textContent = sub || '';
+  }
+
+  function addTranscript(role, text) {
+    transcriptEl.classList.add('show');
+    var line = document.createElement('div');
+    line.style.cssText = 'margin-bottom:4px;';
+    line.innerHTML = '<strong style="color:' + (role === 'user' ? 'var(--accent-a)' : 'var(--accent-glow)') + ';">' +
+      (role === 'user' ? 'You: ' : 'Bot: ') + '</strong>' + escapeHtml(text);
+    transcriptEl.appendChild(line);
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  }
+
+  function speak(text, onDone) {
+    if (!tts) { if(onDone) onDone(); return; }
+    tts.cancel();
+    // plain text বানাও (markdown/code strip)
+    var plain = text
+      .replace(/```[\s\S]*?```/g, 'code block.')
+      .replace(/`[^`]+`/g, '')
+      .replace(/[#*_~>\[\]]/g, '')
+      .replace(/https?:\/\/\S+/g, 'link.')
+      .trim();
+    if (!plain) { if(onDone) onDone(); return; }
+
+    speaking = true;
+    setAvatar('speaking');
+    setStatus('Bot is speaking...', plain.slice(0,80) + (plain.length > 80 ? '…' : ''));
+    skipBtn.style.display = '';
+
+    var utter = new SpeechSynthesisUtterance(plain);
+    var lang = langSelect.value;
+    utter.lang = lang;
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+
+    // ভাষা অনুযায়ী voice বেছে নেওয়ার চেষ্টা
+    var voices = tts.getVoices();
+    var match = voices.find(function(v){ return v.lang === lang; }) ||
+                voices.find(function(v){ return v.lang.startsWith(lang.split('-')[0]); });
+    if (match) utter.voice = match;
+
+    utter.onend = function() {
+      speaking = false;
+      skipBtn.style.display = 'none';
+      currentUtterance = null;
+      if (vcActive && onDone) onDone();
+    };
+    utter.onerror = function() {
+      speaking = false;
+      skipBtn.style.display = 'none';
+      currentUtterance = null;
+      if (vcActive && onDone) onDone();
+    };
+    currentUtterance = utter;
+    tts.speak(utter);
+  }
+
+  function startListening() {
+    if (!SpeechRec) {
+      setStatus('Not supported', 'Your browser does not support Speech Recognition.');
+      return;
+    }
+    if (listening) return;
+    listening = true;
+    setAvatar('listening');
+    setStatus('Listening...', 'Speak now — pause to send');
+    micBtn.textContent = '⏹ Stop';
+
+    recognition = new SpeechRec();
+    recognition.lang = langSelect.value;
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    var finalText = '';
+    recognition.onresult = function(e) {
+      var interim = '';
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      subEl.textContent = (finalText + interim) || 'Listening...';
+    };
+
+    recognition.onend = function() {
+      listening = false;
+      micBtn.textContent = '🎤 Start';
+      if (!vcActive) return;
+      if (finalText.trim()) {
+        sendVoiceMessage(finalText.trim());
+      } else {
+        setAvatar('idle');
+        setStatus('Ready', 'No speech detected. Press Start to try again.');
+      }
+    };
+
+    recognition.onerror = function(e) {
+      listening = false;
+      micBtn.textContent = '🎤 Start';
+      if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        setStatus('Error', 'Microphone error: ' + e.error);
+      } else {
+        setAvatar('idle');
+        setStatus('Ready', 'Press Start to speak.');
+      }
+    };
+
+    recognition.start();
+  }
+
+  function stopListening() {
+    if (recognition) { try { recognition.stop(); } catch(e){} }
+    listening = false;
+    micBtn.textContent = '🎤 Start';
+  }
+
+  async function sendVoiceMessage(text) {
+    if (!vcActive) return;
+    addTranscript('user', text);
+    setAvatar('idle');
+    setStatus('Thinking...', '');
+
+    // চ্যাটেও বার্তাটা যোগ করো (visible in chat)
+    if (typeof addMessage === 'function') {
+      addMessage('user', text, {});
+    }
+
+    try {
+      var data = await api('/chat/conversations/' + currentConvId + '/message', {
+        method: 'POST',
+        body: { content: text },
+        token: userToken,
+      });
+
+      var reply = data.reply || '';
+
+      // চ্যাটেও bot reply যোগ করো
+      if (typeof addMessage === 'function') {
+        addMessage('bot', reply, { id: data.assistantMessageId || null });
+      }
+
+      // conversation title আপডেট
+      var conv = (typeof conversations !== 'undefined') && conversations.find(function(c){ return c.id === currentConvId; });
+      if (conv && data.title) { conv.title = data.title; if(typeof renderConvList==='function') renderConvList(); }
+
+      addTranscript('bot', reply);
+      speak(reply, function() {
+        if (vcActive) {
+          setAvatar('idle');
+          setStatus('Ready', 'Press Start to speak again.');
+        }
+      });
+    } catch(err) {
+      setStatus('Error', err.message);
+      setAvatar('idle');
+    }
+  }
+
+  // ---- Controls ----
+  micBtn.onclick = function() {
+    if (listening) stopListening();
+    else startListening();
+  };
+
+  skipBtn.onclick = function() {
+    if (tts) tts.cancel();
+    skipBtn.style.display = 'none';
+    speaking = false;
+    if (vcActive) {
+      setAvatar('idle');
+      setStatus('Ready', 'Press Start to speak.');
+    }
+  };
+
+  endBtn.onclick = closeVoiceChat;
+
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) closeVoiceChat();
+  });
+
+  function openVoiceChat() {
+    if (!currentConvId) { alert('Please start a chat first.'); return; }
+    if (!tts) { alert('Text-to-speech not supported in this browser.'); return; }
+    vcActive = true;
+    transcriptEl.innerHTML = '';
+    transcriptEl.classList.remove('show');
+    setAvatar('idle');
+    setStatus('Voice Chat', 'Press Start to speak.');
+    subEl.textContent = 'Press Start to begin speaking';
+    micBtn.textContent = '🎤 Start';
+    skipBtn.style.display = 'none';
+    modal.classList.add('show');
+    openBtn.classList.add('vc-active');
+  }
+
+  function closeVoiceChat() {
+    vcActive = false;
+    stopListening();
+    if (tts) tts.cancel();
+    speaking = false;
+    modal.classList.remove('show');
+    openBtn.classList.remove('vc-active');
+  }
+
+  if (openBtn) openBtn.onclick = openVoiceChat;
+
+  // voices async load হলে retry
+  if (tts && tts.onvoiceschanged !== undefined) {
+    tts.onvoiceschanged = function() { tts.getVoices(); };
+  }
+})();
+</script>
 <script id="sr-added-ripple-script">
   document.addEventListener('pointerdown', function (e) {
     var target = e.target.closest('button, [class*="btn"]');
