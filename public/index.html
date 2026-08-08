@@ -6491,7 +6491,26 @@ window.fetch = async function (input, init) {
 console.log("[WebLLM] STARTING LOCAL FALLBACK");
     if (!window.LocalAI || !window.LocalAI.isSupported()) return res; // fallback করার উপায় নাই, আসল error-ই দেখাই
 
-var noteDiv = document.createElement('div');
+    var promptText = payload.content || (function () {
+      var last = [...(currentMessages || [])].reverse().find(function (m) { return m.role === 'user'; });
+      return last ? last.content : '';
+    })();
+    if (!promptText) return res;
+
+    var APPROX_MODEL_SIZE_MB = 1000; // Qwen2.5-1.5B (FALLBACK_MODELS-এর প্রথম মডেল) আনুমানিক ডাউনলোড সাইজ (MB)
+    function estimateWaitLabel() {
+      try {
+        var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (conn && conn.downlink && conn.downlink > 0) {
+          var seconds = Math.ceil((APPROX_MODEL_SIZE_MB * 8) / conn.downlink);
+          var mins = Math.ceil(seconds / 60);
+          return 'আপনার নেট স্পিড অনুযায়ী আনুমানিক ' + mins + ' মিনিট সময় লাগতে পারে।';
+        }
+      } catch (e) { /* connection API না থাকলে ignore */ }
+      return 'আনুমানিক ৩-১০ মিনিট সময় লাগতে পারে (আপনার নেট স্পিডের উপর নির্ভর করে)।';
+    }
+
+    var noteDiv = document.createElement('div');
     noteDiv.className = 'msg note';
     noteDiv.style.textAlign = 'center';
     noteDiv.textContent = 'একটি সমস্যা হয়েছে — ' + estimateWaitLabel();
@@ -6511,6 +6530,10 @@ try {
             // progress callback আর message আপডেট করছে না — একটাই স্থির মেসেজ দেখানো হচ্ছে
         }
     );
+
+    if (noteDiv && noteDiv.parentNode) noteDiv.remove();
+
+    return new Response(
         JSON.stringify({
             reply: reply,
             assistantMessageId: null,
