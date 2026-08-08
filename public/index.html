@@ -6510,14 +6510,19 @@ console.log("[WebLLM] STARTING LOCAL FALLBACK");
       return 'আনুমানিক ৩-১০ মিনিট সময় লাগতে পারে (আপনার নেট স্পিডের উপর নির্ভর করে)।';
     }
 
-    var noteDiv = document.createElement('div');
-    noteDiv.className = 'msg note';
-    noteDiv.style.textAlign = 'center';
-    noteDiv.textContent = 'একটি সমস্যা হয়েছে — ' + estimateWaitLabel();
-    var messagesBox = document.getElementById('messages');
-    if (messagesBox) {
-      messagesBox.appendChild(noteDiv);
-      messagesBox.scrollTop = messagesBox.scrollHeight;
+   // FIX: model already ekbar download hoye gele (localStorage flag) ei notice ar dekhabo na
+    var modelAlreadyReady = window.LocalAI.isModelReady && window.LocalAI.isModelReady();
+    var noteDiv = null;
+    if (!modelAlreadyReady) {
+      noteDiv = document.createElement('div');
+      noteDiv.className = 'msg note';
+      noteDiv.style.textAlign = 'center';
+      noteDiv.textContent = 'একটি সমস্যা হয়েছে — ' + estimateWaitLabel();
+      var messagesBox = document.getElementById('messages');
+      if (messagesBox) {
+        messagesBox.appendChild(noteDiv);
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+      }
     }
 
 try {
@@ -6533,10 +6538,31 @@ try {
 
     if (noteDiv && noteDiv.parentNode) noteDiv.remove();
 
+    // FIX: ei reply DB te save kora hocchilo na, tai reload dile bot reply gayeb hoye jeto.
+    // Notun /save-assistant-reply route call kore assistant message ta save kore nichi.
+    var savedAssistantId = null;
+    var convIdMatch = url.match(/\/conversations\/([^/]+)\//);
+    var conversationIdForSave = convIdMatch ? convIdMatch[1] : null;
+    if (conversationIdForSave) {
+      try {
+        var saveRes = await __srOriginalFetchForLocalAi('/api/chat/conversations/' + conversationIdForSave + '/save-assistant-reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + userToken },
+          body: JSON.stringify({ content: reply })
+        });
+        if (saveRes.ok) {
+          var saveData = await saveRes.json();
+          savedAssistantId = saveData.assistantMessageId || null;
+        }
+      } catch (saveErr) {
+        console.error('[WebLLM] could not persist local reply:', saveErr);
+      }
+    }
+
     return new Response(
         JSON.stringify({
             reply: reply,
-            assistantMessageId: null,
+            assistantMessageId: savedAssistantId,
             replyImageUrl: null,
             local: true
         }),
