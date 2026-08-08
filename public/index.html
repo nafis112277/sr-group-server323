@@ -1270,6 +1270,34 @@
       -3px -3px 7px var(--neu-light) !important;
   }
 </style>
+<style id="sr-added-thinking-ui">
+  .thinking-block{
+    margin-bottom:10px; border-radius:10px;
+    background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.18);
+    overflow:hidden;
+  }
+  .thinking-toggle{
+    display:flex; align-items:center; gap:8px; width:100%; background:none; border:none;
+    padding:9px 13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11.5px;
+    color:var(--accent-b); text-align:left;
+  }
+  .thinking-toggle:hover{ background:rgba(139,92,246,0.08); }
+  .thinking-toggle .th-arrow{ transition:transform 0.2s; font-size:9px; }
+  .thinking-toggle.open .th-arrow{ transform:rotate(90deg); }
+  .thinking-toggle .th-spin{
+    width:10px; height:10px; border-radius:50%;
+    border:1.5px solid var(--accent-b); border-top-color:transparent;
+    animation:th-spin 0.8s linear infinite; flex-shrink:0;
+  }
+  @keyframes th-spin{ to{ transform:rotate(360deg); } }
+  .thinking-body{
+    display:none; padding:10px 13px 12px;
+    font-size:12.5px; color:var(--text-soft); font-family:'JetBrains Mono',monospace;
+    line-height:1.65; white-space:pre-wrap; border-top:1px solid rgba(139,92,246,0.12);
+    max-height:260px; overflow-y:auto;
+  }
+  .thinking-toggle.open + .thinking-body{ display:block; }
+</style>
 <style id="sr-added-model-picker">
   .plus-menu-item.model-item{ justify-content:space-between; }
   .plus-menu-item.model-item.locked{ opacity:0.5; cursor:not-allowed; }
@@ -2112,7 +2140,29 @@ document.addEventListener('keydown', (e) => {
 // ```lang\ncode\n``` কে একটা ছোট্ট, ক্লিকযোগ্য কার্ডে বদলে দেয় (Claude-এর Artifact কার্ডের মতো),
 // ক্লিক করলে ডানপাশে সাইড প্যানেলে পুরো কোড খুলবে। ![alt](url) থাকলে আসল ছবি দেখায়।
 // XSS এড়াতে সব অংশ escapeHtml দিয়ে যায় — শুধু structure টা HTML হিসেবে বসে।
+function buildThinkingBlockHtml(thinkContent, done) {
+  const id = 'th-' + Math.random().toString(36).slice(2);
+  const spinnerHtml = done ? '' : '<span class="th-spin"></span>';
+  const label = done ? '▸ Thought process' : '<span class="th-spin"></span> Thinking...';
+  return `<div class="thinking-block">
+    <button type="button" class="thinking-toggle" onclick="this.classList.toggle('open')" aria-expanded="false">
+      <span class="th-arrow">▶</span>${spinnerHtml}
+      <span>${done ? 'Thought process' : 'Thinking...'}</span>
+    </button>
+    <div class="thinking-body">${escapeHtml(thinkContent)}</div>
+  </div>`;
+}
+
 function renderMessageHtml(text) {
+  // <think>...</think> block extract করো (Claude-style thinking)
+  let processedText = text;
+  let thinkingHtml = '';
+  const thinkMatch = text.match(/^<think>([\s\S]*?)<\/think>\n*/);
+  if (thinkMatch) {
+    thinkingHtml = buildThinkingBlockHtml(thinkMatch[1].trim(), true);
+    processedText = text.slice(thinkMatch[0].length);
+  }
+
   const parts = [];
   const fenceRegex = /```(\w*)\n?([\s\S]*?)```/g;
   let lastIndex = 0;
@@ -2129,7 +2179,7 @@ function renderMessageHtml(text) {
     parts.push({ type: 'text', value: text.slice(lastIndex) });
   }
 
-  return parts
+return thinkingHtml + parts
     .map((part) => {
       if (part.type === 'code') {
         // lang "question" হলে আগে MCQ widget হিসেবে রেন্ডারের চেষ্টা করি, JSON ভাঙা থাকলে সাধারণ কোড কার্ডে fallback করি
