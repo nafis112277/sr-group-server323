@@ -816,4 +816,34 @@ router.delete('/my-api-key', async (req, res) => {
   }
 });
 
+// FIX: cloud AI (gemini/groq/deepseek) 502 dile frontend WebLLM diye locally reply banay,
+// kintu database e user message already save hoye geche, assistant reply save hoyni —
+// tai reload dile bot reply gayeb hoye jeto. Ei route shudhu ei ekta assistant reply insert kore.
+router.post('/conversations/:id/save-assistant-reply', async (req, res) => {
+  try {
+    const conv = await queryOne('SELECT id FROM conversations WHERE id = $1 AND user_email = $2', [
+      req.params.id,
+      req.userEmail,
+    ]);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
+
+    const content = ((req.body || {}).content || '').trim();
+    if (!content) return res.status(400).json({ error: 'Empty reply.' });
+    if (content.length > MAX_MESSAGE_LENGTH) {
+      return res.status(400).json({ error: `Reply is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
+    }
+
+    const inserted = await queryOne(
+      `INSERT INTO messages (conversation_id, role, content) VALUES ($1, 'assistant', $2) RETURNING id`,
+      [conv.id, content]
+    );
+    await query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conv.id]);
+
+    res.json({ ok: true, assistantMessageId: inserted.id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not save the reply.' });
+  }
+});
+
 export default router;
