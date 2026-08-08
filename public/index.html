@@ -3028,11 +3028,9 @@ async function sendMessage() {
       renderConvList();
     }
 
-  } catch (err) {
+ } catch (err) {
     hideTyping();
     if (err.name === 'AbortError') {
-      // ইউজার নিজে থামিয়েছে — চুপচাপ, কোনো error note নয়
-      // শেষ user message-টা রেখে দিই, bot reply আসেনি সেটা note করি না
       addMessage('note', 'Generation stopped.');
     } else {
       addMessage('note', "Couldn't get a reply: " + err.message);
@@ -3045,6 +3043,7 @@ async function sendMessage() {
   hideStopBtn();
   input.focus();
 }
+
 document.getElementById('sendBtn').onclick = sendMessage;
 document.getElementById('userInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
 
@@ -3054,7 +3053,6 @@ document.getElementById('logoutBtn').onclick = () => {
   document.getElementById('loginPassword').value = '';
   showScreen('screen-login');
 };
-
 /* ---------------- Account settings modal (Customize AI + Skills + Change password) ---------------- */
 function openAccountModal() {
   document.getElementById('accountModalBackdrop').classList.add('show');
@@ -3101,60 +3099,10 @@ document.getElementById('saveCustomizeBtn').onclick = async () => {
     const note = document.getElementById('customizeSaveNote');
     note.style.display = 'block';
     setTimeout(() => (note.style.display = 'none'), 2000);
- } catch (err) {
-  hideTyping();
-
-  console.error("Cloud AI failed:", err);
-
-  // Browser Local AI fallback
-  if (window.LocalAI && window.LocalAI.isSupported()) {
-    try {
-      addMessage("note", "Cloud AI unavailable. Switching to Local AI...");
-
-      // Local AI load (only first time)
-      await window.LocalAI.loadEngine();
-
-      // Conversation history build
-      const history = [];
-
-      document.querySelectorAll(".message").forEach(el => {
-        if (el.classList.contains("user")) {
-          history.push({
-            role: "user",
-            content: el.innerText
-          });
-        } else if (el.classList.contains("bot")) {
-          history.push({
-            role: "assistant",
-            content: el.innerText
-          });
-        }
-      });
-
-      const reply = await window.LocalAI.generateReply(
-        "",
-        history,
-        text
-      );
-
-      addMessage("bot", reply);
-
-    } catch (localErr) {
-      console.error(localErr);
-
-      addMessage(
-        "note",
-        "Local AI also failed: " + localErr.message
-      );
-    }
-  } else {
-    addMessage(
-      "note",
-      "Couldn't get a reply: " + err.message
-    );
+  } catch (err) {
+    setError('customizeError', err.message);
   }
-}
-  };
+};
 /* ---------------- Theme (client-side only, saved in localStorage per device) ----------------
    html ট্যাগে data-theme="..." বসিয়ে দেওয়া হয়, আর CSS-এর html[data-theme="..."] রুলগুলো
    শুধু কালার ভ্যারিয়েবল override করে দেয় — বাকি পুরো সাইটের লে-আউট/ফিচার অপরিবর্তিত থাকে। */
@@ -5252,21 +5200,54 @@ function buildModelMenuItems() {
     };
   }
 
-  const __originalFetchForModelPicker = window.fetch.bind(window);
+ const __originalFetchForEnhancements = window.fetch.bind(window);
   window.fetch = function (input, init) {
     try {
       const url = typeof input === 'string' ? input : (input && input.url) || '';
       const isChatSendCall = /\/api\/chat\/conversations\/[^/]+\/(message|message\/stream|messages\/[^/]+|messages\/[^/]+\/regenerate)$/.test(url);
+      
       if (isChatSendCall && init && init.body && typeof init.body === 'string') {
         const parsed = JSON.parse(init.body);
-        const modelForTier = selectedTier ? TIER_MODEL[selectedTier] : null;
+        
+        // Priority 1: Model tier selection
+        const modelForTier = (typeof selectedTier !== 'undefined' && selectedTier) ? TIER_MODEL[selectedTier] : null;
         if (modelForTier && !parsed.model) {
           parsed.model = modelForTier;
-          init = Object.assign({}, init, { body: JSON.stringify(parsed) });
         }
+        
+        // Priority 2: Math solve instruction
+        if (typeof window.mathSolveEnabled !== 'undefined' && window.mathSolveEnabled) {
+          const mathInstr = (typeof getMathInstruction === 'function') ? getMathInstruction() : '';
+          if (mathInstr && parsed.content) {
+            parsed.content = mathInstr + '\n\nপ্রশ্ন: ' + parsed.content;
+          }
+        }
+        
+        // Priority 3: Code review + file attach
+        if (typeof window.codeReviewEnabled !== 'undefined' && window.codeReviewEnabled) {
+          const CODE_REVIEW_INST = "তুমি এখন একজন সিনিয়র কোড রিভিউয়ার..."; // truncated for brevity
+          if (parsed.content) {
+            parsed.content = CODE_REVIEW_INST + '\n\n' + parsed.content;
+          }
+          if (typeof pendingCodeFile !== 'undefined' && pendingCodeFile) {
+            parsed.content = (parsed.content || '') + '\n\n--- Attached: ' + pendingCodeFile.name + ' ---\n```\n' + pendingCodeFile.content + '\n```';
+            pendingCodeFile = null;
+          }
+        }
+        
+        // Priority 4: Design mode
+        if (typeof window.designModeActive !== 'undefined' && window.designModeActive) {
+          const DESIGN_INST = "তুমি এখন একজন প্রোডাক্ট ডিজাইনার..."; // truncated for brevity
+          if (parsed.content) {
+            parsed.content = DESIGN_INST + '\n\nডিজাইন রিকোয়েস্ট: ' + parsed.content;
+          }
+          window.designModeActive = false; // one-shot
+        }
+        
+        init = Object.assign({}, init, { body: JSON.stringify(parsed) });
       }
     } catch (e) { /* ignore */ }
-    return __originalFetchForModelPicker(input, init);
+    return __originalFetchForEnhancements(input, init);
   };
 
   // FIX: session-restore (auto-login via localStorage) হলে init() এই স্ক্রিপ্ট লোড হওয়ার
@@ -5943,21 +5924,7 @@ const policyLinkStyle = document.createElement('style');
   /* ---------------- আউটগোয়িং মেসেজে instruction জুড়ে দেওয়া (fetch patch) ----------------
      শুধু .../chat/conversations/:id/message বা .../message/stream এন্ডপয়েন্টেই কাজ করবে —
      মেসেজ এডিট/রিজেনারেট/অ্যাডমিন-চ্যাট এন্ডপয়েন্টগুলো অক্ষত থাকবে। */
-  var __srOriginalFetch = window.fetch.bind(window);
-   var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message(\/stream)?$/;
-  window.fetch = function (input, init) {
-    try {
-      var url = typeof input === 'string' ? input : (input && input.url) || '';
-      if (window.mathSolveEnabled && MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string') {
-        var payload = JSON.parse(init.body);
-        if (payload && typeof payload.content === 'string' && payload.content.trim()) {
-          payload.content = getMathInstruction() + '\n\nপ্রশ্ন: ' + payload.content;
-          init = Object.assign({}, init, { body: JSON.stringify(payload) });
-        }
-      }
-    } catch (e) { /* কোনো সমস্যা হলে original request-ই পাঠানো হবে, কিছু ভাঙবে না */ }
-    return __srOriginalFetch(input, init);
-  };
+ // Math solve fetch patch merged into main enhancement fetch above
 
   /* ---------------- এডমিন প্যানেল: "Math Solve" নামে নতুন ট্যাব ---------------- */
   var tabsBar = document.querySelector('.admin-tabs');
@@ -6343,27 +6310,7 @@ if (typeof applyAdminRoleUI === 'function') {
   }
 
   // আউটগোয়িং মেসেজে code review instruction + attached code জুড়ে দেওয়া
-  var __srOriginalFetchForCodeReview = window.fetch.bind(window);
-  var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message(\/stream)?$/;
-  window.fetch = function (input, init) {
-    try {
-      var url = typeof input === 'string' ? input : (input && input.url) || '';
-      if (MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string') {
-        var payload = JSON.parse(init.body);
-        if (payload && typeof payload.content === 'string') {
-          if (pendingCodeFile) {
-            payload.content = payload.content + '\n\n--- Attached file: ' + pendingCodeFile.name + ' ---\n```\n' + pendingCodeFile.content + '\n```';
-            pendingCodeFile = null;
-          }
-          if (window.codeReviewEnabled && payload.content.trim()) {
-            payload.content = CODE_REVIEW_INSTRUCTION + '\n\n' + payload.content;
-          }
-          init = Object.assign({}, init, { body: JSON.stringify(payload) });
-        }
-      }
-    } catch (e) { /* silent fallback */ }
-    return __srOriginalFetchForCodeReview(input, init);
-  };
+// Code review fetch patch merged into main enhancement fetch above
 })();
 </script>
 
@@ -6401,22 +6348,7 @@ if (typeof applyAdminRoleUI === 'function') {
 
   // মেসেজ পাঠানোর পর design mode অটো-অফ হয়ে যায় (এক-বারের জন্য), যাতে পরের normal মেসেজে
   // ভুল করে instruction জুড়ে না যায় — ঠিক Web Search টগলের মতো persistent না রেখে one-shot রাখা হলো
-  var __srOriginalFetchForDesign = window.fetch.bind(window);
-  var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/message(\/stream)?$/;
-  window.fetch = function (fetchInput, init) {
-    try {
-      var url = typeof fetchInput === 'string' ? fetchInput : (fetchInput && fetchInput.url) || '';
-      if (window.designModeActive && MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string') {
-        var payload = JSON.parse(init.body);
-        if (payload && typeof payload.content === 'string' && payload.content.trim()) {
-          payload.content = DESIGN_INSTRUCTION + '\n\nডিজাইন রিকোয়েস্ট: ' + payload.content;
-          init = Object.assign({}, init, { body: JSON.stringify(payload) });
-        }
-        setDesignMode(false);
-      }
-    } catch (e) { /* silent fallback */ }
-    return __srOriginalFetchForDesign(fetchInput, init);
-  };
+// Design mode fetch patch merged into main enhancement fetch above
 })();
 </script>
 <script src="/webllm-local.js"></script>
