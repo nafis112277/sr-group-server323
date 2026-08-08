@@ -2089,7 +2089,7 @@ async function switchConversation(id) {
     const log = data.messages || [];
     log.forEach((m) => addMessage(m.role === 'user' ? 'user' : 'bot', m.content, { id: m.id, imageUrl: m.imageUrl }));
     if (log.length === 0) {
-      addMessage('note', "You're chatting with KROVOS's AI assistant. It can answer questions about KROVOS's services and help with coding requests, but it can't give medical, legal, or financial advice, process payments, or write harmful/malicious content.");
+      addMessage('note', "আমি KROVOS, SR Group-এর AI Assistant। আপনার যেকোনো প্রশ্নে সাহায্য করতে প্রস্তুত। It can answer questions about KROVOS's services and help with coding requests, but it can't give medical, legal, or financial advice, process payments, or write harmful/malicious content.");
       addMessage('note', 'Say hello to get started.');
     }
   } catch (e) { /* empty/broken conversation view */ }
