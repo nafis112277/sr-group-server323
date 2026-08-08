@@ -1,14 +1,22 @@
 // public/webllm-local.js
 //
-// Local (offline) AI mode — WebGPU, multilingual support (Bengali, English, Hindi, etc)
-// SmolLM2-360M: সবচেয়ে ছোট, ১৫০MB, super fast download
+// Local (offline) AI mode — WebGPU, multilingual support
+// Fallback logic: SmolLM2-360M → SmolLM2-135M → Qwen3-0.6B
+// Network fail হলে পরবর্তী ছোট model চেষ্টা করবে।
 
 let enginePromise = null;
 let currentModelId = null;
 let selectedLanguage = 'bengali'; // default
 
-// SmolLM2-360M: সবচেয়ে ছোট model। ১५०MB, network এ সহজ।
+// Primary model
 const DEFAULT_MODEL = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
+
+// Fallback models — ছোট থেকে বড় order
+const FALLBACK_MODELS = [
+  'SmolLM2-360M-Instruct-q4f16_1-MLC',
+  'SmolLM2-135M-Instruct-q4f16_1-MLC',
+  'Qwen3-0.6B-q4f32_1-MLC'
+];
 
 // Language-specific system prompts
 const LANGUAGE_PROMPTS = {
@@ -41,41 +49,68 @@ async function loadEngine(modelId = DEFAULT_MODEL, onProgress) {
       'এই ডিভাইসে Local AI চলবে না। Chrome বা Edge (desktop) দিয়ে চেষ্টা করুন — WebGPU দরকার।'
     );
   }
+  
   // model change hole purono engine fela dei
   if (enginePromise && currentModelId !== modelId) {
     enginePromise = null;
   }
-  currentModelId = modelId;
+  
+  // যদি আগেই loaded, রিটার্ন করো
+  if (enginePromise && currentModelId === modelId) {
+    return enginePromise;
+  }
+  
   if (!enginePromise) {
     enginePromise = (async () => {
-      const webllm = await import('https://esm.run/@mlc-ai/web-llm');
-      const engine = new webllm.MLCEngine();
-      engine.setInitProgressCallback((report) => {
-        if (onProgress) onProgress(report.text, report.progress);
-      });
-      const MAX_RETRIES = 5;
-      let lastErr;
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      // Fallback logic: models sequence এ চেষ্টা করবে
+      for (const model of FALLBACK_MODELS) {
         try {
-          await engine.reload(modelId);
-          return engine;
+          if (onProgress) onProgress(`Trying ${model.split('-')[0]}...`, 0);
+          
+          const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+          const engine = new webllm.MLCEngine();
+          engine.setInitProgressCallback((report) => {
+            if (onProgress) onProgress(report.text, report.progress);
+          });
+          
+          const MAX_RETRIES = 3;
+          let lastErr;
+          for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+              await engine.reload(model);
+              currentModelId = model;
+              if (onProgress) onProgress(`Model loaded: ${model}`, 100);
+              return engine;
+            } catch (err) {
+              lastErr = err;
+              if (onProgress) onProgress(`Attempt ${attempt} failed, retrying...`, 0);
+              await new Promise((r) => setTimeout(r, 2000 * attempt));
+            }
+          }
+          // এই model fail, পরবর্তী চেষ্টা করবে
+          if (onProgress) onProgress(`${model.split('-')[0]} failed, trying next model...`, 0);
+          continue;
+          
         } catch (err) {
-          lastErr = err;
-          if (onProgress) onProgress('Download attempt ' + attempt + ' failed, retrying...', 0);
-          await new Promise((r) => setTimeout(r, 2000 * attempt));
+          if (onProgress) onProgress(`${model} error, trying next...`, 0);
+          continue;
         }
       }
+      
+      // সব model fail
       enginePromise = null;
-      throw lastErr;
+      throw new Error('সব models fail। Internet connection check করুন। Network stable নয়।');
+      
     })();
   }
+  
   return enginePromise;
 }
 
 async function generateReply(systemPrompt, history, userMessage, onProgress) {
   const engine = await loadEngine(DEFAULT_MODEL, onProgress);
   
-  // Language-specific prompt add করছি
+  // Language-specific prompt
   const langPrompt = LANGUAGE_PROMPTS[selectedLanguage] || LANGUAGE_PROMPTS.english;
   
   const messages = [];
@@ -101,7 +136,7 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   return text;
 }
 
-// Language change করার জন্য
+// Language change
 function setLanguage(lang) {
   if (LANGUAGE_PROMPTS[lang]) {
     selectedLanguage = lang;
@@ -110,6 +145,7 @@ function setLanguage(lang) {
   return false;
 }
 
+// Model list দেখার জন্য
 window.listModels = async function() {
   try {
     const webllm = await import('https://esm.run/@mlc-ai/web-llm');
@@ -121,6 +157,11 @@ window.listModels = async function() {
   }
 };
 
+// Current model জানার জন্য
+window.getCurrentModel = function() {
+  return currentModelId || 'Not loaded yet';
+};
+
 if (isSupported()) {
   loadEngine().catch(() => { enginePromise = null; });
 }
@@ -130,5 +171,6 @@ window.LocalAI = {
   loadEngine, 
   generateReply, 
   setLanguage,
-  SUPPORTED_LANGUAGES: Object.keys(LANGUAGE_PROMPTS)
+  SUPPORTED_LANGUAGES: Object.keys(LANGUAGE_PROMPTS),
+  FALLBACK_MODELS
 };
