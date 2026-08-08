@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
 import { query, queryOne } from '../db.js';
 import { requireUser } from '../auth.js';
 import { callAI } from '../ai.js';
@@ -122,7 +123,7 @@ const MODEL_ACCESS = {
   max: ['gemini', 'groq', 'deepseek', 'local'],
 };
 
-// FIX: label ta clear kore dewa hoyeche — ei model ekhon server-e na, browser-e (WebLLM) chole
+// label ta clear kore dewa hoyeche — ei model ekhon server-e na, browser-e (WebLLM) chole
 const MODEL_INFO = {
   gemini: { label: 'Gemini' },
   groq: { label: 'Groq' },
@@ -130,7 +131,7 @@ const MODEL_INFO = {
   local: { label: 'Local AI (device-e chole, offline)' },
 };
 
-// FIX: kon model-gulo server-e callAI() diye process hoy — 'local' ei list-e nai,
+// kon model-gulo server-e callAI() diye process hoy — 'local' ei list-e nai,
 // karon local model-er reply client (browser, WebLLM) nijei generate kore pathay.
 const SERVER_PROVIDER_MODELS = ['gemini', 'groq', 'deepseek'];
 
@@ -269,7 +270,7 @@ router.get('/available-models', async (req, res) => {
       label: MODEL_INFO[name].label,
       tier: tierOfModel(name),
       locked: !allowed.includes(name),
-      // FIX: frontend eta diye bujhte parbe "local" select korle server-e call na kore
+      // frontend eta diye bujhte parbe "local" select korle server-e call na kore
       // WebLLM diye nijei generate korte hobe, tarpor reply server-e save korte pathabe.
       clientSide: name === 'local',
     }));
@@ -390,7 +391,7 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
     let text = ((req.body || {}).content || '').trim();
     const incomingImage = (req.body || {}).image || null;
     const requestedModel = (req.body || {}).model || null;
-    // FIX: model === 'local' hole browser (WebLLM) age-e nijei reply generate kore
+    // model === 'local' hole browser (WebLLM) age-e nijei reply generate kore
     // ei field-e pathay. Thakle server callAI() ekdom skip kore, sudhu save kore.
     const clientGeneratedReply = (req.body || {}).localReply || null;
     if (!text && !incomingImage) return res.status(400).json({ error: 'Message is empty.' });
@@ -413,12 +414,17 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
       return res.status(modelCheck.status).json({ error: modelCheck.error });
     }
 
-    // FIX: local model chaile client obossoi tar generate kora reply pathabe,
+    // local model chaile client obossoi tar generate kora reply pathabe,
     // server-e kono AI call hobe na — na pathale clear error dei.
     if (modelCheck.forceProvider === 'local' && !clientGeneratedReply) {
       return res.status(400).json({
         error: 'Local AI reply from the browser is missing. Make sure the model finished loading before sending.',
       });
+    }
+    // FIX: local reply-o same length cap follow korbe — age eta check hocchilo na,
+    // tai keu chaile huge WebLLM output pathiye DB bloat / abuse korte parto.
+    if (modelCheck.forceProvider === 'local' && clientGeneratedReply.length > MAX_MESSAGE_LENGTH) {
+      return res.status(400).json({ error: `Local reply is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
     }
 
     const userImageRecord = dataUrlToImageRecord(incomingImage);
@@ -430,7 +436,7 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
 
     let result;
     if (modelCheck.forceProvider === 'local') {
-      // FIX: server-e kichu call kora hocche na — browser-er WebLLM output-i shorashori use hocche.
+      // server-e kichu call kora hocche na — browser-er WebLLM output-i shorashori use hocche.
       result = { ok: true, text: clientGeneratedReply, images: null, provider: 'local' };
     } else {
       const fullHistory = await query(
@@ -499,7 +505,7 @@ router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, asy
 
     const newContent = ((req.body || {}).content || '').trim();
     const requestedModel = (req.body || {}).model || null;
-    const clientGeneratedReply = (req.body || {}).localReply || null; // FIX
+    const clientGeneratedReply = (req.body || {}).localReply || null;
     if (!newContent) return res.status(400).json({ error: 'Message is empty.' });
 
     if (newContent.length > MAX_MESSAGE_LENGTH) {
@@ -528,6 +534,10 @@ router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, asy
     }
     if (modelCheck.forceProvider === 'local' && !clientGeneratedReply) {
       return res.status(400).json({ error: 'Local AI reply from the browser is missing.' });
+    }
+    // FIX: length cap edit-eo lagbe
+    if (modelCheck.forceProvider === 'local' && clientGeneratedReply.length > MAX_MESSAGE_LENGTH) {
+      return res.status(400).json({ error: `Local reply is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
     }
 
     await query('UPDATE messages SET content = $1 WHERE id = $2', [newContent, target.id]);
@@ -617,13 +627,17 @@ router.post('/conversations/:id/messages/:messageId/regenerate', blockIfBroadcas
     }
 
     const requestedModel = (req.body || {}).model || null;
-    const clientGeneratedReply = (req.body || {}).localReply || null; // FIX
+    const clientGeneratedReply = (req.body || {}).localReply || null;
     const modelCheck = await resolveModelChoice(req.userEmail, requestedModel);
     if (!modelCheck.ok) {
       return res.status(modelCheck.status).json({ error: modelCheck.error });
     }
     if (modelCheck.forceProvider === 'local' && !clientGeneratedReply) {
       return res.status(400).json({ error: 'Local AI reply from the browser is missing.' });
+    }
+    // FIX: length cap regenerate-eo lagbe
+    if (modelCheck.forceProvider === 'local' && clientGeneratedReply.length > MAX_MESSAGE_LENGTH) {
+      return res.status(400).json({ error: `Local reply is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
     }
 
     await query('DELETE FROM messages WHERE conversation_id = $1 AND id >= $2', [conv.id, target.id]);
@@ -717,8 +731,11 @@ router.post('/feedback', requireUser, async (req, res) => {
   }
 });
 
+// FIX: crypto.randomBytes diye replace kora holo — age Math.random() diye key
+// generate hocchilo, jeta cryptographically predictable, tai customer-er API
+// key guess kora possible chilo. Ei fix crucial, revert kora jabe na.
 function generateApiKey() {
-  return 'sk-' + [...Array(40)].map(() => Math.random().toString(36)[2] || '0').join('');
+  return 'sk-' + crypto.randomBytes(32).toString('hex');
 }
 
 async function blockIfApiAccessDisabled(req, res, next) {
