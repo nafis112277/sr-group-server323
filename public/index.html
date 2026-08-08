@@ -4164,11 +4164,23 @@ init();
     utter.pitch = 1.0;
 
     // ভাষা অনুযায়ী voice বেছে নেওয়ার চেষ্টা
-    var voices = tts.getVoices();
-    var match = voices.find(function(v){ return v.lang === lang; }) ||
-                voices.find(function(v){ return v.lang.startsWith(lang.split('-')[0]); });
-    if (match) utter.voice = match;
+   function assignVoiceAndSpeak() {
+  var voices = tts.getVoices();
+  var match = voices.find(function(v){ return v.lang === lang; }) ||
+              voices.find(function(v){ return v.lang.startsWith(lang.split('-')[0]); });
+  if (match) utter.voice = match;
+  tts.speak(utter);
+}
 
+if (tts.getVoices().length === 0) {
+  tts.onvoiceschanged = function() {
+    tts.onvoiceschanged = null;
+    assignVoiceAndSpeak();
+  };
+} else {
+  assignVoiceAndSpeak();
+  return;
+}
     utter.onend = function() {
       speaking = false;
       skipBtn.style.display = 'none';
@@ -4182,7 +4194,6 @@ init();
       if (vcActive && onDone) onDone();
     };
     currentUtterance = utter;
-    tts.speak(utter);
   }
 
   function startListening() {
