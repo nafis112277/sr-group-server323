@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>KROVOS AI Assistant</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://code.responsivevoice.org/responsivevoice.js?key=FREE"></script> <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <!-- Added: jsPDF — শুধুমাত্র নতুন "PDF এ কনভার্ট" ফিচারের জন্য, আগের কোনো কিছুর সাথে সম্পর্ক নেই -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <style id="sr-added-maintenance-mode">
@@ -1054,32 +1054,7 @@
     flex:1;
   }
 </style>
- <style id="sr-added-maintenance-mode">
-  #maintenanceOverlay{
-    display:none;
-    position:fixed; inset:0; z-index:300;
-    align-items:center; justify-content:center;
-    padding:20px;
-    background:
-      radial-gradient(circle at 15% 20%, var(--grad-1), transparent 45%),
-      radial-gradient(circle at 85% 75%, var(--grad-2), transparent 45%),
-      var(--bg-deep);
-  }
-  #maintenanceOverlay.show{ display:flex; }
-  .maintenance-card{
-    text-align:center; max-width:420px; padding:36px 28px;
-    background:var(--panel); border:1px solid var(--border-glass);
-    border-radius:18px; backdrop-filter:blur(18px);
-  }
-  .maintenance-card .mc-icon{ font-size:34px; margin-bottom:14px; }
-  .maintenance-card .mc-title{
-    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:18px;
-    color:var(--text-primary); margin-bottom:8px;
-  }
-  .maintenance-card .mc-msg{
-    color:var(--text-soft); font-size:13.5px; line-height:1.6; white-space:pre-wrap;
-  }
-</style>
+ <!-- duplicate sr-added-maintenance-mode block removed — original definition in <head> already covers this -->
 
  <!-- ================= নিওমরফিজম (Soft-UI) লেয়ার ================= -->
 
@@ -4071,12 +4046,15 @@ init();
     <div class="vc-status" id="vcStatus">Voice Chat</div>
     <div class="vc-lang-row">
       <label>Language:</label>
-      <select id="vcLangSelect">
+     <select id="vcLangSelect">
         <option value="bn-BD">বাংলা</option>
         <option value="en-US">English</option>
         <option value="hi-IN">हिन्दी</option>
-        <option value="ar-SA">العربية</option>
         <option value="ur-PK">اردو</option>
+        <option value="ja-JP">日本語</option>
+        <option value="ar-SA">العربية</option>
+        <option value="fr-FR">Français</option>
+        <option value="zh-CN">中文</option>
       </select>
     </div>
     <div class="vc-transcript" id="vcTranscript"></div>
@@ -4140,7 +4118,57 @@ init();
     transcriptEl.scrollTop = transcriptEl.scrollHeight;
   }
 
-  function speak(text, onDone) {
+ function speak(text, onDone) {
+    var lang = langSelect.value;
+
+    // ResponsiveVoice voice map
+    var voiceMap = {
+      'bn-BD': 'Bangla Bangladesh Female',
+      'bn-IN': 'Bengali Female',
+      'en-US': 'US English Female',
+      'en-GB': 'UK English Female',
+      'hi-IN': 'Hindi Female',
+      'ur-PK': 'Urdu Female',
+      'ja-JP': 'Japanese Female',
+      'ar-SA': 'Arabic Female',
+      'fr-FR': 'French Female',
+      'es-ES': 'Spanish Female',
+      'zh-CN': 'Chinese Female',
+    };
+
+    var voiceName = voiceMap[lang] || 'UK English Female';
+
+    // plain text বানাও (markdown/code strip)
+    var plain = text
+      .replace(/```[\s\S]*?```/g, 'code block.')
+      .replace(/`[^`]+`/g, '')
+      .replace(/[#*_~>\[\]]/g, '')
+      .replace(/https?:\/\/\S+/g, 'link.')
+      .trim();
+    if (!plain) { if(onDone) onDone(); return; }
+
+    speaking = true;
+    setAvatar('speaking');
+    setStatus('Bot is speaking...', plain.slice(0,80) + (plain.length > 80 ? '…' : ''));
+    skipBtn.style.display = '';
+
+    if (window.responsiveVoice) {
+      responsiveVoice.speak(plain, voiceName, {
+        onend: function() {
+          speaking = false;
+          skipBtn.style.display = 'none';
+          if (vcActive && onDone) onDone();
+        },
+        onerror: function() {
+          speaking = false;
+          skipBtn.style.display = 'none';
+          if (vcActive && onDone) onDone();
+        }
+      });
+      return;
+    }
+
+    // Fallback: browser built-in TTS
     if (!tts) { if(onDone) onDone(); return; }
     tts.cancel();
     // plain text বানাও (markdown/code strip)
@@ -4303,6 +4331,7 @@ if (tts.getVoices().length === 0) {
   };
 
   skipBtn.onclick = function() {
+    if (window.responsiveVoice) responsiveVoice.cancel();
     if (tts) tts.cancel();
     skipBtn.style.display = 'none';
     speaking = false;
@@ -4336,6 +4365,7 @@ if (tts.getVoices().length === 0) {
   function closeVoiceChat() {
     vcActive = false;
     stopListening();
+    if (window.responsiveVoice) responsiveVoice.cancel();
     if (tts) tts.cancel();
     speaking = false;
     modal.classList.remove('show');
@@ -6442,17 +6472,21 @@ window.fetch = async function (input, init) {
       return __srOriginalFetchForLocalAi(input, init);
     }
 
-    var res = await __srOriginalFetchForLocalAi(input, init);
+   var res;
+    try {
+      res = await __srOriginalFetchForLocalAi(input, init);
+    } catch (networkErr) {
+      // Network fail (offline/timeout/DNS) — fetch নিজেই throw করে, এতদিন এইখানে ধরাই হতো না।
+      // এখন এটাকেও 502-এর মতোই local fallback-এর জন্য qualify করাচ্ছি।
+      console.log("[WebLLM] NETWORK ERROR, treating as fallback-eligible:", networkErr.message);
+      res = { status: 502, __networkFailure: true };
+    }
 
-console.log("[WebLLM] STATUS:", res.status);
-    console.log("STATUS =", res.status);
-    // শুধু 502 (chat.js-এর callAI সব provider-e fail করলে ঠিক এই কোডই পাঠায়) ধরি —
-    // 400/403/429/404 এগুলো legit user-facing error (quota শেষ, model lock ইত্যাদি), fallback করব না
-    console.log("FETCH FALLBACK HIT");
-   if (res.status !== 502) {
-    console.log("[WebLLM] NOT 502");
-    return res;
-}
+    console.log("[WebLLM] STATUS:", res.status);
+    if (res.status !== 502) {
+      console.log("[WebLLM] NOT 502");
+      return res;
+    }
 
 console.log("[WebLLM] STARTING LOCAL FALLBACK");
     if (!window.LocalAI || !window.LocalAI.isSupported()) return res; // fallback করার উপায় নাই, আসল error-ই দেখাই
