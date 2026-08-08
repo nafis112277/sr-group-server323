@@ -7,6 +7,17 @@ let enginePromise = null;
 let currentModelId = null;
 let selectedLanguage = 'english'; // last-detected language, auto-updates
 
+const MODEL_READY_KEY = 'krovos_local_model_ready_v1';
+function isModelReady() {
+  try { return localStorage.getItem(MODEL_READY_KEY) === 'true'; } catch (e) { return false; }
+}
+function markModelReady() {
+  try { localStorage.setItem(MODEL_READY_KEY, 'true'); } catch (e) { /* ignore */ }
+}
+function clearModelReady() {
+  try { localStorage.removeItem(MODEL_READY_KEY); } catch (e) { /* ignore */ }
+}
+
 const AI_NAME = 'KROVOS AI';
 const AI_MODEL_NAME = 'Nova1';
 const AI_CREATOR = 'SR Group';
@@ -109,6 +120,7 @@ async function loadEngine(modelId = DEFAULT_MODEL, onProgress) {
             try {
               await engine.reload(model);
               currentModelId = model;
+              markModelReady();
               if (onProgress) onProgress(`Model loaded: ${model}`, 100);
               return engine;
             } catch (err) {
@@ -191,16 +203,19 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   } catch (err) {
     if (!isDeviceLostError(err)) throw err;
 
-    // GPU device crash hoyeche — purono engine reference bad diye fresh load try kori
+    // GPU device crash hoyeche — purono engine reference bad diye fresh load try kori.
+    // ready-flag clear kore dei, karon purono "ready" state ar valid na (engine disposed).
     if (onProgress) onProgress('GPU device crash — reloading model...', 0);
     enginePromise = null;
     currentModelId = null;
+    clearModelReady();
 
     try {
       return await runOneAttempt(systemPrompt, history, userMessage, onProgress);
     } catch (err2) {
       enginePromise = null;
       currentModelId = null;
+      clearModelReady();
       throw new Error(
         'ডিভাইসের GPU সাময়িকভাবে ক্র্যাশ করেছে (মেমরি/ড্রাইভার সমস্যা)। ' +
         'পেজ রিফ্রেশ করে আবার চেষ্টা করুন, অথবা অন্য ব্রাউজার ট্যাব বন্ধ করে জায়গা খালি করুন।'
@@ -244,6 +259,7 @@ window.LocalAI = {
   generateReply,
   setLanguage,
   detectLanguage,
+  isModelReady,
   SUPPORTED_LANGUAGES: Object.keys(LANGUAGE_PROMPTS),
   FALLBACK_MODELS
 };
