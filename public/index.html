@@ -6579,10 +6579,14 @@ try {
     if (noteDiv && noteDiv.parentNode)
         noteDiv.remove();
 
-    console.error('[WebLLM] local fallback failed:', genErr);
+console.error('[WebLLM] local fallback failed:', genErr);
+    // FIX: age shobshomoy generic "download somossa hoyeche" text dekhano hoto,
+    // real karon (jemon GPU crash) chapa pore jeto. Ekhon webllm-local.js theke
+    // asha specific error message-i dekhano hocche, jate user real karon bujhte pare.
+    var friendlyMsg = (genErr && genErr.message) ? genErr.message : 'দুঃখিত, উত্তর তৈরি করা যায়নি — আবার চেষ্টা করুন।';
     return new Response(
         JSON.stringify({
-            reply: 'দুঃখিত, উত্তর তৈরি করা যায়নি (local AI download সমস্যা হয়েছে) — আবার চেষ্টা করুন।',
+            reply: friendlyMsg,
             assistantMessageId: null,
             replyImageUrl: null,
             local: true,
