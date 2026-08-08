@@ -113,10 +113,14 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   // Language-specific prompt
   const langPrompt = LANGUAGE_PROMPTS[selectedLanguage] || LANGUAGE_PROMPTS.english;
   
-  const messages = [];
-  messages.push({ role: 'system', content: langPrompt });
-  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
-  
+const messages = [];
+  // WebLLM শুধু একটা system message allow করে, সেটাও অবশ্যই messages[0]-এ থাকতে হবে —
+  // আগে langPrompt আর systemPrompt আলাদা দুইটা 'system' role message হিসেবে পুশ হতো,
+  // দ্বিতীয়টা (index 1) SystemMessageOrderError থ্রো করত। এখন দুইটাকে একটাই system
+  // message-এ merge করা হচ্ছে।
+  const combinedSystemPrompt = systemPrompt ? (langPrompt + '\n\n' + systemPrompt) : langPrompt;
+  messages.push({ role: 'system', content: combinedSystemPrompt });
+
   for (const m of history) {
     messages.push({ 
       role: m.role === 'assistant' ? 'assistant' : 'user', 
