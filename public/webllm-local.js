@@ -142,7 +142,17 @@ function filterIdentityLeak(text) {
     .replace(/\b(Alibaba|HuggingFace|MLC-AI)\b/gi, AI_CREATOR);
 }
 
-async function generateReply(systemPrompt, history, userMessage, onProgress) {
+// FIX: GPU device crash (DXGI_ERROR_DEVICE_HUNG / "Device was lost") hole purono
+// engine object disposed hoye jay, kintu enginePromise/currentModelId purono thake —
+// tai porer call e shei mrito engine diye kaj korte giye "Object has already been
+// disposed" throw hoto. Ekhon eirokom error dhorle enginePromise reset kore, fresh
+// engine load kore ekbar retry kora hocche.
+function isDeviceLostError(err) {
+  const msg = String(err && err.message || err || '');
+  return /disposed|device.*lost|device.*removed|GPUDevice/i.test(msg);
+}
+
+async function runOneAttempt(systemPrompt, history, userMessage, onProgress) {
   const engine = await loadEngine(DEFAULT_MODEL, onProgress);
 
   // Prottek message e user er vasha auto-detect
@@ -173,6 +183,30 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   const rawText = reply?.choices?.[0]?.message?.content?.trim();
   if (!rawText) throw new Error('Local AI কোনো উত্তর দিতে পারেনি। আবার চেষ্টা করুন।');
   return filterIdentityLeak(rawText);
+}
+
+async function generateReply(systemPrompt, history, userMessage, onProgress) {
+  try {
+    return await runOneAttempt(systemPrompt, history, userMessage, onProgress);
+  } catch (err) {
+    if (!isDeviceLostError(err)) throw err;
+
+    // GPU device crash hoyeche — purono engine reference bad diye fresh load try kori
+    if (onProgress) onProgress('GPU device crash — reloading model...', 0);
+    enginePromise = null;
+    currentModelId = null;
+
+    try {
+      return await runOneAttempt(systemPrompt, history, userMessage, onProgress);
+    } catch (err2) {
+      enginePromise = null;
+      currentModelId = null;
+      throw new Error(
+        'ডিভাইসের GPU সাময়িকভাবে ক্র্যাশ করেছে (মেমরি/ড্রাইভার সমস্যা)। ' +
+        'পেজ রিফ্রেশ করে আবার চেষ্টা করুন, অথবা অন্য ব্রাউজার ট্যাব বন্ধ করে জায়গা খালি করুন।'
+      );
+    }
+  }
 }
 
 // Manual override still available (UI theke call korle e-o kaj korbe,
