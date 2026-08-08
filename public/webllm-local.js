@@ -13,9 +13,11 @@ const DEFAULT_MODEL = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
 
 // Fallback models — ছোট থেকে বড় order
 const FALLBACK_MODELS = [
-  'SmolLM2-360M-Instruct-q4f16_1-MLC',
-  'SmolLM2-135M-Instruct-q4f16_1-MLC',
-  'Qwen3-0.6B-q4f32_1-MLC'
+  // Qwen সিরিজ SmolLM2-এর চেয়ে বেশি ভাষা (বাংলাসহ) বোঝে এবং instruction ভালো follow করে —
+  // তাই বড়/সক্ষম মডেলটাকে প্রথমে চেষ্টা করানো হচ্ছে, ছোটগুলো শুধু download/RAM fail-এ fallback
+  'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
+  'Qwen3-0.6B-q4f32_1-MLC',
+  'SmolLM2-360M-Instruct-q4f16_1-MLC'
 ];
 
 // Language-specific system prompts
