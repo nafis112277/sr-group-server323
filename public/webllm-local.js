@@ -35,7 +35,10 @@ const IDENTITY_PROMPT = `তোমার নাম ${AI_NAME}। তোমার
 তোমার কাজ: ${AI_CREATOR}-এর পণ্য/সেবা সম্পর্কিত প্রশ্নের উত্তর দেওয়া, সাধারণ কোডিং/টেকনিক্যাল সহায়তা দেওয়া, এবং সাধারণ তথ্য ও পরামর্শ প্রদান করা।
 তুমি কখনো নিজেকে Qwen, SmolLM, Alibaba, HuggingFace বা অন্য কোনো base model বলবে না।
 কেউ "তুমি কোন মডেল/AI" জিজ্ঞেস করলে শুধু বলবে: "আমি ${AI_MODEL_NAME}, ${AI_CREATOR}-এর ${AI_NAME}।"
-ব্যবহারকারী যে ভাষায় প্রশ্ন করবে, ঠিক সেই ভাষায় উত্তর দেবে — ব্যবহারকারী ভাষা পাল্টালে তুমিও পাল্টাবে।`;
+ব্যবহারকারী যে ভাষায় প্রশ্ন করবে, ঠিক সেই ভাষায় উত্তর দেবে — ব্যবহারকারী ভাষা পাল্টালে তুমিও পাল্টাবে।
+তুমি একটি ছোট, ডিভাইসে চলা মডেল — জটিল বা নির্দিষ্ট তথ্যভিত্তিক প্রশ্নে (যেমন: রাজধানী, ইতিহাস, তারিখ, সংখ্যা) ভুল তথ্য বানিয়ে বলার প্রবণতা তোমার আছে।
+তাই: নিশ্চিত না হলে কখনো আন্দাজে/বানিয়ে উত্তর দেবে না। নিশ্চিত না থাকলে স্পষ্টভাবে বলবে "আমি নিশ্চিত না" অথবা "এই মুহূর্তে সঠিক তথ্য দিতে পারছি না, ইন্টারনেট সংযোগ ফিরলে আবার জিজ্ঞেস করুন।"
+কোনো নাম, সংখ্যা, তারিখ বা তথ্য সম্পূর্ণ নিশ্চিত না হয়ে কখনো তৈরি করে বলবে না।`;
 
 // SR Group org info — admin/contact question ashle eikhan theke bolbe
 const ORG_INFO = `SR Group প্রশাসক: Sadiqur Rahman, Sakirul Islam।
@@ -186,9 +189,15 @@ async function runOneAttempt(systemPrompt, history, userMessage, onProgress) {
   }
   messages.push({ role: 'user', content: userMessage });
 
+  // FIX: temperature 0.7 theke kome 0.3 kora hoyeche — chotto (360M/0.6B) model
+  // high temperature-e factual question-e (rajdhani, tarikh, songkha) beshi
+  // hallucinate kore. 0.3-e output beshi deterministic/conservative hoy, tai
+  // banano tottho deyar probability kome — kintu shompurno bondho hoy na, karon
+  // eita model-er nijer size/capacity-r limitation, prompt/temperature diye
+  // 100% fix kora jay na.
   const reply = await engine.chat.completions.create({
     messages,
-    temperature: 0.7,
+    temperature: 0.3,
     max_tokens: 400,
   });
 
