@@ -1383,6 +1383,18 @@
   }
   .vc-transcript.show{ display:block; }
 </style>
+<style id="sr-added-stop-generation">
+  #stopGenerationBtn{
+    display:none;
+    background:rgba(255,107,107,0.12); border:1px solid rgba(255,107,107,0.35);
+    color:var(--danger); border-radius:10px; padding:0 20px; height:44px;
+    font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; font-size:13.5px;
+    white-space:nowrap; flex-shrink:0;
+  }
+  #stopGenerationBtn.show{ display:flex; align-items:center; gap:7px; }
+  #stopGenerationBtn:hover{ background:rgba(255,107,107,0.22); border-color:var(--danger); }
+  .msg.bot.streaming{ position:relative; }
+</style>
 <style id="sr-added-model-picker">
   .plus-menu-item.model-item{ justify-content:space-between; }
   .plus-menu-item.model-item.locked{ opacity:0.5; cursor:not-allowed; }
@@ -1578,6 +1590,7 @@
   </span>
 </div>
       <div class="composer-attachments" id="composerAttachments"></div>
+     <button type="button" id="stopGenerationBtn">⏹ Stop</button>
       <div class="composer-row">
 <input type="file" id="imageFileInput" accept="image/*" style="display:none;">
         <input type="file" id="codeFileInput" accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.php,.rb,.go,.rs,.html,.css,.json,.sql,.txt,.md" style="display:none;">
@@ -2963,16 +2976,33 @@ function setBroadcastChatLock(active, message = '') {
     }
   }
 }
-async function sendMessage() {
-  if (broadcastChatLocked) {
-  return;
+let currentAbortController = null;
+
+function showStopBtn() {
+  const btn = document.getElementById('stopGenerationBtn');
+  if (btn) btn.classList.add('show');
 }
+function hideStopBtn() {
+  const btn = document.getElementById('stopGenerationBtn');
+  if (btn) btn.classList.remove('show');
+}
+
+document.getElementById('stopGenerationBtn').onclick = function() {
+  if (currentAbortController) {
+    currentAbortController.abort();
+    currentAbortController = null;
+  }
+};
+
+async function sendMessage() {
+  if (broadcastChatLocked) return;
   const input = document.getElementById('userInput');
   const text = input.value.trim();
   if ((!text && !pendingAttachment) || sending || !currentConvId) return;
 
   sending = true;
   document.getElementById('sendBtn').disabled = true;
+  showStopBtn();
 
   const attachment = pendingAttachment;
   pendingAttachment = null;
@@ -2981,20 +3011,34 @@ async function sendMessage() {
   input.value = '';
   showTyping();
 
+  // নতুন AbortController — Stop বাটন এটাকেই abort করবে
+  currentAbortController = new AbortController();
+  const signal = currentAbortController.signal;
+
   try {
-    // image পাঠালে base64 dataUrl সহ পাঠাই — ব্যাকএন্ড এটা আপলোড হ্যান্ডলার/স্টোরেজে সেভ করে
-    // একটা স্থায়ী URL রিটার্ন করবে বলে ধরে নিচ্ছি (data.reply, data.title-এর পাশাপাশি)।
     const body = { content: text };
     if (attachment) body.image = attachment.dataUrl;
     if (webSearchEnabled) body.webSearch = true;
 
-    const data = await api(`/chat/conversations/${currentConvId}/message`, {
-      method: 'POST', body, token: userToken,
+    const headers = { 'Content-Type': 'application/json' };
+    if (userToken) headers['Authorization'] = 'Bearer ' + userToken;
+
+    const res = await fetch('/api/chat/conversations/' + currentConvId + '/message', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal, // abort signal যুক্ত
     });
+
+    if (!res.ok) {
+      let errData = {};
+      try { errData = await res.json(); } catch(e) {}
+      throw new Error(errData.error || 'Something went wrong.');
+    }
+    const data = await res.json();
+
     hideTyping();
 
-    // just-sent message-e server-er real id boshai — ei id na thakle "Edit" click korle
-    // "missing id from server" error dekhabe, jotokhon na page reload kore purono history load hoy
     if (userEntry && data.userMessageId != null) {
       userEntry.record.id = data.userMessageId;
       userEntry.row.dataset.msgId = data.userMessageId;
@@ -3008,13 +3052,22 @@ async function sendMessage() {
       conv.updatedAt = new Date().toISOString();
       renderConvList();
     }
+
   } catch (err) {
     hideTyping();
-    addMessage('note', "Couldn't get a reply: " + err.message);
+    if (err.name === 'AbortError') {
+      // ইউজার নিজে থামিয়েছে — চুপচাপ, কোনো error note নয়
+      // শেষ user message-টা রেখে দিই, bot reply আসেনি সেটা note করি না
+      addMessage('note', 'Generation stopped.');
+    } else {
+      addMessage('note', "Couldn't get a reply: " + err.message);
+    }
   }
 
+  currentAbortController = null;
   sending = false;
   document.getElementById('sendBtn').disabled = false;
+  hideStopBtn();
   input.focus();
 }
 document.getElementById('sendBtn').onclick = sendMessage;
