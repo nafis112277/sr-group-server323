@@ -6491,17 +6491,15 @@ window.fetch = async function (input, init) {
 console.log("[WebLLM] STARTING LOCAL FALLBACK");
     if (!window.LocalAI || !window.LocalAI.isSupported()) return res; // fallback করার উপায় নাই, আসল error-ই দেখাই
 
-    var promptText = payload.content || (function () {
-      var last = [...(currentMessages || [])].reverse().find(function (m) { return m.role === 'user'; });
-      return last ? last.content : '';
-    })();
-    if (!promptText) return res;
-
-  // FIX: client-কে এই fallback নোটিশ আর দেখানো হচ্ছে না — চুপচাপ ব্যাকগ্রাউন্ডে হচ্ছে,
-    // showTyping() থেকে যে "..." typing bubble টা আগে থেকেই দেখাচ্ছে সেটাই যথেষ্ট।
-    // noteDiv কে DOM-এ append করা হচ্ছে না, শুধু ভ্যারিয়েবল হিসেবে রাখা হলো যাতে নিচের
-    // progress-callback আর remove() কলগুলো error না দিয়ে চুপচাপ কাজ করে (unattached node, no-op)।
-   var noteDiv = document.createElement('div');
+var noteDiv = document.createElement('div');
+    noteDiv.className = 'msg note';
+    noteDiv.style.textAlign = 'center';
+    noteDiv.textContent = 'একটি সমস্যা হয়েছে — ' + estimateWaitLabel();
+    var messagesBox = document.getElementById('messages');
+    if (messagesBox) {
+      messagesBox.appendChild(noteDiv);
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+    }
 
 try {
 
@@ -6509,12 +6507,10 @@ try {
         LOCAL_SYSTEM_PROMPT,
         currentHistoryForLocalAi(),
         promptText,
-        function (text) {
-            if (noteDiv) noteDiv.textContent = text;
+        function () {
+            // progress callback আর message আপডেট করছে না — একটাই স্থির মেসেজ দেখানো হচ্ছে
         }
     );
-
-    return new Response(
         JSON.stringify({
             reply: reply,
             assistantMessageId: null,
