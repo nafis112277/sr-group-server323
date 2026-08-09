@@ -104,14 +104,21 @@ const WEBLLM_TIERS = [
     sizeGB:       0.75,
     minSpeedMbps: 50,
     timeoutMs:    180_000,
-    label:       'Tier 1 — High-end'
+    label:       'Tier 1 — High-end (Big)'
+  },
+  {
+    id:          'Phi-3.5-mini-instruct-q4f16_1-MLC',
+    sizeGB:       2.2,
+    minSpeedMbps: 25,
+    timeoutMs:    180_000,
+    label:       'Tier 1.5 — Medium'
   },
   {
     id:          'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
     sizeGB:       1.0,
     minSpeedMbps: 10,
     timeoutMs:    180_000,
-    label:       'Tier 2 — Balanced'
+    label:       'Tier 2 — Balanced (Qwen2.5)'
   },
   {
     id:          'Qwen3-0.6B-q4f32_1-MLC',
@@ -335,11 +342,12 @@ async function loadWebLLMEngine(modelId = null, onProgress) {
       targetTier = await pickWebLLMForNetwork(onProgress);
     }
 
-    // Retry chain: preferred tier → smaller fallbacks
-    const tryOrder = [
-      targetTier,
-      ...WEBLLM_TIERS.filter(t => t.id !== targetTier.id).reverse()
-    ];
+    // Retry chain: FIXED sequential fallback — Big → Medium → Qwen2.5 → Compact → Emergency.
+    // targetTier (network-picked) decides where to START in that fixed chain, not the order
+    // itself — chain always big-first, never reversed. Model below start tier not retried
+    // (already smaller than what network can handle), model above start tier also skipped.
+    const startIdx = WEBLLM_TIERS.findIndex(t => t.id === targetTier.id);
+    const tryOrder = WEBLLM_TIERS.slice(startIdx >= 0 ? startIdx : 0);
 
     for (const tier of tryOrder) {
       const shortName = tier.id.split('-').slice(0, 2).join(' ');
