@@ -3,6 +3,8 @@
 // Local (offline) AI mode — WebGPU, multilingual (auto-detect) support
 // Network-aware tiered model selection: picks best model based on connection speed
 // Fallback chain: Tier 1 (best) → Tier 5 (emergency), no user left empty-handed
+//
+// Fix v2: concurrent load race condition + GPU device lost error handled
 
 // ─── Model Ready Flag ────────────────────────────────────────────────────────
 
@@ -19,9 +21,9 @@ function clearModelReady() {
 
 // ─── Identity ────────────────────────────────────────────────────────────────
 
-const AI_NAME        = 'KROVOS AI';
-const AI_MODEL_NAME  = 'Nova1';
-const AI_CREATOR     = 'SR Group';
+const AI_NAME       = 'KROVOS AI';
+const AI_MODEL_NAME = 'Nova1';
+const AI_CREATOR    = 'SR Group';
 
 // ─── Network-Aware Model Tiers ───────────────────────────────────────────────
 // Sorted best → worst quality.
@@ -38,38 +40,38 @@ const AI_CREATOR     = 'SR Group';
 
 const MODEL_TIERS = [
   {
-    id:           'Llama-3.2-1B-Instruct-q4f16_1-MLC',
-    sizeGB:        0.75,
-    minSpeedMbps:  50,
-    label:        'Tier 1 — High-end'
+    id:          'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+    sizeGB:       0.75,
+    minSpeedMbps: 50,
+    label:       'Tier 1 — High-end'
   },
   {
-    id:           'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
-    sizeGB:        1.0,
-    minSpeedMbps:  10,
-    label:        'Tier 2 — Balanced'
+    id:          'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
+    sizeGB:       1.0,
+    minSpeedMbps: 10,
+    label:       'Tier 2 — Balanced'
   },
   {
-    id:           'Qwen3-0.6B-q4f32_1-MLC',
-    sizeGB:        0.4,
-    minSpeedMbps:  3,
-    label:        'Tier 3 — Compact'
+    id:          'Qwen3-0.6B-q4f32_1-MLC',
+    sizeGB:       0.4,
+    minSpeedMbps: 3,
+    label:       'Tier 3 — Compact'
   },
   {
-    id:           'SmolLM2-360M-Instruct-q4f16_1-MLC',
-    sizeGB:        0.2,
-    minSpeedMbps:  1,
-    label:        'Tier 4 — Minimal'
+    id:          'SmolLM2-360M-Instruct-q4f16_1-MLC',
+    sizeGB:       0.2,
+    minSpeedMbps: 1,
+    label:       'Tier 4 — Minimal'
   },
   {
-    id:           'SmolLM2-135M-Instruct-q4f16_1-MLC',
-    sizeGB:        0.08,
-    minSpeedMbps:  0,
-    label:        'Tier 5 — Emergency'
+    id:          'SmolLM2-135M-Instruct-q4f16_1-MLC',
+    sizeGB:       0.08,
+    minSpeedMbps: 0,
+    label:       'Tier 5 — Emergency'
   }
 ];
 
-// Fallback order for loadEngine retry: smallest → largest (easiest to load first)
+// Fallback order: smallest → largest (safest load order on retry)
 const FALLBACK_MODELS = [...MODEL_TIERS].reverse().map(t => t.id);
 
 // ─── Network Speed Estimation ────────────────────────────────────────────────
@@ -78,7 +80,7 @@ const FALLBACK_MODELS = [...MODEL_TIERS].reverse().map(t => t.id);
 
 async function estimateNetworkMbps() {
   // ~90 KB public CDN file — no CORS issues, no auth, widely cached at edge
-  const testUrl    = 'https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js';
+  const testUrl     = 'https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js';
   const sampleBytes = 90_000;
   try {
     const start   = performance.now();
@@ -109,6 +111,7 @@ async function pickModelForNetwork(onProgress) {
 
 let enginePromise  = null;
 let currentModelId = null;
+let isLoading      = false;   // concurrent load lock — prevents double engine.reload()
 let selectedLanguage = 'english';
 
 // ─── Identity + Scope Prompts ────────────────────────────────────────────────
@@ -159,8 +162,8 @@ Répondez en français complet.`,
 // Detect language from Unicode script ranges in user message
 function detectLanguage(text) {
   if (!text) return 'english';
-  if (/[\u3040-\u30FF]/.test(text)) return 'japanese';   // hiragana / katakana
-  if (/[\u4E00-\u9FFF]/.test(text)) return 'chinese';    // CJK unified ideographs
+  if (/[\u3040-\u30FF]/.test(text)) return 'japanese';  // hiragana / katakana
+  if (/[\u4E00-\u9FFF]/.test(text)) return 'chinese';   // CJK unified ideographs
   if (/[\u0980-\u09FF]/.test(text)) return 'bengali';
   if (/[\u0900-\u097F]/.test(text)) return 'hindi';
   if (/[\u0600-\u06FF]/.test(text)) return 'urdu';
@@ -176,11 +179,17 @@ function isSupported() {
 }
 
 // ─── Engine Loader ────────────────────────────────────────────────────────────
-// modelId=null → auto-pick via network speed test.
+// modelId=null  → auto-pick via network speed test.
 // modelId=string → force that model (manual override / restart after crash).
 //
-// Retry strategy inside each tier: up to 3 attempts with exponential backoff.
-// If all attempts for a tier fail, move to the next smaller model automatically.
+// Concurrency fix: isLoading flag prevents pre-warm and user message from
+// triggering two concurrent engine.reload() calls — double reload was the root
+// cause of the GPU device crash seen in production (screenshot: "GPU সাময়িকভাবে
+// ক্র্যাশ করেছে"). If a load is already in progress, the second caller just
+// waits on the same enginePromise instead of starting a new one.
+//
+// Retry strategy: up to 3 attempts per tier with exponential backoff.
+// If all retries for a tier fail, move to the next smaller model automatically.
 // User always gets something — worst case SmolLM2-360M (Emergency tier).
 
 async function loadEngine(modelId = null, onProgress) {
@@ -195,61 +204,71 @@ async function loadEngine(modelId = null, onProgress) {
     modelId = await pickModelForNetwork(onProgress);
   }
 
-  // Return existing engine if same model already loading/loaded
+  // Same model already loading or loaded — reuse the promise
   if (enginePromise && currentModelId === modelId) return enginePromise;
 
   // Different model requested — discard old promise
   if (enginePromise && currentModelId !== modelId) enginePromise = null;
 
+  // ── Concurrency guard ──────────────────────────────────────────────────────
+  // Another call already started a load (pre-warm vs user message race).
+  // Return the in-flight promise instead of starting a second engine.reload().
+  if (isLoading && enginePromise) return enginePromise;
+
+  isLoading = true; // lock
+
   enginePromise = (async () => {
-    // Build retry order: preferred model first, then smaller fallbacks
-    const tryOrder = [
-      modelId,
-      ...FALLBACK_MODELS.filter(m => m !== modelId)
-    ];
+    try {
+      // Build retry order: preferred model first, then smaller fallbacks
+      const tryOrder = [
+        modelId,
+        ...FALLBACK_MODELS.filter(m => m !== modelId)
+      ];
 
-    for (const model of tryOrder) {
-      try {
-        const shortName = model.split('-').slice(0, 2).join(' ');
-        if (onProgress) onProgress(`লোড হচ্ছে: ${shortName}...`, 0);
+      for (const model of tryOrder) {
+        try {
+          const shortName = model.split('-').slice(0, 2).join(' ');
+          if (onProgress) onProgress(`লোড হচ্ছে: ${shortName}...`, 0);
 
-        const webllm = await import('https://esm.run/@mlc-ai/web-llm');
-        const engine = new webllm.MLCEngine();
-        engine.setInitProgressCallback((report) => {
-          if (onProgress) onProgress(report.text, report.progress);
-        });
+          const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+          const engine = new webllm.MLCEngine();
+          engine.setInitProgressCallback((report) => {
+            if (onProgress) onProgress(report.text, report.progress);
+          });
 
-        const MAX_RETRIES = 3;
-        let lastErr;
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-          try {
-            await engine.reload(model);
-            currentModelId = model;
-            markModelReady();
-            if (onProgress) onProgress(`প্রস্তুত: ${shortName}`, 100);
-            return engine;
-          } catch (err) {
-            lastErr = err;
-            if (attempt < MAX_RETRIES) {
-              if (onProgress) onProgress(`চেষ্টা ${attempt} ব্যর্থ, পুনরায়...`, 0);
-              await new Promise(r => setTimeout(r, 2000 * attempt));
+          const MAX_RETRIES = 3;
+          for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+              await engine.reload(model);
+              currentModelId = model;
+              markModelReady();
+              if (onProgress) onProgress(`প্রস্তুত: ${shortName}`, 100);
+              return engine; // success — exit everything
+            } catch (err) {
+              if (attempt < MAX_RETRIES) {
+                if (onProgress) onProgress(`চেষ্টা ${attempt} ব্যর্থ, পুনরায়...`, 0);
+                await new Promise(r => setTimeout(r, 2000 * attempt));
+              }
             }
           }
+
+          // All retries for this tier exhausted — try next smaller model
+          if (onProgress) onProgress(`${model.split('-')[0]} ব্যর্থ, ছোট মডেলে যাচ্ছি...`, 0);
+
+        } catch {
+          if (onProgress) onProgress('পরবর্তী মডেলে যাচ্ছি...', 0);
         }
-
-        // This tier exhausted — try next smaller model
-        if (onProgress) onProgress(`${model.split('-')[0]} ব্যর্থ, ছোট মডেলে যাচ্ছি...`, 0);
-
-      } catch (err) {
-        if (onProgress) onProgress('পরবর্তী মডেলে যাচ্ছি...', 0);
       }
-    }
 
-    // All tiers failed
-    enginePromise = null;
-    throw new Error(
-      'সব মডেল লোড করা যায়নি। ইন্টারনেট কানেকশন চেক করুন অথবা পেজ রিফ্রেশ করুন।'
-    );
+      // All tiers failed
+      enginePromise = null;
+      throw new Error(
+        'সব মডেল লোড করা যায়নি। ইন্টারনেট কানেকশন চেক করুন অথবা পেজ রিফ্রেশ করুন।'
+      );
+
+    } finally {
+      isLoading = false; // always unlock
+    }
   })();
 
   return enginePromise;
@@ -260,9 +279,9 @@ async function loadEngine(modelId = null, onProgress) {
 
 function filterIdentityLeak(text) {
   return text
-    .replace(/\bQwen2?\.?5?\b/gi,              AI_MODEL_NAME)
-    .replace(/\bSmolLM2?\b/gi,                 AI_MODEL_NAME)
-    .replace(/\bLlama[\s-]?3\.?2?\b/gi,        AI_MODEL_NAME)
+    .replace(/\bQwen2?\.?5?\b/gi,                    AI_MODEL_NAME)
+    .replace(/\bSmolLM2?\b/gi,                        AI_MODEL_NAME)
+    .replace(/\bLlama[\s-]?3\.?2?\b/gi,               AI_MODEL_NAME)
     .replace(/\b(Alibaba|Meta|HuggingFace|MLC-AI)\b/gi, AI_CREATOR);
 }
 
@@ -281,9 +300,9 @@ async function runOneAttempt(systemPrompt, history, userMessage, onProgress) {
   const engine = await loadEngine(null, onProgress);
 
   // Auto-detect user language every message
-  const detectedLang  = detectLanguage(userMessage);
-  selectedLanguage    = detectedLang;
-  const langPrompt    = LANGUAGE_PROMPTS[detectedLang] || LANGUAGE_PROMPTS.english;
+  const detectedLang = detectLanguage(userMessage);
+  selectedLanguage   = detectedLang;
+  const langPrompt   = LANGUAGE_PROMPTS[detectedLang] || LANGUAGE_PROMPTS.english;
 
   const combinedSystemPrompt =
     IDENTITY_PROMPT + '\n\n' +
@@ -324,10 +343,11 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   } catch (err) {
     if (!isDeviceLostError(err)) throw err;
 
-    // GPU crashed — clear stale engine and retry with fresh load
+    // GPU crashed — clear stale engine state and retry with fresh load
     if (onProgress) onProgress('GPU ক্র্যাশ — মডেল পুনরায় লোড হচ্ছে...', 0);
     enginePromise  = null;
     currentModelId = null;
+    isLoading      = false; // force-unlock in case crash left it stuck
     clearModelReady();
 
     try {
@@ -335,6 +355,7 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
     } catch (err2) {
       enginePromise  = null;
       currentModelId = null;
+      isLoading      = false;
       clearModelReady();
       throw new Error(
         'ডিভাইসের GPU সাময়িকভাবে ক্র্যাশ করেছে (মেমরি/ড্রাইভার সমস্যা)। ' +
@@ -374,17 +395,25 @@ window.getCurrentModel = function () {
 
 window.getNetworkSpeed = async function () {
   const mbps = await estimateNetworkMbps();
-  const tier  = MODEL_TIERS.find(t => mbps >= t.minSpeedMbps) || MODEL_TIERS[MODEL_TIERS.length - 1];
+  const tier  = MODEL_TIERS.find(t => mbps >= t.minSpeedMbps)
+             || MODEL_TIERS[MODEL_TIERS.length - 1];
   console.log(`Network: ~${mbps.toFixed(2)} Mbps → Would pick: ${tier.label} (${tier.id})`);
   return mbps;
 };
 
 // ─── Pre-warm ────────────────────────────────────────────────────────────────
-// Start loading in background as soon as the script is parsed (WebGPU only).
-// Network speed test runs here so the engine is ready before the first message.
+// Delayed 5 seconds so the page fully settles before background load starts.
+// This prevents pre-warm and an immediate first user message from racing into
+// two concurrent engine.reload() calls — the original cause of the GPU crash.
 
 if (isSupported()) {
-  loadEngine(null).catch(() => { enginePromise = null; });
+  setTimeout(() => {
+    loadEngine(null).catch(() => {
+      enginePromise  = null;
+      currentModelId = null;
+      isLoading      = false;
+    });
+  }, 5000);
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
