@@ -51,14 +51,18 @@ export async function callGemini(systemPrompt, history, options = {}) {
   // ei model TEXT+IMAGE dutoi generate kore, tai googleSearch tool combine korle
   // API bhalo error dite pare — shei khetre niche catch kore lastError set hoy,
   // ar ai.js-er fallback chain porer provider-e switch kore.
-  const requestBody = {
+ const requestBody = {
     contents,
     systemInstruction: { parts: [{ text: systemPrompt }] },
     generationConfig: {
       maxOutputTokens: 8000,
-      // Model-ke text ebong image duitai generate korar permission deওয়া hocche;
-      // model nijei bujhe dorkar mone korle image return korbe, na hole shudhu text.
-      responseModalities: ['TEXT', 'IMAGE'],
+      // FIX: googleSearch grounding tool ei TEXT+IMAGE combined model-এর সাথে
+      // ব্যবহার করলে Google API error দেয় (নিচের কমেন্টে ব্যাখ্যা করা ছিল) —
+      // তাই webSearch:true হলে responseModalities থেকে IMAGE বাদ দিয়ে শুধু TEXT
+      // চাওয়া হচ্ছে, যাতে googleSearch tool ঠিকভাবে কাজ করতে পারে। ফলে সার্চ
+      // চালু থাকা মেসেজে ছবি জেনারেট হবে না, কিন্তু আসল সার্চ ফলাফল আসবে —
+      // এটাই বিবেচনা করে ঠিক করা হচ্ছে যে সার্চ ফলাফল ছবি জেনারেশনের চেয়ে জরুরি।
+      responseModalities: webSearch ? ['TEXT'] : ['TEXT', 'IMAGE'],
     },
   };
   if (webSearch) {
