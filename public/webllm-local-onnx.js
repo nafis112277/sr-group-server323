@@ -542,6 +542,7 @@ if (runtime.type === 'webllm') {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 window.LocalAI = {
+  isSupported: () => runtime.type === 'webllm' ? (typeof navigator !== 'undefined' && !!navigator.gpu) : true,
   getRuntime,
   loadEngine,
   generateReply,
