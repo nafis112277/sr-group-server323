@@ -6,6 +6,59 @@ import { callAI } from '../ai.js';
 import { getSettings, buildSystemPrompt, getBroadcast } from '../settings.js';
 import { getMaintenanceStatus, getPolicy, getApiAccessStatus } from './admin.js';
 
+// ===== TAVILY WEB SEARCH FUNCTION =====
+// Tavily API-র মাধ্যমে ওয়েব সার্চ করো এবং ফলাফল AI-র কাছে পাঠাও
+async function searchWeb(query) {
+  if (!process.env.TAVILY_API_KEY) {
+    console.warn('[Web Search] TAVILY_API_KEY পাওয়া যায়নি environment variables-এ');
+    return null;
+  }
+
+  try {
+    const response = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: process.env.TAVILY_API_KEY,
+        query: query,
+        max_results: 5,
+        include_answer: true,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Web Search] Tavily API error: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    if (!data.results || data.results.length === 0) {
+      return null;
+    }
+
+    // ওয়েব সার্চ ফলাফল ফরম্যাট করো বাংলায়
+    let searchContext = '📰 **সর্বশেষ ওয়েব সার্চ ফলাফল (Tavily থেকে):**\n\n';
+    
+    if (data.answer) {
+      searchContext += `**সংক্ষিপ্ত উত্তর:** ${data.answer}\n\n`;
+    }
+
+    searchContext += '**বিস্তারিত সূত্র:**\n';
+    data.results.forEach((result, index) => {
+      searchContext += `${index + 1}. **${result.title}**\n`;
+      searchContext += `   সূত্র: ${result.url}\n`;
+      searchContext += `   বর্ণনা: ${result.content}\n\n`;
+    });
+
+    return searchContext;
+  } catch (err) {
+    console.error('[Web Search] Error:', err.message);
+    return null;
+  }
+}
+// ===== END TAVILY WEB SEARCH FUNCTION =====
+
 const router = Router();
 router.use(requireUser);
 
@@ -215,124 +268,85 @@ async function getMatchingSkillInstructions(userEmail, userText) {
 
 function firstImageAsDataUrl(images) {
   if (!images) return null;
-  const arr = typeof images === 'string' ? JSON.parse(images) : images;
-  if (!Array.isArray(arr) || arr.length === 0) return null;
-  const img = arr[0];
-  if (!img || !img.base64) return null;
-  const mime = img.mimeType || 'image/png';
-  return `data:${mime};base64,${img.base64}`;
-}
-
-function dataUrlToImageRecord(dataUrl) {
-  if (!dataUrl || typeof dataUrl !== 'string') return null;
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) return null;
-  return { mimeType: match[1], base64: match[2] };
+  try {
+    const parsed = Array.isArray(images) ? images : JSON.parse(images || '[]');
+    if (parsed.length > 0 && parsed[0].data) {
+      return parsed[0].data;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
 }
 
 function normalizeImages(images) {
   if (!images) return null;
-  const arr = typeof images === 'string' ? JSON.parse(images) : images;
-  return Array.isArray(arr) && arr.length > 0 ? arr : null;
+  try {
+    return Array.isArray(images) ? images : JSON.parse(images || '[]');
+  } catch (e) {
+    return null;
+  }
+}
+
+function dataUrlToImageRecord(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return null;
+  if (!dataUrl.startsWith('data:image/')) return null;
+  const [header, data] = dataUrl.split(',');
+  const mediaType = header.match(/data:(.*?);/)?.[1] || 'image/jpeg';
+  return { mediaType, data };
 }
 
 router.get('/conversations', async (req, res) => {
   try {
-    const rows = await query(
-      'SELECT id, title, updated_at AS "updatedAt" FROM conversations WHERE user_email = $1 ORDER BY updated_at DESC',
+    const conversations = await query(
+      `SELECT id, title, created_at AS "createdAt", updated_at AS "updatedAt"
+       FROM conversations WHERE user_email = $1 ORDER BY updated_at DESC`,
       [req.userEmail]
     );
-    res.json({ conversations: rows });
+    res.json({ conversations });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not load conversations.' });
   }
 });
 
-router.get('/my-plan', async (req, res) => {
+router.post('/conversations', async (req, res) => {
   try {
-    const user = await queryOne('SELECT plan FROM users WHERE email = $1', [req.userEmail]);
-    res.json({ plan: user?.plan || 'free' });
+    const id = crypto.randomUUID();
+    await query(
+      'INSERT INTO conversations (id, user_email, title) VALUES ($1, $2, $3)',
+      [id, req.userEmail, 'New chat']
+    );
+    res.json({ id });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Could not load plan.' });
+    res.status(500).json({ error: 'Could not create conversation.' });
   }
 });
 
-router.get('/available-models', async (req, res) => {
+router.get('/conversations/:id', async (req, res) => {
   try {
-    const user = await queryOne('SELECT plan FROM users WHERE email = $1', [req.userEmail]);
-    const plan = user?.plan || 'free';
-    const allowed = MODEL_ACCESS[plan] || MODEL_ACCESS.free;
+    const conv = await queryOne(
+      'SELECT * FROM conversations WHERE id = $1 AND user_email = $2',
+      [req.params.id, req.userEmail]
+    );
+    if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
 
-    const models = Object.keys(MODEL_INFO).map((name) => ({
-      id: name,
-      label: MODEL_INFO[name].label,
-      tier: tierOfModel(name),
-      locked: !allowed.includes(name),
-      // frontend eta diye bujhte parbe "local" select korle server-e call na kore
-      // WebLLM diye nijei generate korte hobe, tarpor reply server-e save korte pathabe.
-      clientSide: name === 'local',
-    }));
+    const messages = await query(
+      'SELECT id, role, content, images, feedback_rating AS "feedbackRating" FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
+      [conv.id]
+    );
 
-    res.json({ plan, currentPlan: plan, models });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Could not load models.' });
-  }
-});
-
-router.get('/broadcast', async (req, res) => {
-  try {
-    const b = await getBroadcast();
     res.json({
-      id: b.updatedAt ? new Date(b.updatedAt).getTime() : null,
-      title: b.title || '',
-      message: b.message || '',
-      active: !!b.active,
+      conversation: conv,
+      messages: messages.map((m) => ({
+        ...m,
+        images: normalizeImages(m.images),
+      })),
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Could not load the broadcast.' });
-  }
-});
-
-router.post('/conversations', async (req, res) => {
-  try {
-    const row = await queryOne(
-      `INSERT INTO conversations (user_email, title) VALUES ($1, 'New chat')
-       RETURNING id, title, updated_at AS "updatedAt"`,
-      [req.userEmail]
-    );
-    res.json(row);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Could not start a new chat.' });
-  }
-});
-
-router.get('/conversations/:id/messages', async (req, res) => {
-  try {
-    const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
-      req.params.id,
-      req.userEmail,
-    ]);
-    if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
-
-    const rows = await query(
-      'SELECT id, role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
-      [conv.id]
-    );
-    const messages = rows.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      imageUrl: firstImageAsDataUrl(m.images),
-    }));
-    res.json({ messages });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Could not load messages.' });
+    res.status(500).json({ error: 'Could not load conversation.' });
   }
 });
 
@@ -346,37 +360,31 @@ router.delete('/conversations/:id', async (req, res) => {
 
     await query('DELETE FROM messages WHERE conversation_id = $1', [conv.id]);
     await query('DELETE FROM conversations WHERE id = $1', [conv.id]);
-
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Could not delete this conversation.' });
+    res.status(500).json({ error: 'Could not delete conversation.' });
   }
 });
 
-router.get('/preferences', async (req, res) => {
+router.patch('/conversations/:id', async (req, res) => {
   try {
-    const user = await queryOne('SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1', [
-      req.userEmail,
-    ]);
-    if (!user) return res.status(404).json({ error: 'Account not found.' });
-    res.json({ customInstructions: user.customInstructions || '' });
+    const { title } = req.body || {};
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+      return res.status(400).json({ error: 'Title is required.' });
+    }
+
+    const conv = await queryOne(
+      'SELECT id FROM conversations WHERE id = $1 AND user_email = $2',
+      [req.params.id, req.userEmail]
+    );
+    if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
+
+    await query('UPDATE conversations SET title = $1 WHERE id = $2', [title.trim(), conv.id]);
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Could not load your preferences.' });
-  }
-});
-
-router.post('/preferences', async (req, res) => {
-  try {
-    const { customInstructions } = req.body || {};
-    const text = typeof customInstructions === 'string' ? customInstructions.slice(0, 2000) : '';
-
-    await query('UPDATE users SET custom_instructions = $1 WHERE email = $2', [text, req.userEmail]);
-    res.json({ ok: true, customInstructions: text });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Could not save your preferences.' });
+    res.status(500).json({ error: 'Could not update conversation.' });
   }
 });
 
@@ -391,8 +399,6 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
     let text = ((req.body || {}).content || '').trim();
     const incomingImage = (req.body || {}).image || null;
     const requestedModel = (req.body || {}).model || null;
-    // model === 'local' hole browser (WebLLM) age-e nijei reply generate kore
-    // ei field-e pathay. Thakle server callAI() ekdom skip kore, sudhu save kore.
     const clientGeneratedReply = (req.body || {}).localReply || null;
     if (!text && !incomingImage) return res.status(400).json({ error: 'Message is empty.' });
 
@@ -414,15 +420,11 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
       return res.status(modelCheck.status).json({ error: modelCheck.error });
     }
 
-    // local model chaile client obossoi tar generate kora reply pathabe,
-    // server-e kono AI call hobe na — na pathale clear error dei.
     if (modelCheck.forceProvider === 'local' && !clientGeneratedReply) {
       return res.status(400).json({
         error: 'Local AI reply from the browser is missing. Make sure the model finished loading before sending.',
       });
     }
-    // FIX: local reply-o same length cap follow korbe — age eta check hocchilo na,
-    // tai keu chaile huge WebLLM output pathiye DB bloat / abuse korte parto.
     if (modelCheck.forceProvider === 'local' && clientGeneratedReply.length > MAX_MESSAGE_LENGTH) {
       return res.status(400).json({ error: `Local reply is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
     }
@@ -436,7 +438,6 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
 
     let result;
     if (modelCheck.forceProvider === 'local') {
-      // server-e kichu call kora hocche na — browser-er WebLLM output-i shorashori use hocche.
       result = { ok: true, text: clientGeneratedReply, images: null, provider: 'local' };
     } else {
       const fullHistory = await query(
@@ -458,7 +459,21 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
       const skillBlock = await getMatchingSkillInstructions(req.userEmail, text);
       const system = baseSystem + skillBlock;
 
-      result = await callAI(system, history, {
+      // ===== WEB SEARCH INTEGRATION =====
+      // Web search enabled হলে Tavily থেকে রেজাল্ট নাও এবং system prompt-এ যোগ করো
+      let enhancedSystem = system;
+      
+      if ((req.body || {}).webSearch && text) {
+        console.log(`[Web Search] Running search for: "${text}"`);
+        const searchResults = await searchWeb(text);
+        if (searchResults) {
+          enhancedSystem = system + '\n\n---\n\n' + searchResults;
+          console.log('[Web Search] ফলাফল যোগ করা হয়েছে system prompt-এ');
+        }
+      }
+      // ===== END WEB SEARCH INTEGRATION =====
+
+      result = await callAI(enhancedSystem, history, {
         webSearch: !!(req.body || {}).webSearch,
         forceProvider: modelCheck.forceProvider,
       });
@@ -479,23 +494,21 @@ router.post('/conversations/:id/message', blockIfBroadcastActive, async (req, re
     let title = conv.title;
     if (title === 'New chat') title = (text || 'Photo').slice(0, 40);
 
-    await query('UPDATE conversations SET updated_at = now(), title = $1 WHERE id = $2', [title, conv.id]);
+    await query('UPDATE conversations SET title = $1, updated_at = now() WHERE id = $2', [title, conv.id]);
 
     res.json({
       reply: result.text,
       images,
       replyImageUrl: firstImageAsDataUrl(images),
-      title,
-      userMessageId: insertedUserMsg.id,
       assistantMessageId: insertedAssistantMsg.id,
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Something went wrong sending your message.' });
+    res.status(500).json({ error: 'Could not process your message.' });
   }
 });
 
-router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, async (req, res) => {
+router.post('/conversations/:id/messages/:messageId/edit', blockIfBroadcastActive, async (req, res) => {
   try {
     const conv = await queryOne('SELECT * FROM conversations WHERE id = $1 AND user_email = $2', [
       req.params.id,
@@ -503,49 +516,42 @@ router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, asy
     ]);
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
 
-    const newContent = ((req.body || {}).content || '').trim();
-    const requestedModel = (req.body || {}).model || null;
-    const clientGeneratedReply = (req.body || {}).localReply || null;
-    if (!newContent) return res.status(400).json({ error: 'Message is empty.' });
+    const target = await queryOne(
+      `SELECT m.id FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE m.id = $1 AND c.user_email = $2 AND m.role = 'user'`,
+      [req.params.messageId, req.userEmail]
+    );
+    if (!target) return res.status(404).json({ error: 'Message not found.' });
 
-    if (newContent.length > MAX_MESSAGE_LENGTH) {
+    const newText = ((req.body || {}).content || '').trim();
+    if (!newText) return res.status(400).json({ error: 'New content is empty.' });
+    if (newText.length > MAX_MESSAGE_LENGTH) {
       return res.status(400).json({ error: `Message is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
     }
 
-    const target = await queryOne(
-      'SELECT id, role FROM messages WHERE id = $1 AND conversation_id = $2',
-      [req.params.messageId, conv.id]
-    );
-    if (!target) return res.status(404).json({ error: 'Message not found.' });
-    if (target.role !== 'user') return res.status(400).json({ error: 'Only your own messages can be edited.' });
-
     const settings = await getSettings();
-
     const quota = await checkDailyQuota(req.userEmail, settings);
     if (!quota.allowed) {
-      return res.status(429).json({
-        error: `You've reached your daily message limit (${quota.limit}). Please try again tomorrow.`,
-      });
+      return res.status(429).json({ error: `Daily message limit reached (${quota.limit}). Try again tomorrow.` });
     }
 
-    const modelCheck = await resolveModelChoice(req.userEmail, requestedModel);
+    const modelCheck = await resolveModelChoice(req.userEmail, (req.body || {}).model || null);
     if (!modelCheck.ok) {
       return res.status(modelCheck.status).json({ error: modelCheck.error });
     }
-    if (modelCheck.forceProvider === 'local' && !clientGeneratedReply) {
+    if (modelCheck.forceProvider === 'local' && !((req.body || {}).localReply)) {
       return res.status(400).json({ error: 'Local AI reply from the browser is missing.' });
     }
-    // FIX: length cap edit-eo lagbe
-    if (modelCheck.forceProvider === 'local' && clientGeneratedReply.length > MAX_MESSAGE_LENGTH) {
+    if (modelCheck.forceProvider === 'local' && ((req.body || {}).localReply || '').length > MAX_MESSAGE_LENGTH) {
       return res.status(400).json({ error: `Local reply is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
     }
 
-    await query('UPDATE messages SET content = $1 WHERE id = $2', [newContent, target.id]);
-    await query('DELETE FROM messages WHERE conversation_id = $1 AND id > $2', [conv.id, target.id]);
+    await query('DELETE FROM messages WHERE conversation_id = $1 AND id >= $2', [conv.id, target.id]);
 
     let result;
     if (modelCheck.forceProvider === 'local') {
-      result = { ok: true, text: clientGeneratedReply, images: null, provider: 'local' };
+      result = { ok: true, text: (req.body || {}).localReply, images: null, provider: 'local' };
     } else {
       const fullHistory = await query(
         'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
@@ -561,43 +567,34 @@ router.put('/conversations/:id/messages/:messageId', blockIfBroadcastActive, asy
         'SELECT custom_instructions AS "customInstructions" FROM users WHERE email = $1',
         [req.userEmail]
       );
-
       const baseSystem = buildSystemPrompt(settings, customerRow?.customInstructions);
-      const skillBlock = await getMatchingSkillInstructions(req.userEmail, newContent);
+      const lastUserMsg = [...fullHistory].reverse().find((m) => m.role === 'user');
+      const skillBlock = await getMatchingSkillInstructions(req.userEmail, lastUserMsg ? lastUserMsg.content : '');
       const system = baseSystem + skillBlock;
 
-      result = await callAI(system, history, {
-        webSearch: !!(req.body || {}).webSearch,
-        forceProvider: modelCheck.forceProvider,
-      });
+      result = await callAI(system, history, { forceProvider: modelCheck.forceProvider });
     }
 
-    if (!result.ok) {
-      return res.status(502).json({ error: result.error });
-    }
+    if (!result.ok) return res.status(502).json({ error: result.error });
 
     const images = result.images || null;
-
     const insertedAssistantMsg = await queryOne(
       `INSERT INTO messages (conversation_id, role, content, images) VALUES ($1, $2, $3, $4)
        RETURNING id`,
       [conv.id, 'assistant', result.text || '', images ? JSON.stringify(images) : null]
     );
 
-    let title = conv.title;
-    if (title === 'New chat') title = newContent.slice(0, 40);
-    await query('UPDATE conversations SET updated_at = now(), title = $1 WHERE id = $2', [title, conv.id]);
+    await query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conv.id]);
 
     res.json({
       reply: result.text,
       images,
       replyImageUrl: firstImageAsDataUrl(images),
-      title,
       assistantMessageId: insertedAssistantMsg.id,
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Could not save the edit.' });
+    res.status(500).json({ error: 'Could not edit and regenerate.' });
   }
 });
 
@@ -610,33 +607,28 @@ router.post('/conversations/:id/messages/:messageId/regenerate', blockIfBroadcas
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
 
     const target = await queryOne(
-      'SELECT id, role FROM messages WHERE id = $1 AND conversation_id = $2',
-      [req.params.messageId, conv.id]
+      `SELECT m.id FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE m.id = $1 AND c.user_email = $2 AND m.role = 'assistant'`,
+      [req.params.messageId, req.userEmail]
     );
     if (!target) return res.status(404).json({ error: 'Message not found.' });
-    if (target.role !== 'assistant') {
-      return res.status(400).json({ error: 'Only assistant replies can be regenerated.' });
-    }
 
     const settings = await getSettings();
     const quota = await checkDailyQuota(req.userEmail, settings);
     if (!quota.allowed) {
-      return res.status(429).json({
-        error: `You've reached your daily message limit (${quota.limit}). Please try again tomorrow.`,
-      });
+      return res.status(429).json({ error: `Daily limit reached (${quota.limit}). Try again tomorrow.` });
     }
 
-    const requestedModel = (req.body || {}).model || null;
-    const clientGeneratedReply = (req.body || {}).localReply || null;
-    const modelCheck = await resolveModelChoice(req.userEmail, requestedModel);
+    const modelCheck = await resolveModelChoice(req.userEmail, (req.body || {}).model || null);
     if (!modelCheck.ok) {
       return res.status(modelCheck.status).json({ error: modelCheck.error });
     }
-    if (modelCheck.forceProvider === 'local' && !clientGeneratedReply) {
+    if (modelCheck.forceProvider === 'local' && !((req.body || {}).localReply)) {
       return res.status(400).json({ error: 'Local AI reply from the browser is missing.' });
     }
     // FIX: length cap regenerate-eo lagbe
-    if (modelCheck.forceProvider === 'local' && clientGeneratedReply.length > MAX_MESSAGE_LENGTH) {
+    if (modelCheck.forceProvider === 'local' && ((req.body || {}).localReply || '').length > MAX_MESSAGE_LENGTH) {
       return res.status(400).json({ error: `Local reply is too long (max ${MAX_MESSAGE_LENGTH} characters).` });
     }
 
@@ -644,7 +636,7 @@ router.post('/conversations/:id/messages/:messageId/regenerate', blockIfBroadcas
 
     let result;
     if (modelCheck.forceProvider === 'local') {
-      result = { ok: true, text: clientGeneratedReply, images: null, provider: 'local' };
+      result = { ok: true, text: (req.body || {}).localReply, images: null, provider: 'local' };
     } else {
       const fullHistory = await query(
         'SELECT role, content, images FROM messages WHERE conversation_id = $1 ORDER BY id ASC',
