@@ -736,6 +736,25 @@ window.checkWebGPU = async function () {
   return works;
 };
 
+// FIX: ensureRuntime() caches its result forever (`if (runtime) return runtime`). If the very
+// first probe (e.g. the 5s pre-warm timer right after page load) hits a false negative —
+// adapter not fully ready yet, timing race inside the 4s hasWorkingWebGPU() timeout — the
+// runtime gets permanently cached as 'onnx' for the rest of the page's life, even though a
+// later manual checkWebGPU() call confirms the adapter works fine. This gives a manual escape
+// hatch: clear the cache and force a fresh probe on the next loadEngine()/waitUntilReady() call,
+// without needing a full page reload.
+window.resetRuntime = function () {
+  runtime = null;
+  runtimePromise = null;
+  enginePromise = null;
+  currentModelId = null;
+  currentEngineType = null;
+  engineReady = false;
+  isLoading = false;
+  clearModelReady();
+  console.log('Runtime cache cleared — next loadEngine()/waitUntilReady() call will re-probe GPU.');
+};
+
 // ─── Pre-warm (5s delay to let page settle) ──────────────────────────────────
 
 // FIX: pre-warm now waits for ensureRuntime() (the real async GPU probe) before deciding
