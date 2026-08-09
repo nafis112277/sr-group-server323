@@ -6916,7 +6916,17 @@ window.fetch = async function (input, init) {
     }
 
 console.log("[WebLLM] STARTING LOCAL FALLBACK");
-    if (!window.LocalAI || !window.LocalAI.isSupported()) return res; // fallback করার উপায় নাই, আসল error-ই দেখাই
+// LocalAI না থাকলে বা support না থাকলে original error দেখাও
+if (!window.LocalAI || !window.LocalAI.isSupported()) return res;
+
+// model এখনো load না হলে ready হওয়া পর্যন্ত wait করো
+if (!window.LocalAI.isEngineReady()) {
+  try {
+    await window.LocalAI.waitUntilReady(function () {});
+  } catch (e) {
+    return res; // load fail করলে original error দেখাও
+  }
+}
 
     var promptText = payload.content || (function () {
       var last = [...(currentMessages || [])].reverse().find(function (m) { return m.role === 'user'; });
