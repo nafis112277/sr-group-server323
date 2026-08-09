@@ -115,9 +115,14 @@ function buildTrimmedMessages(systemPrompt, history) {
   ];
 }
 
-export async function callGroq(systemPrompt, history) {
+export async function callGroq(systemPrompt, history, options = {}) {
+  // NOTE: Groq/Llama মডেলের নিজস্ব কোনো web-browsing capability নেই, তাই webSearch
+  // option-টা এখানে গ্রহণ করা হচ্ছে (যাতে callAI() থেকে আসা extra argument silently
+  // signature mismatch না করে) কিন্তু কার্যকরভাবে ব্যবহার করা যাচ্ছে না। Gemini fail করে
+  // এখানে fallback হলে ইউজার আসলে non-search উত্তর পাচ্ছে — এটা জানিয়ে রাখা উচিত।
+  const { webSearch = false } = options;
   if (apiKeys.length === 0) {
-    return { ok: false, error: 'Groq is not configured (no GROQ_API_KEY / GROQ_API_KEYS).' };
+    return { ok: false, error: 'Groq is not configured (no GROQ_API_KEY / GROQ_API_KEYs).' };
   }
 
   const messages = buildTrimmedMessages(systemPrompt, history);
