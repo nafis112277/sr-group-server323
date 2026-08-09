@@ -2,9 +2,14 @@
 //
 // Local (offline) AI mode — WebGPU, multilingual (auto-detect) support
 // Network-aware tiered model selection: picks best model based on connection speed
-// Fallback chain: Tier 1 (best) → Tier 5 (emergency), no user left empty-handed
+// Fallback chain: Tier 1 (best) → Tier 4 (emergency), no user left empty-handed
 //
-// Fix v2: concurrent load race condition + GPU device lost error handled
+// Fix v3:
+//   - SmolLM2-135M removed (not in MLC catalog) — SmolLM2-360M is now the floor
+//   - isLoading flag prevents concurrent engine.reload() race (GPU crash fix)
+//   - Pre-warm delayed 5s so page settles before background load starts
+//   - Per-tier timeout via Promise.race() — no infinite loading spinner
+//   - isReady() exposed so UI can disable input until model is loaded
 
 // ─── Model Ready Flag ────────────────────────────────────────────────────────
 
@@ -29,45 +34,42 @@ const AI_CREATOR    = 'SR Group';
 // Sorted best → worst quality.
 // minSpeedMbps = minimum download speed needed to load this model comfortably.
 // sizeGB       = approximate cache size (informational only).
+// timeoutMs    = max wait for engine.reload() before giving up and trying next tier.
 //
-// MLC catalog availability notes (as of 2025):
-//   Llama-3.2-1B  — available in MLC catalog
-//   Qwen2.5-1.5B  — available in MLC catalog
-//   Qwen3-0.6B    — available in MLC catalog
-//   SmolLM2-360M  — available in MLC catalog
-//   SmolLM2-135M  — CHECK catalog before deploying; if missing, Tier 5 falls
-//                   back to SmolLM2-360M automatically via FALLBACK_MODELS.
+// MLC catalog confirmed available (2025):
+//   Llama-3.2-1B-Instruct-q4f16_1-MLC   ✓
+//   Qwen2.5-1.5B-Instruct-q4f16_1-MLC   ✓
+//   Qwen3-0.6B-q4f32_1-MLC              ✓
+//   SmolLM2-360M-Instruct-q4f16_1-MLC   ✓  ← confirmed floor (135M is NOT in catalog)
 
 const MODEL_TIERS = [
   {
     id:          'Llama-3.2-1B-Instruct-q4f16_1-MLC',
     sizeGB:       0.75,
     minSpeedMbps: 50,
+    timeoutMs:    180_000, // 3 min
     label:       'Tier 1 — High-end'
   },
   {
     id:          'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
     sizeGB:       1.0,
     minSpeedMbps: 10,
+    timeoutMs:    180_000, // 3 min
     label:       'Tier 2 — Balanced'
   },
   {
     id:          'Qwen3-0.6B-q4f32_1-MLC',
     sizeGB:       0.4,
     minSpeedMbps: 3,
+    timeoutMs:    120_000, // 2 min
     label:       'Tier 3 — Compact'
   },
   {
     id:          'SmolLM2-360M-Instruct-q4f16_1-MLC',
     sizeGB:       0.2,
-    minSpeedMbps: 1,
-    label:       'Tier 4 — Minimal'
-  },
-  {
-    id:          'SmolLM2-135M-Instruct-q4f16_1-MLC',
-    sizeGB:       0.08,
-    minSpeedMbps: 0,
-    label:       'Tier 5 — Emergency'
+    minSpeedMbps: 0,       // always usable — guaranteed floor
+    timeoutMs:    60_000,  // 1 min
+    label:       'Tier 4 — Emergency'
   }
 ];
 
@@ -79,39 +81,55 @@ const FALLBACK_MODELS = [...MODEL_TIERS].reverse().map(t => t.id);
 // Returns estimated Mbps. On fetch error, returns conservative 2 Mbps.
 
 async function estimateNetworkMbps() {
-  // ~90 KB public CDN file — no CORS issues, no auth, widely cached at edge
   const testUrl     = 'https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js';
-  const sampleBytes = 90_000;
+  const sampleBytes = 90_000; // ~90 KB
   try {
     const start   = performance.now();
     await fetch(testUrl, { cache: 'no-store' });
-    const elapsed = (performance.now() - start) / 1000; // seconds
+    const elapsed = (performance.now() - start) / 1000;
     const mbps    = (sampleBytes * 8) / (elapsed * 1_000_000);
     return mbps;
   } catch {
-    return 2; // conservative fallback: assume slow connection
+    return 2; // conservative fallback
   }
 }
 
-// Picks the highest-quality tier affordable at current network speed.
+// Picks the highest-quality tier the current network speed can handle.
 async function pickModelForNetwork(onProgress) {
   if (onProgress) onProgress('নেটওয়ার্ক গতি পরীক্ষা হচ্ছে...', 0);
   const mbps = await estimateNetworkMbps();
   if (onProgress) onProgress(`নেটওয়ার্ক: ~${mbps.toFixed(1)} Mbps`, 5);
 
-  // Walk tiers best → worst; pick first one user's speed can afford
   const picked = MODEL_TIERS.find(t => mbps >= t.minSpeedMbps)
-              || MODEL_TIERS[MODEL_TIERS.length - 1]; // guaranteed floor
+              || MODEL_TIERS[MODEL_TIERS.length - 1];
 
   if (onProgress) onProgress(`মডেল নির্বাচিত: ${picked.label}`, 10);
-  return picked.id;
+  return picked;
+}
+
+// ─── Per-tier Timeout Wrapper ────────────────────────────────────────────────
+// Wraps engine.reload() in a race against a timer.
+// On timeout throws an Error with message 'LOAD_TIMEOUT' so the outer loop
+// can distinguish it from a genuine network/WebGPU error.
+
+function reloadWithTimeout(engine, modelId, timeoutMs) {
+  return Promise.race([
+    engine.reload(modelId),
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error('LOAD_TIMEOUT')),
+        timeoutMs
+      )
+    )
+  ]);
 }
 
 // ─── Engine State ────────────────────────────────────────────────────────────
 
 let enginePromise  = null;
 let currentModelId = null;
-let isLoading      = false;   // concurrent load lock — prevents double engine.reload()
+let isLoading      = false;   // concurrent load lock
+let engineReady    = false;   // true once a model is fully loaded this session
 let selectedLanguage = 'english';
 
 // ─── Identity + Scope Prompts ────────────────────────────────────────────────
@@ -125,7 +143,6 @@ const IDENTITY_PROMPT = `তোমার নাম ${AI_NAME}। তোমার
 তাই: নিশ্চিত না হলে কখনো আন্দাজে/বানিয়ে উত্তর দেবে না। নিশ্চিত না থাকলে স্পষ্টভাবে বলবে "আমি নিশ্চিত না" অথবা "এই মুহূর্তে সঠিক তথ্য দিতে পারছি না, ইন্টারনেট সংযোগ ফিরলে আবার জিজ্ঞেস করুন।"
 কোনো নাম, সংখ্যা, তারিখ বা তথ্য সম্পূর্ণ নিশ্চিত না হয়ে কখনো তৈরি করে বলবে না।`;
 
-// SR Group org info — admin/contact question এলে এখান থেকে বলবে
 const ORG_INFO = `SR Group প্রশাসক: Sadiqur Rahman, Sakirul Islam।
 যোগাযোগ ইমেইল: hossainalijms9@gmail.com
 ওয়েবসাইট: https://krovos.rf.gd/
@@ -159,11 +176,10 @@ Répondez en français complet.`,
 تمام جوابات اردو میں لکھیں۔`
 };
 
-// Detect language from Unicode script ranges in user message
 function detectLanguage(text) {
   if (!text) return 'english';
-  if (/[\u3040-\u30FF]/.test(text)) return 'japanese';  // hiragana / katakana
-  if (/[\u4E00-\u9FFF]/.test(text)) return 'chinese';   // CJK unified ideographs
+  if (/[\u3040-\u30FF]/.test(text)) return 'japanese';
+  if (/[\u4E00-\u9FFF]/.test(text)) return 'chinese';
   if (/[\u0980-\u09FF]/.test(text)) return 'bengali';
   if (/[\u0900-\u097F]/.test(text)) return 'hindi';
   if (/[\u0600-\u06FF]/.test(text)) return 'urdu';
@@ -179,18 +195,14 @@ function isSupported() {
 }
 
 // ─── Engine Loader ────────────────────────────────────────────────────────────
-// modelId=null  → auto-pick via network speed test.
-// modelId=string → force that model (manual override / restart after crash).
+// modelId=null   → auto-pick via network speed test
+// modelId=string → force that specific model
 //
-// Concurrency fix: isLoading flag prevents pre-warm and user message from
-// triggering two concurrent engine.reload() calls — double reload was the root
-// cause of the GPU device crash seen in production (screenshot: "GPU সাময়িকভাবে
-// ক্র্যাশ করেছে"). If a load is already in progress, the second caller just
-// waits on the same enginePromise instead of starting a new one.
+// Concurrency: isLoading flag prevents two concurrent engine.reload() calls.
+// If a load is already in progress the second caller waits on the same promise.
 //
-// Retry strategy: up to 3 attempts per tier with exponential backoff.
-// If all retries for a tier fail, move to the next smaller model automatically.
-// User always gets something — worst case SmolLM2-360M (Emergency tier).
+// Timeout: each tier has its own timeoutMs. If reload() exceeds it, that tier
+// is skipped and the next smaller model is tried automatically.
 
 async function loadEngine(modelId = null, onProgress) {
   if (!isSupported()) {
@@ -199,35 +211,39 @@ async function loadEngine(modelId = null, onProgress) {
     );
   }
 
-  // Auto-detect best model from network speed if none forced
-  if (!modelId) {
-    modelId = await pickModelForNetwork(onProgress);
+  // Resolve tier object from modelId string, or auto-pick
+  let targetTier;
+  if (modelId) {
+    targetTier = MODEL_TIERS.find(t => t.id === modelId) || MODEL_TIERS[MODEL_TIERS.length - 1];
+  } else {
+    targetTier = await pickModelForNetwork(onProgress);
   }
 
-  // Same model already loading or loaded — reuse the promise
-  if (enginePromise && currentModelId === modelId) return enginePromise;
+  // Same model already loading or loaded — reuse
+  if (enginePromise && currentModelId === targetTier.id) return enginePromise;
 
-  // Different model requested — discard old promise
-  if (enginePromise && currentModelId !== modelId) enginePromise = null;
+  // Different model — discard old promise
+  if (enginePromise && currentModelId !== targetTier.id) enginePromise = null;
 
-  // ── Concurrency guard ──────────────────────────────────────────────────────
-  // Another call already started a load (pre-warm vs user message race).
-  // Return the in-flight promise instead of starting a second engine.reload().
+  // Another load already in progress — wait on it
   if (isLoading && enginePromise) return enginePromise;
 
-  isLoading = true; // lock
+  isLoading    = false;
+  engineReady  = false;
+  isLoading    = true; // lock
 
   enginePromise = (async () => {
     try {
-      // Build retry order: preferred model first, then smaller fallbacks
+      // Build retry order: preferred tier first, then smaller fallbacks
       const tryOrder = [
-        modelId,
-        ...FALLBACK_MODELS.filter(m => m !== modelId)
+        targetTier,
+        ...MODEL_TIERS.filter(t => t.id !== targetTier.id).reverse()
       ];
 
-      for (const model of tryOrder) {
+      for (const tier of tryOrder) {
+        const shortName = tier.id.split('-').slice(0, 2).join(' ');
+
         try {
-          const shortName = model.split('-').slice(0, 2).join(' ');
           if (onProgress) onProgress(`লোড হচ্ছে: ${shortName}...`, 0);
 
           const webllm = await import('https://esm.run/@mlc-ai/web-llm');
@@ -239,12 +255,19 @@ async function loadEngine(modelId = null, onProgress) {
           const MAX_RETRIES = 3;
           for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-              await engine.reload(model);
-              currentModelId = model;
+              await reloadWithTimeout(engine, tier.id, tier.timeoutMs);
+              currentModelId = tier.id;
+              engineReady    = true;
               markModelReady();
               if (onProgress) onProgress(`প্রস্তুত: ${shortName}`, 100);
-              return engine; // success — exit everything
+              return engine; // success
             } catch (err) {
+              const isTimeout = err.message === 'LOAD_TIMEOUT';
+              if (isTimeout) {
+                // Timeout — no point retrying same tier, jump to next
+                if (onProgress) onProgress(`${shortName} timeout, ছোট মডেলে যাচ্ছি...`, 0);
+                break;
+              }
               if (attempt < MAX_RETRIES) {
                 if (onProgress) onProgress(`চেষ্টা ${attempt} ব্যর্থ, পুনরায়...`, 0);
                 await new Promise(r => setTimeout(r, 2000 * attempt));
@@ -252,8 +275,7 @@ async function loadEngine(modelId = null, onProgress) {
             }
           }
 
-          // All retries for this tier exhausted — try next smaller model
-          if (onProgress) onProgress(`${model.split('-')[0]} ব্যর্থ, ছোট মডেলে যাচ্ছি...`, 0);
+          if (onProgress) onProgress(`${shortName} ব্যর্থ, পরের মডেলে যাচ্ছি...`, 0);
 
         } catch {
           if (onProgress) onProgress('পরবর্তী মডেলে যাচ্ছি...', 0);
@@ -275,19 +297,16 @@ async function loadEngine(modelId = null, onProgress) {
 }
 
 // ─── Identity Leak Filter ────────────────────────────────────────────────────
-// Prevents base model names from leaking into responses.
 
 function filterIdentityLeak(text) {
   return text
-    .replace(/\bQwen2?\.?5?\b/gi,                    AI_MODEL_NAME)
-    .replace(/\bSmolLM2?\b/gi,                        AI_MODEL_NAME)
-    .replace(/\bLlama[\s-]?3\.?2?\b/gi,               AI_MODEL_NAME)
+    .replace(/\bQwen2?\.?5?\b/gi,                     AI_MODEL_NAME)
+    .replace(/\bSmolLM2?\b/gi,                         AI_MODEL_NAME)
+    .replace(/\bLlama[\s-]?3\.?2?\b/gi,                AI_MODEL_NAME)
     .replace(/\b(Alibaba|Meta|HuggingFace|MLC-AI)\b/gi, AI_CREATOR);
 }
 
 // ─── GPU Device Lost Detection ───────────────────────────────────────────────
-// DXGI_ERROR_DEVICE_HUNG / GPUDevice lost crashes leave enginePromise pointing
-// at a disposed object. Detect and force full reload on next call.
 
 function isDeviceLostError(err) {
   const msg = String(err?.message || err || '');
@@ -299,7 +318,6 @@ function isDeviceLostError(err) {
 async function runOneAttempt(systemPrompt, history, userMessage, onProgress) {
   const engine = await loadEngine(null, onProgress);
 
-  // Auto-detect user language every message
   const detectedLang = detectLanguage(userMessage);
   selectedLanguage   = detectedLang;
   const langPrompt   = LANGUAGE_PROMPTS[detectedLang] || LANGUAGE_PROMPTS.english;
@@ -311,7 +329,6 @@ async function runOneAttempt(systemPrompt, history, userMessage, onProgress) {
     (systemPrompt ? '\n\n' + systemPrompt : '');
 
   const messages = [{ role: 'system', content: combinedSystemPrompt }];
-
   for (const m of history) {
     messages.push({
       role:    m.role === 'assistant' ? 'assistant' : 'user',
@@ -320,9 +337,6 @@ async function runOneAttempt(systemPrompt, history, userMessage, onProgress) {
   }
   messages.push({ role: 'user', content: userMessage });
 
-  // temperature 0.3: reduces hallucination on factual queries for small models.
-  // Not a perfect fix — model size is the root constraint — but meaningfully safer
-  // than default 0.7 for a 135M–1B parameter device model.
   const reply = await engine.chat.completions.create({
     messages,
     temperature: 0.3,
@@ -335,7 +349,6 @@ async function runOneAttempt(systemPrompt, history, userMessage, onProgress) {
 }
 
 // ─── Public: Generate Reply ───────────────────────────────────────────────────
-// Handles GPU device crash: resets engine and retries once before giving up.
 
 async function generateReply(systemPrompt, history, userMessage, onProgress) {
   try {
@@ -343,11 +356,12 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   } catch (err) {
     if (!isDeviceLostError(err)) throw err;
 
-    // GPU crashed — clear stale engine state and retry with fresh load
+    // GPU crashed — reset everything and retry once
     if (onProgress) onProgress('GPU ক্র্যাশ — মডেল পুনরায় লোড হচ্ছে...', 0);
     enginePromise  = null;
     currentModelId = null;
-    isLoading      = false; // force-unlock in case crash left it stuck
+    engineReady    = false;
+    isLoading      = false;
     clearModelReady();
 
     try {
@@ -355,6 +369,7 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
     } catch (err2) {
       enginePromise  = null;
       currentModelId = null;
+      engineReady    = false;
       isLoading      = false;
       clearModelReady();
       throw new Error(
@@ -366,7 +381,6 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
 }
 
 // ─── Manual Language Override ────────────────────────────────────────────────
-// UI can call this; auto-detect overwrites it on the next user message.
 
 function setLanguage(lang) {
   if (LANGUAGE_PROMPTS[lang]) {
@@ -376,7 +390,23 @@ function setLanguage(lang) {
   return false;
 }
 
-// ─── Debug Helpers (browser console) ────────────────────────────────────────
+// ─── isEngineReady ───────────────────────────────────────────────────────────
+// UI should poll or await this before enabling the send button.
+// Usage:
+//   sendBtn.disabled = true;
+//   await LocalAI.waitUntilReady(onProgress);
+//   sendBtn.disabled = false;
+
+function isEngineReady() {
+  return engineReady;
+}
+
+async function waitUntilReady(onProgress) {
+  if (engineReady) return;
+  await loadEngine(null, onProgress);
+}
+
+// ─── Debug Helpers ───────────────────────────────────────────────────────────
 
 window.listModels = async function () {
   try {
@@ -402,15 +432,15 @@ window.getNetworkSpeed = async function () {
 };
 
 // ─── Pre-warm ────────────────────────────────────────────────────────────────
-// Delayed 5 seconds so the page fully settles before background load starts.
-// This prevents pre-warm and an immediate first user message from racing into
-// two concurrent engine.reload() calls — the original cause of the GPU crash.
+// 5s delay so page fully settles before background load starts.
+// Prevents pre-warm + immediate user message from racing into double reload().
 
 if (isSupported()) {
   setTimeout(() => {
     loadEngine(null).catch(() => {
       enginePromise  = null;
       currentModelId = null;
+      engineReady    = false;
       isLoading      = false;
     });
   }, 5000);
@@ -425,6 +455,8 @@ window.LocalAI = {
   setLanguage,
   detectLanguage,
   isModelReady,
+  isEngineReady,
+  waitUntilReady,
   estimateNetworkMbps,
   MODEL_TIERS,
   FALLBACK_MODELS,
