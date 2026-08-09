@@ -1539,12 +1539,11 @@
         <div class="brandmark"><span class="dot"></span> KROVOS Assistant</div>
       </div>
     <div style="display:flex; align-items:center; gap:10px;">
-        <button class="icon-btn" id="voiceChatBtn" title="Voice chat">🎙️</button>    
-      <button class="icon-btn" id="openDesignModeBtn" title="Design">🎨</button>
-        <button class="icon-btn" id="openSkillsHeaderBtn" title="Skills">🧩</button>
-        <!-- নতুন সংযোজন: হেডারেও একটা সার্চ আইকন — ট্যাপ করলে সাইডবার খুলে সরাসরি সার্চ বক্সে
-             ফোকাস করে দেয়, যাতে ইউজারকে হ্যামবার্গার মেনুতে গিয়ে খুঁজতে না হয় -->
-        <button class="icon-btn" id="headerSearchBtn" title="Search chats">🔍</button>
+     <button class="icon-btn" id="voiceChatBtn" title="Voice chat">🎙️</button>    
+<button class="icon-btn" id="openDesignModeBtn" title="Design">🎨</button>
+<button class="icon-btn" id="openSkillsHeaderBtn" title="Skills">🧩</button>
+<button class="icon-btn" id="bgImageBtn" title="Set chat background">🖼️</button>
+<button class="icon-btn" id="headerSearchBtn" title="Search chats">🔍</button>
         <span class="who" id="convStatus"></span>
       </div>
     </div>
@@ -1568,7 +1567,8 @@
      <button type="button" id="stopGenerationBtn">⏹ Stop</button>
       <div class="composer-row">
 <input type="file" id="imageFileInput" accept="image/*" style="display:none;">
-        <input type="file" id="codeFileInput" accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.php,.rb,.go,.rs,.html,.css,.json,.sql,.txt,.md" style="display:none;">
+<input type="file" id="codeFileInput" accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.php,.rb,.go,.rs,.html,.css,.json,.sql,.txt,.md" style="display:none;">
+<input type="file" id="bgImageInput" accept="image/*" style="display:none;">
         <div class="plus-menu-wrap">
           <button class="attach-btn" id="composerPlusBtn" type="button" title="Add">+</button>
           <div class="plus-menu" id="composerPlusMenu">
@@ -6023,6 +6023,117 @@ if (typeof applyAdminRoleUI === 'function') {
      ইতিহাস নেই বলে সেগুলোর জন্য কোনো নোট দেখাবে না। এই history শুধু এই
      browser/device-এই থাকে (localStorage), অন্য ডিভাইসে আলাদা।
      ================================================================== -->
+<script id="sr-added-bg-image-feature">
+(function initBgImageFeatureWithTheme() {
+  var KEY = 'srgroup:chatBg';
+  var bgBtn = document.getElementById('bgImageBtn');
+  var bgInput = document.getElementById('bgImageInput');
+  var chatMain = document.querySelector('.chat-main');
+
+  if (!bgBtn || !bgInput || !chatMain) return;
+
+  var THEME_OVERLAY = {
+    black: 0.72,
+    white: 0.55,
+    red: 0.68,
+    blue: 0.70,
+    yellow: 0.75,
+    green: 0.68,
+    purple: 0.70
+  };
+
+  function getCurrentTheme() {
+    try {
+      return localStorage.getItem('srgroup:theme') || 'black';
+    } catch (e) {
+      return 'black';
+    }
+  }
+
+  function getOverlayOpacity() {
+    var theme = getCurrentTheme();
+    return THEME_OVERLAY[theme] || 0.70;
+  }
+
+  function applyBgWithTheme() {
+    try {
+      var saved = localStorage.getItem(KEY);
+      if (!saved) {
+        chatMain.style.backgroundImage = '';
+        return;
+      }
+
+      var opacity = getOverlayOpacity();
+      var theme = getCurrentTheme();
+      var bgColor = (theme === 'white') ? 'rgba(244, 246, 250, ' + opacity + ')' : 'rgba(10, 14, 20, ' + opacity + ')';
+
+      chatMain.style.backgroundImage = 
+        'linear-gradient(' + bgColor + ', ' + bgColor + '), url(' + saved + ')';
+      chatMain.style.backgroundSize = 'cover';
+      chatMain.style.backgroundPosition = 'center';
+      chatMain.style.backgroundAttachment = 'fixed';
+      chatMain.style.backgroundRepeat = 'no-repeat';
+    } catch (e) {}
+  }
+
+  bgInput.onchange = function (e) {
+    var file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !file.type.startsWith('image/')) {
+      alert('Image file choose koro');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Max 5MB');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        localStorage.setItem(KEY, reader.result);
+        applyBgWithTheme();
+      } catch (e) {
+        alert('Save fail');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  bgBtn.onclick = function () {
+    var menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:999; background:var(--panel-solid); border:1px solid var(--border-glass); border-radius:12px; padding:16px; min-width:220px; text-align:center;';
+    menu.innerHTML = '<div style="margin-bottom:12px; font-size:14px; font-weight:600;">Chat Background</div><button id="tempBgUploadBtn" style="width:100%; padding:8px; margin-bottom:8px; background:var(--accent-a); color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:13px;">📤 Upload Image</button><button id="tempBgRemoveBtn" style="width:100%; padding:8px; background:rgba(255,107,107,0.1); border:1px solid var(--danger); color:var(--danger); border-radius:8px; cursor:pointer; font-size:13px;">Remove</button><button id="tempBgCloseBtn" style="width:100%; padding:8px; margin-top:8px; background:rgba(255,255,255,0.05); border:1px solid var(--border-glass); color:var(--text-primary); border-radius:8px; cursor:pointer; font-size:13px;">Close</button>';
+    document.body.appendChild(menu);
+
+    document.getElementById('tempBgUploadBtn').onclick = function () {
+      bgInput.click();
+      menu.remove();
+    };
+    document.getElementById('tempBgRemoveBtn').onclick = function () {
+      try {
+        localStorage.removeItem(KEY);
+        chatMain.style.backgroundImage = '';
+      } catch (e) {}
+      menu.remove();
+    };
+    document.getElementById('tempBgCloseBtn').onclick = function () {
+      menu.remove();
+    };
+
+    menu.addEventListener('click', function (e) {
+      if (e.target === menu) menu.remove();
+    });
+  };
+
+  var observer = new MutationObserver(function () {
+    applyBgWithTheme();
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  applyBgWithTheme();
+})();
+</script>
+
 <script id="sr-added-plan-history">
 (function initPlanHistoryFeature() {
   var PLAN_LABELS = { free: 'Free', pro: 'Pro', max: 'Max' };
