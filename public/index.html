@@ -1360,6 +1360,70 @@
   }
   .vc-transcript.show{ display:block; }
 </style>
+<style id="sr-added-doc-reviewer">
+  #docReviewerModal{
+    display:none; position:fixed; inset:0; z-index:320;
+    align-items:center; justify-content:center; padding:24px;
+    background:rgba(6,9,15,0.85); backdrop-filter:blur(8px);
+  }
+  #docReviewerModal.show{ display:flex; }
+  .dr-card{
+    max-width:560px; width:100%; max-height:88vh; overflow-y:auto;
+    background:var(--panel-solid); border:1px solid var(--border-glass);
+    border-radius:20px; padding:28px;
+    box-shadow:0 24px 60px rgba(0,0,0,0.6);
+  }
+  .dr-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+  .dr-head h2{ font-family:'Space Grotesk',sans-serif; font-size:17px; margin:0; font-weight:700; }
+  .dr-close{ background:none; border:none; color:var(--text-soft); font-size:20px; cursor:pointer; }
+  .dr-close:hover{ color:var(--text-primary); }
+  .dr-dropzone{
+    border:2px dashed var(--border-glass); border-radius:14px;
+    padding:36px 20px; text-align:center; cursor:pointer;
+    transition:border-color 0.2s, background 0.2s; margin-bottom:16px;
+  }
+  .dr-dropzone:hover, .dr-dropzone.dragover{
+    border-color:var(--accent-a); background:rgba(79,140,255,0.06);
+  }
+  .dr-dropzone-icon{ font-size:36px; margin-bottom:10px; }
+  .dr-dropzone-text{ color:var(--text-soft); font-size:13.5px; }
+  .dr-dropzone-text strong{ color:var(--text-primary); }
+  .dr-file-info{
+    display:none; align-items:center; gap:10px; padding:10px 12px;
+    background:rgba(255,255,255,0.04); border:1px solid var(--border-glass);
+    border-radius:10px; margin-bottom:14px; font-size:13px;
+  }
+  .dr-file-info.show{ display:flex; }
+  .dr-file-icon{ font-size:20px; flex-shrink:0; }
+  .dr-file-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dr-file-remove{ background:none; border:none; color:var(--danger); cursor:pointer; font-size:14px; }
+  .dr-prompt-label{ font-family:'JetBrains Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-soft); margin-bottom:6px; }
+  .dr-prompt-quick{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .dr-quick-btn{
+    background:rgba(255,255,255,0.05); border:1px solid var(--border-glass);
+    border-radius:8px; padding:6px 11px; font-size:12px; cursor:pointer; color:var(--text-soft);
+  }
+  .dr-quick-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+  .dr-prompt-input{
+    width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border-glass);
+    border-radius:10px; padding:11px 13px; color:var(--text-primary); font-size:13.5px;
+    font-family:'Inter',sans-serif; resize:vertical; min-height:80px; margin-bottom:14px;
+  }
+  .dr-prompt-input:focus{ outline:2px solid var(--accent-a); outline-offset:1px; }
+  .dr-analyze-btn{
+    width:100%; background:linear-gradient(135deg, var(--accent-a), var(--accent-b));
+    border:none; border-radius:10px; padding:13px; color:#fff;
+    font-family:'Inter',sans-serif; font-weight:700; font-size:14px; cursor:pointer;
+  }
+  .dr-analyze-btn:disabled{ opacity:0.55; cursor:default; }
+  .dr-progress{ display:none; margin-top:14px; font-size:12.5px; color:var(--text-soft); font-family:'JetBrains Mono',monospace; }
+  .dr-progress.show{ display:block; }
+  #docReviewerBtn{
+    background:var(--panel); border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:8px; padding:7px 9px; font-size:14px; cursor:pointer; line-height:1;
+  }
+  #docReviewerBtn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
+</style>
 <style id="sr-added-stop-generation">
   #stopGenerationBtn{
     display:none;
@@ -1541,7 +1605,8 @@
         <div class="brandmark"><span class="dot"></span> KROVOS Assistant</div>
       </div>
     <div style="display:flex; align-items:center; gap:10px;">
-     <button class="icon-btn" id="voiceChatBtn" title="Voice chat">🎙️</button>    
+   <button class="icon-btn" id="docReviewerBtn" title="Document Reviewer">📄</button>
+<button class="icon-btn" id="voiceChatBtn" title="Voice chat">🎙️</button>
 <button class="icon-btn" id="openDesignModeBtn" title="Design">🎨</button>
 <button class="icon-btn" id="openSkillsHeaderBtn" title="Skills">🧩</button>
 <button class="icon-btn" id="bgImageBtn" title="Set chat background">🖼️</button>
@@ -3993,6 +4058,207 @@ init();
      ডাইনামিকালি তৈরি হওয়া বাটনেও (থিম সোয়াচ, স্কিল কার্ড ইত্যাদি) কাজ
      করবে। preventDefault/stopPropagation কিছুই করা হয়নি বলে আগের কোনো
      onclick হ্যান্ডলার এতে বিন্দুমাত্র প্রভাবিত হয় না। ============================================================ -->
+<!-- Document Reviewer Modal -->
+<div id="docReviewerModal">
+  <div class="dr-card">
+    <div class="dr-head">
+      <h2>📄 Document Reviewer</h2>
+      <button class="dr-close" id="drCloseBtn">✕</button>
+    </div>
+    <div class="dr-dropzone" id="drDropzone">
+      <div class="dr-dropzone-icon">📂</div>
+      <div class="dr-dropzone-text"><strong>Click or drag & drop</strong><br>PDF, TXT, or image file (max 10MB)</div>
+      <input type="file" id="drFileInput" accept=".pdf,.txt,.md,image/*" style="display:none;">
+    </div>
+    <div class="dr-file-info" id="drFileInfo">
+      <span class="dr-file-icon" id="drFileIcon">📄</span>
+      <span class="dr-file-name" id="drFileName"></span>
+      <button class="dr-file-remove" id="drFileRemove">✕</button>
+    </div>
+    <div class="dr-prompt-label">What do you want to do?</div>
+    <div class="dr-prompt-quick">
+      <button class="dr-quick-btn" data-prompt="এই ডকুমেন্টটির বাংলায় সংক্ষিপ্ত সারসংক্ষেপ দাও।">📝 Summary</button>
+      <button class="dr-quick-btn" data-prompt="এই ডকুমেন্টের মূল বিষয়গুলো bullet point-এ দাও।">🔑 Key Points</button>
+      <button class="dr-quick-btn" data-prompt="এই ডকুমেন্টটি review করো এবং কোনো ভুল বা সমস্যা থাকলে বলো।">🔍 Review</button>
+      <button class="dr-quick-btn" data-prompt="এই ডকুমেন্টটি বাংলায় অনুবাদ করো।">🌐 Translate</button>
+      <button class="dr-quick-btn" data-prompt="এই ডকুমেন্ট থেকে সব গুরুত্বপূর্ণ তথ্য বের করো।">📊 Extract Data</button>
+    </div>
+    <textarea class="dr-prompt-input" id="drPromptInput" placeholder="অথবা নিজে লেখো — যেমন: 'এই চুক্তির ঝুঁকিগুলো বলো'"></textarea>
+    <button class="dr-analyze-btn" id="drAnalyzeBtn" disabled>🔍 Analyze Document</button>
+    <div class="dr-progress" id="drProgress">⏳ Reading document...</div>
+  </div>
+</div>
+
+<script id="sr-added-doc-reviewer-script">
+(function initDocReviewer() {
+  var modal = document.getElementById('docReviewerModal');
+  var dropzone = document.getElementById('drDropzone');
+  var fileInput = document.getElementById('drFileInput');
+  var fileInfo = document.getElementById('drFileInfo');
+  var fileIcon = document.getElementById('drFileIcon');
+  var fileName = document.getElementById('drFileName');
+  var fileRemove = document.getElementById('drFileRemove');
+  var promptInput = document.getElementById('drPromptInput');
+  var analyzeBtn = document.getElementById('drAnalyzeBtn');
+  var progress = document.getElementById('drProgress');
+  var closeBtn = document.getElementById('drCloseBtn');
+
+  var currentFile = null;
+  var extractedText = '';
+
+  // Quick prompt buttons
+  document.querySelectorAll('.dr-quick-btn').forEach(function(btn) {
+    btn.onclick = function() {
+      promptInput.value = btn.dataset.prompt;
+      checkReady();
+    };
+  });
+
+  function checkReady() {
+    analyzeBtn.disabled = !(currentFile && promptInput.value.trim());
+  }
+  promptInput.oninput = checkReady;
+
+  // Dropzone click
+  dropzone.onclick = function() { fileInput.click(); };
+
+  // Drag & drop
+  dropzone.ondragover = function(e) { e.preventDefault(); dropzone.classList.add('dragover'); };
+  dropzone.ondragleave = function() { dropzone.classList.remove('dragover'); };
+  dropzone.ondrop = function(e) {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    var f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  };
+
+  fileInput.onchange = function() {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    fileInput.value = '';
+  };
+
+  fileRemove.onclick = function() {
+    currentFile = null; extractedText = '';
+    fileInfo.classList.remove('show');
+    dropzone.style.display = '';
+    checkReady();
+  };
+
+  function handleFile(f) {
+    if (f.size > 10 * 1024 * 1024) { alert('File is too large (max 10MB).'); return; }
+    currentFile = f;
+    var ext = f.name.split('.').pop().toLowerCase();
+    fileIcon.textContent = ext === 'pdf' ? '📄' : f.type.startsWith('image/') ? '🖼️' : '📝';
+    fileName.textContent = f.name;
+    fileInfo.classList.add('show');
+    dropzone.style.display = 'none';
+    checkReady();
+  }
+
+  async function extractText(f) {
+    var ext = f.name.split('.').pop().toLowerCase();
+
+    if (ext === 'txt' || ext === 'md') {
+      return await f.text();
+    }
+
+    if (f.type.startsWith('image/')) {
+      // Image — base64 এ পাঠাব
+      return null; // image হলে আলাদা handle করব
+    }
+
+    if (ext === 'pdf') {
+      if (!window.pdfjsLib) { throw new Error('PDF.js লোড হয়নি। পেজ রিফ্রেশ করুন।'); }
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      var arrayBuffer = await f.arrayBuffer();
+      var pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      var text = '';
+      for (var i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+        var page = await pdf.getPage(i);
+        var content = await page.getTextContent();
+        text += content.items.map(function(item) { return item.str; }).join(' ') + '\n';
+      }
+      if (!text.trim()) throw new Error('এই PDF থেকে টেক্সট বের করা যায়নি — হয়তো এটি একটি scanned/image PDF।');
+      return text;
+    }
+
+    throw new Error('এই ফাইল ফরম্যাট সাপোর্ট করা হয় না।');
+  }
+
+  analyzeBtn.onclick = async function() {
+    if (!currentFile || !promptInput.value.trim()) return;
+    analyzeBtn.disabled = true;
+    progress.classList.add('show');
+    progress.textContent = '⏳ Reading document...';
+
+    try {
+      var text = await extractText(currentFile);
+      var userPrompt = promptInput.value.trim();
+      var messageContent = '';
+
+      if (currentFile.type.startsWith('image/')) {
+        // Image ফাইল — base64 হিসেবে পাঠাব
+        var reader = new FileReader();
+        var dataUrl = await new Promise(function(res, rej) {
+          reader.onload = function() { res(reader.result); };
+          reader.onerror = rej;
+          reader.readAsDataURL(currentFile);
+        });
+        progress.textContent = '🤖 Analyzing image...';
+        closeModal();
+        if (typeof addMessage === 'function') {
+          document.getElementById('userInput').value = userPrompt;
+        }
+        // Image আগের attachment system দিয়ে পাঠাই
+        pendingAttachment = { dataUrl: dataUrl, name: currentFile.name };
+        renderComposerAttachment();
+        document.getElementById('userInput').value = userPrompt;
+        sendMessage();
+        return;
+      }
+
+      // Text/PDF
+      var maxChars = 12000;
+      var trimmedText = text.length > maxChars ? text.slice(0, maxChars) + '\n\n[... বাকি অংশ কেটে দেওয়া হয়েছে]' : text;
+      messageContent = userPrompt + '\n\n--- Document: ' + currentFile.name + ' ---\n' + trimmedText;
+
+      progress.textContent = '🤖 AI analyzing...';
+      closeModal();
+
+      // Chat-এ পাঠাই
+      document.getElementById('userInput').value = messageContent;
+      sendMessage();
+
+    } catch(err) {
+      progress.classList.remove('show');
+      analyzeBtn.disabled = false;
+      alert('Error: ' + err.message);
+    }
+  };
+
+  function closeModal() {
+    modal.classList.remove('show');
+    progress.classList.remove('show');
+    analyzeBtn.disabled = false;
+    currentFile = null; extractedText = '';
+    fileInfo.classList.remove('show');
+    dropzone.style.display = '';
+    promptInput.value = '';
+    checkReady();
+  }
+
+  closeBtn.onclick = closeModal;
+  modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+
+  // Header বাটন
+  var openBtn = document.getElementById('docReviewerBtn');
+  if (openBtn) openBtn.onclick = function() {
+    if (!currentConvId) { alert('Please start a chat first.'); return; }
+    modal.classList.add('show');
+  };
+})();
+</script>
+
 <!-- Voice Chat Modal -->
 <div id="voiceChatModal">
   <div class="vc-card">
