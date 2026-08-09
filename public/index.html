@@ -8,6 +8,8 @@
 <script src="https://code.responsivevoice.org/responsivevoice.js?key=FREE"></script> <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <!-- Added: jsPDF — শুধুমাত্র নতুন "PDF এ কনভার্ট" ফিচারের জন্য, আগের কোনো কিছুর সাথে সম্পর্ক নেই -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<!-- Added: PDF.js — শুধুমাত্র নতুন "PDF Analyze" ফিচারের জন্য, PDF থেকে টেক্সট বের করতে ব্যবহার হয় -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
   <style id="sr-added-maintenance-mode">
   #maintenanceOverlay{
     display:none; position:fixed; inset:0; z-index:300;
@@ -1568,6 +1570,7 @@
       <div class="composer-row">
 <input type="file" id="imageFileInput" accept="image/*" style="display:none;">
 <input type="file" id="codeFileInput" accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.php,.rb,.go,.rs,.html,.css,.json,.sql,.txt,.md" style="display:none;">
+<input type="file" id="pdfFileInput" accept="application/pdf,.pdf" style="display:none;">
 <input type="file" id="bgImageInput" accept="image/*" style="display:none;">
         <div class="plus-menu-wrap">
           <button class="attach-btn" id="composerPlusBtn" type="button" title="Add">+</button>
@@ -1575,8 +1578,11 @@
             <div class="plus-menu-item" id="menuAddPhoto">
               <span class="pmi-icon">📷</span><span class="pmi-label">Add photo</span>
             </div>
-            <div class="plus-menu-item" id="menuAddCode">
+           <div class="plus-menu-item" id="menuAddCode">
               <span class="pmi-icon">📄</span><span class="pmi-label">Attach code file</span>
+            </div>
+            <div class="plus-menu-item" id="menuAddPdf">
+              <span class="pmi-icon">📕</span><span class="pmi-label">Analyze PDF</span>
             </div>
             <div class="plus-menu-item" id="menuCodeReview">
               <span class="pmi-icon">🔍</span><span class="pmi-label">Code Review mode</span><span class="pmi-check">✓</span>
@@ -6463,6 +6469,117 @@ if (typeof applyAdminRoleUI === 'function') {
 })();
 </script>
 <script src="/webllm-local.js"></script>
+  <script id="sr-added-pdf-analyze-feature">
+(function () {
+  var pendingPdfFile = null; // { name, text, pageCount }
+  var MAX_PDF_TEXT_CHARS = 30000; // খুব বড় PDF হলে টেক্সট কেটে ছোট করা হয় (backend MAX_MESSAGE_LENGTH-এর সাথে সামঞ্জস্যপূর্ণ)
+
+  var menuAddPdf = document.getElementById('menuAddPdf');
+  var pdfFileInput = document.getElementById('pdfFileInput');
+  if (!menuAddPdf || !pdfFileInput) return;
+
+  menuAddPdf.onclick = function () {
+    if (typeof togglePlusMenu === 'function') togglePlusMenu(false);
+    pdfFileInput.click();
+  };
+
+  function showPdfThumb(name, pageCount) {
+    var wrap = document.getElementById('composerAttachments');
+    wrap.classList.add('show');
+    var thumb = document.createElement('div');
+    thumb.style.cssText = 'display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--border-glass); border-radius:9px; padding:8px 12px; font-size:12.5px; color:var(--text-primary);';
+    thumb.innerHTML = '<span>📕 ' + name + ' (' + pageCount + ' pages)</span>';
+    var removeBtn = document.createElement('button');
+    removeBtn.textContent = '✕';
+    removeBtn.style.cssText = 'background:none; border:none; color:var(--text-soft); cursor:pointer; font-size:12px;';
+    removeBtn.onclick = function () { pendingPdfFile = null; thumb.remove(); if (!wrap.children.length) wrap.classList.remove('show'); };
+    thumb.appendChild(removeBtn);
+    wrap.appendChild(thumb);
+  }
+
+  pdfFileInput.onchange = async function (e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      alert('একটা PDF ফাইল বেছে নাও।');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      alert('PDF অনেক বড় (max 15MB)।');
+      return;
+    }
+    if (!window.pdfjsLib) {
+      alert('PDF রিডার এখনো লোড হয়নি — একটু পরে আবার চেষ্টা করো (পেজ রিফ্রেশ করে দেখো)।');
+      return;
+    }
+
+    var loadingNote = document.createElement('div');
+    loadingNote.className = 'msg note';
+    loadingNote.textContent = 'PDF পড়া হচ্ছে...';
+    var messagesBox = document.getElementById('messages');
+    messagesBox.appendChild(loadingNote);
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+
+    try {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      var arrayBuffer = await file.arrayBuffer();
+      var pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      var fullText = '';
+      for (var i = 1; i <= pdf.numPages; i++) {
+        var page = await pdf.getPage(i);
+        var content = await page.getTextContent();
+        var pageText = content.items.map(function (item) { return item.str; }).join(' ');
+        fullText += '\n--- Page ' + i + ' ---\n' + pageText;
+        if (fullText.length > MAX_PDF_TEXT_CHARS) break; // বড় PDF হলে মাঝপথে থামিয়ে দেয়
+      }
+
+      var truncated = fullText.length > MAX_PDF_TEXT_CHARS;
+      if (truncated) {
+        fullText = fullText.slice(0, MAX_PDF_TEXT_CHARS) + '\n\n...[PDF shortened for length]...';
+      }
+
+      pendingPdfFile = { name: file.name, text: fullText.trim(), pageCount: pdf.numPages };
+      loadingNote.remove();
+      if (!pendingPdfFile.text) {
+        alert('এই PDF থেকে কোনো টেক্সট পাওয়া যায়নি — এটা হয়তো স্ক্যান করা ছবি-ভিত্তিক PDF (OCR ছাড়া টেক্সট বের করা যায় না)।');
+        pendingPdfFile = null;
+        return;
+      }
+      showPdfThumb(file.name, pdf.numPages);
+    } catch (err) {
+      loadingNote.remove();
+      console.error('[PDF Analyze] failed:', err);
+      alert('PDF পড়া যায়নি: ' + err.message);
+    }
+  };
+
+  // আউটগোয়িং মেসেজে PDF-এর টেক্সট জুড়ে দেওয়া — code-review ফিচারের মতোই fetch patch দিয়ে,
+  // কিন্তু আলাদা, স্বয়ংসম্পূর্ণ patch হিসেবে (অন্য কোনো fetch override-কে না ছুঁয়ে)
+  var __srOriginalFetchForPdf = window.fetch.bind(window);
+  var MESSAGE_ENDPOINT_RE = /\/api\/chat\/conversations\/[^/]+\/(message|messages\/[^/]+|messages\/[^/]+\/regenerate)(\/stream)?$/;
+  window.fetch = function (input, init) {
+    try {
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (pendingPdfFile && MESSAGE_ENDPOINT_RE.test(url) && init && typeof init.body === 'string') {
+        var payload = JSON.parse(init.body);
+        if (payload && typeof payload.content === 'string') {
+          payload.content =
+            (payload.content || '') +
+            '\n\n--- Attached PDF: ' + pendingPdfFile.name + ' (' + pendingPdfFile.pageCount + ' pages) ---\n' +
+            pendingPdfFile.text;
+          pendingPdfFile = null;
+          init = Object.assign({}, init, { body: JSON.stringify(payload) });
+        }
+      }
+    } catch (e) { /* silent fallback */ }
+    return __srOriginalFetchForPdf(input, init);
+  };
+})();
+</script>
 <script id="sr-added-local-ai-feature">
 (function () {
   // FIX: আগে এটা ইউজারের "+" মেনু টগলে চলত। এখন সেটা সরিয়ে fully automatic করা হলো —
