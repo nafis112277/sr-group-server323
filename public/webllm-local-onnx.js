@@ -74,7 +74,19 @@ async function getRuntime() {
   const isChrome = /Chrome|Chromium|CriOS/i.test(ua);
   const isFirefox = /Firefox/i.test(ua);
 
+  // FIX: mobile used to short-circuit straight to ONNX/CPU before any GPU probe ran at all —
+  // so a capable device (e.g. Pixel 9 / Android Chrome 151, confirmed `navigator.gpu
+  // .requestAdapter()` succeeds) was always forced onto tiny ONNX models even though it could
+  // run WebLLM fine. Now mobile Chrome also gets a real adapter probe; only mobile browsers
+  // that genuinely lack a working adapter (older devices, Firefox Android, in-app webviews,
+  // etc.) fall back to ONNX.
   if (isMobile) {
+    if (isChrome) {
+      const gpuWorks = await hasWorkingWebGPU();
+      if (gpuWorks) {
+        return { type: 'webllm', backend: 'webgpu', label: 'Mobile Chrome + WebGPU' };
+      }
+    }
     return { type: 'onnx', backend: 'cpu', label: 'Mobile + ONNX CPU' };
   }
 
