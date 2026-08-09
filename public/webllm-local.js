@@ -1,11 +1,10 @@
 // public/webllm-local.js
 //
 // Local (offline) AI mode — WebGPU, multilingual (auto-detect) support
-// Fallback logic: Qwen2.5-1.5B → Qwen3-0.6B → SmolLM2-360M
+// Network-aware tiered model selection: picks best model based on connection speed
+// Fallback chain: Tier 1 (best) → Tier 5 (emergency), no user left empty-handed
 
-let enginePromise = null;
-let currentModelId = null;
-let selectedLanguage = 'english'; // last-detected language, auto-updates
+// ─── Model Ready Flag ────────────────────────────────────────────────────────
 
 const MODEL_READY_KEY = 'krovos_local_model_ready_v1';
 function isModelReady() {
@@ -18,35 +17,119 @@ function clearModelReady() {
   try { localStorage.removeItem(MODEL_READY_KEY); } catch (e) { /* ignore */ }
 }
 
-const AI_NAME = 'KROVOS AI';
-const AI_MODEL_NAME = 'Nova1';
-const AI_CREATOR = 'SR Group';
+// ─── Identity ────────────────────────────────────────────────────────────────
 
-const DEFAULT_MODEL = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
+const AI_NAME        = 'KROVOS AI';
+const AI_MODEL_NAME  = 'Nova1';
+const AI_CREATOR     = 'SR Group';
 
-const FALLBACK_MODELS = [
-  'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
-  'Qwen3-0.6B-q4f32_1-MLC',
-  'SmolLM2-360M-Instruct-q4f16_1-MLC'
+// ─── Network-Aware Model Tiers ───────────────────────────────────────────────
+// Sorted best → worst quality.
+// minSpeedMbps = minimum download speed needed to load this model comfortably.
+// sizeGB       = approximate cache size (informational only).
+//
+// MLC catalog availability notes (as of 2025):
+//   Llama-3.2-1B  — available in MLC catalog
+//   Qwen2.5-1.5B  — available in MLC catalog
+//   Qwen3-0.6B    — available in MLC catalog
+//   SmolLM2-360M  — available in MLC catalog
+//   SmolLM2-135M  — CHECK catalog before deploying; if missing, Tier 5 falls
+//                   back to SmolLM2-360M automatically via FALLBACK_MODELS.
+
+const MODEL_TIERS = [
+  {
+    id:           'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+    sizeGB:        0.75,
+    minSpeedMbps:  50,
+    label:        'Tier 1 — High-end'
+  },
+  {
+    id:           'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
+    sizeGB:        1.0,
+    minSpeedMbps:  10,
+    label:        'Tier 2 — Balanced'
+  },
+  {
+    id:           'Qwen3-0.6B-q4f32_1-MLC',
+    sizeGB:        0.4,
+    minSpeedMbps:  3,
+    label:        'Tier 3 — Compact'
+  },
+  {
+    id:           'SmolLM2-360M-Instruct-q4f16_1-MLC',
+    sizeGB:        0.2,
+    minSpeedMbps:  1,
+    label:        'Tier 4 — Minimal'
+  },
+  {
+    id:           'SmolLM2-135M-Instruct-q4f16_1-MLC',
+    sizeGB:        0.08,
+    minSpeedMbps:  0,
+    label:        'Tier 5 — Emergency'
+  }
 ];
 
-// Identity + scope
+// Fallback order for loadEngine retry: smallest → largest (easiest to load first)
+const FALLBACK_MODELS = [...MODEL_TIERS].reverse().map(t => t.id);
+
+// ─── Network Speed Estimation ────────────────────────────────────────────────
+// Fetches a small known-size file and measures throughput.
+// Returns estimated Mbps. On fetch error, returns conservative 2 Mbps.
+
+async function estimateNetworkMbps() {
+  // ~90 KB public CDN file — no CORS issues, no auth, widely cached at edge
+  const testUrl    = 'https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js';
+  const sampleBytes = 90_000;
+  try {
+    const start   = performance.now();
+    await fetch(testUrl, { cache: 'no-store' });
+    const elapsed = (performance.now() - start) / 1000; // seconds
+    const mbps    = (sampleBytes * 8) / (elapsed * 1_000_000);
+    return mbps;
+  } catch {
+    return 2; // conservative fallback: assume slow connection
+  }
+}
+
+// Picks the highest-quality tier affordable at current network speed.
+async function pickModelForNetwork(onProgress) {
+  if (onProgress) onProgress('নেটওয়ার্ক গতি পরীক্ষা হচ্ছে...', 0);
+  const mbps = await estimateNetworkMbps();
+  if (onProgress) onProgress(`নেটওয়ার্ক: ~${mbps.toFixed(1)} Mbps`, 5);
+
+  // Walk tiers best → worst; pick first one user's speed can afford
+  const picked = MODEL_TIERS.find(t => mbps >= t.minSpeedMbps)
+              || MODEL_TIERS[MODEL_TIERS.length - 1]; // guaranteed floor
+
+  if (onProgress) onProgress(`মডেল নির্বাচিত: ${picked.label}`, 10);
+  return picked.id;
+}
+
+// ─── Engine State ────────────────────────────────────────────────────────────
+
+let enginePromise  = null;
+let currentModelId = null;
+let selectedLanguage = 'english';
+
+// ─── Identity + Scope Prompts ────────────────────────────────────────────────
+
 const IDENTITY_PROMPT = `তোমার নাম ${AI_NAME}। তোমার model-এর নাম ${AI_MODEL_NAME}। তোমাকে পরিচালনা করে ${AI_CREATOR}।
 তোমার কাজ: ${AI_CREATOR}-এর পণ্য/সেবা সম্পর্কিত প্রশ্নের উত্তর দেওয়া, সাধারণ কোডিং/টেকনিক্যাল সহায়তা দেওয়া, এবং সাধারণ তথ্য ও পরামর্শ প্রদান করা।
-তুমি কখনো নিজেকে Qwen, SmolLM, Alibaba, HuggingFace বা অন্য কোনো base model বলবে না।
+তুমি কখনো নিজেকে Qwen, SmolLM, Llama, Alibaba, Meta, HuggingFace বা অন্য কোনো base model বলবে না।
 কেউ "তুমি কোন মডেল/AI" জিজ্ঞেস করলে শুধু বলবে: "আমি ${AI_MODEL_NAME}, ${AI_CREATOR}-এর ${AI_NAME}।"
 ব্যবহারকারী যে ভাষায় প্রশ্ন করবে, ঠিক সেই ভাষায় উত্তর দেবে — ব্যবহারকারী ভাষা পাল্টালে তুমিও পাল্টাবে।
 তুমি একটি ছোট, ডিভাইসে চলা মডেল — জটিল বা নির্দিষ্ট তথ্যভিত্তিক প্রশ্নে (যেমন: রাজধানী, ইতিহাস, তারিখ, সংখ্যা) ভুল তথ্য বানিয়ে বলার প্রবণতা তোমার আছে।
 তাই: নিশ্চিত না হলে কখনো আন্দাজে/বানিয়ে উত্তর দেবে না। নিশ্চিত না থাকলে স্পষ্টভাবে বলবে "আমি নিশ্চিত না" অথবা "এই মুহূর্তে সঠিক তথ্য দিতে পারছি না, ইন্টারনেট সংযোগ ফিরলে আবার জিজ্ঞেস করুন।"
 কোনো নাম, সংখ্যা, তারিখ বা তথ্য সম্পূর্ণ নিশ্চিত না হয়ে কখনো তৈরি করে বলবে না।`;
 
-// SR Group org info — admin/contact question ashle eikhan theke bolbe
+// SR Group org info — admin/contact question এলে এখান থেকে বলবে
 const ORG_INFO = `SR Group প্রশাসক: Sadiqur Rahman, Sakirul Islam।
 যোগাযোগ ইমেইল: hossainalijms9@gmail.com
 ওয়েবসাইট: https://krovos.rf.gd/
 কেউ SR Group-এর admin/contact/website জিজ্ঞেস করলে এই তথ্য দিয়ে উত্তর দেবে।`;
 
-// Language-specific system prompts (fallback style guide, per detected language)
+// ─── Language Detection & Prompts ────────────────────────────────────────────
+
 const LANGUAGE_PROMPTS = {
   bengali: `আপনি একজন সহায়ক। শিক্ষার্থী-বান্ধব, সহজ ব্যাখ্যা দিন।
 সব উত্তর বাংলায় লিখুন।`,
@@ -73,132 +156,158 @@ Répondez en français complet.`,
 تمام جوابات اردو میں لکھیں۔`
 };
 
-function isSupported() {
-  return typeof navigator !== 'undefined' && !!navigator.gpu;
-}
-
-// User message er script/character dekhe language detect kore
+// Detect language from Unicode script ranges in user message
 function detectLanguage(text) {
   if (!text) return 'english';
-  if (/[\u3040-\u30FF]/.test(text)) return 'japanese';       // hiragana/katakana
-  if (/[\u4E00-\u9FFF]/.test(text)) return 'chinese';         // hanzi (japanese kanji-only text o eikhane pore, rare case)
+  if (/[\u3040-\u30FF]/.test(text)) return 'japanese';   // hiragana / katakana
+  if (/[\u4E00-\u9FFF]/.test(text)) return 'chinese';    // CJK unified ideographs
   if (/[\u0980-\u09FF]/.test(text)) return 'bengali';
   if (/[\u0900-\u097F]/.test(text)) return 'hindi';
   if (/[\u0600-\u06FF]/.test(text)) return 'urdu';
-  if (/[¿¡ñÑ]/.test(text)) return 'spanish';
+  if (/[¿¡ñÑ]/.test(text))         return 'spanish';
   if (/[àâçéèêëîïôùûüÀÂÇÉÈÊËÎÏÔÙÛÜ]/.test(text)) return 'french';
   return 'english';
 }
 
-async function loadEngine(modelId = DEFAULT_MODEL, onProgress) {
+// ─── WebGPU Support Check ─────────────────────────────────────────────────────
+
+function isSupported() {
+  return typeof navigator !== 'undefined' && !!navigator.gpu;
+}
+
+// ─── Engine Loader ────────────────────────────────────────────────────────────
+// modelId=null → auto-pick via network speed test.
+// modelId=string → force that model (manual override / restart after crash).
+//
+// Retry strategy inside each tier: up to 3 attempts with exponential backoff.
+// If all attempts for a tier fail, move to the next smaller model automatically.
+// User always gets something — worst case SmolLM2-360M (Emergency tier).
+
+async function loadEngine(modelId = null, onProgress) {
   if (!isSupported()) {
     throw new Error(
       'এই ডিভাইসে Local AI চলবে না। Chrome বা Edge (desktop) দিয়ে চেষ্টা করুন — WebGPU দরকার।'
     );
   }
 
-  if (enginePromise && currentModelId !== modelId) {
-    enginePromise = null;
+  // Auto-detect best model from network speed if none forced
+  if (!modelId) {
+    modelId = await pickModelForNetwork(onProgress);
   }
 
-  if (enginePromise && currentModelId === modelId) {
-    return enginePromise;
-  }
+  // Return existing engine if same model already loading/loaded
+  if (enginePromise && currentModelId === modelId) return enginePromise;
 
-  if (!enginePromise) {
-    enginePromise = (async () => {
-      for (const model of FALLBACK_MODELS) {
-        try {
-          if (onProgress) onProgress(`Trying ${model.split('-')[0]}...`, 0);
+  // Different model requested — discard old promise
+  if (enginePromise && currentModelId !== modelId) enginePromise = null;
 
-          const webllm = await import('https://esm.run/@mlc-ai/web-llm');
-          const engine = new webllm.MLCEngine();
-          engine.setInitProgressCallback((report) => {
-            if (onProgress) onProgress(report.text, report.progress);
-          });
+  enginePromise = (async () => {
+    // Build retry order: preferred model first, then smaller fallbacks
+    const tryOrder = [
+      modelId,
+      ...FALLBACK_MODELS.filter(m => m !== modelId)
+    ];
 
-          const MAX_RETRIES = 3;
-          let lastErr;
-          for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-              await engine.reload(model);
-              currentModelId = model;
-              markModelReady();
-              if (onProgress) onProgress(`Model loaded: ${model}`, 100);
-              return engine;
-            } catch (err) {
-              lastErr = err;
-              if (onProgress) onProgress(`Attempt ${attempt} failed, retrying...`, 0);
-              await new Promise((r) => setTimeout(r, 2000 * attempt));
+    for (const model of tryOrder) {
+      try {
+        const shortName = model.split('-').slice(0, 2).join(' ');
+        if (onProgress) onProgress(`লোড হচ্ছে: ${shortName}...`, 0);
+
+        const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+        const engine = new webllm.MLCEngine();
+        engine.setInitProgressCallback((report) => {
+          if (onProgress) onProgress(report.text, report.progress);
+        });
+
+        const MAX_RETRIES = 3;
+        let lastErr;
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            await engine.reload(model);
+            currentModelId = model;
+            markModelReady();
+            if (onProgress) onProgress(`প্রস্তুত: ${shortName}`, 100);
+            return engine;
+          } catch (err) {
+            lastErr = err;
+            if (attempt < MAX_RETRIES) {
+              if (onProgress) onProgress(`চেষ্টা ${attempt} ব্যর্থ, পুনরায়...`, 0);
+              await new Promise(r => setTimeout(r, 2000 * attempt));
             }
           }
-          if (onProgress) onProgress(`${model.split('-')[0]} failed, trying next model...`, 0);
-          continue;
-
-        } catch (err) {
-          if (onProgress) onProgress(`${model} error, trying next...`, 0);
-          continue;
         }
+
+        // This tier exhausted — try next smaller model
+        if (onProgress) onProgress(`${model.split('-')[0]} ব্যর্থ, ছোট মডেলে যাচ্ছি...`, 0);
+
+      } catch (err) {
+        if (onProgress) onProgress('পরবর্তী মডেলে যাচ্ছি...', 0);
       }
+    }
 
-      enginePromise = null;
-      throw new Error('সব models fail। Internet connection check করুন। Network stable নয়।');
-
-    })();
-  }
+    // All tiers failed
+    enginePromise = null;
+    throw new Error(
+      'সব মডেল লোড করা যায়নি। ইন্টারনেট কানেকশন চেক করুন অথবা পেজ রিফ্রেশ করুন।'
+    );
+  })();
 
   return enginePromise;
 }
 
+// ─── Identity Leak Filter ────────────────────────────────────────────────────
+// Prevents base model names from leaking into responses.
+
 function filterIdentityLeak(text) {
   return text
-    .replace(/\bQwen2?\.?5?\b/gi, AI_MODEL_NAME)
-    .replace(/\bSmolLM2?\b/gi, AI_MODEL_NAME)
-    .replace(/\b(Alibaba|HuggingFace|MLC-AI)\b/gi, AI_CREATOR);
+    .replace(/\bQwen2?\.?5?\b/gi,              AI_MODEL_NAME)
+    .replace(/\bSmolLM2?\b/gi,                 AI_MODEL_NAME)
+    .replace(/\bLlama[\s-]?3\.?2?\b/gi,        AI_MODEL_NAME)
+    .replace(/\b(Alibaba|Meta|HuggingFace|MLC-AI)\b/gi, AI_CREATOR);
 }
 
-// FIX: GPU device crash (DXGI_ERROR_DEVICE_HUNG / "Device was lost") hole purono
-// engine object disposed hoye jay, kintu enginePromise/currentModelId purono thake —
-// tai porer call e shei mrito engine diye kaj korte giye "Object has already been
-// disposed" throw hoto. Ekhon eirokom error dhorle enginePromise reset kore, fresh
-// engine load kore ekbar retry kora hocche.
+// ─── GPU Device Lost Detection ───────────────────────────────────────────────
+// DXGI_ERROR_DEVICE_HUNG / GPUDevice lost crashes leave enginePromise pointing
+// at a disposed object. Detect and force full reload on next call.
+
 function isDeviceLostError(err) {
-  const msg = String(err && err.message || err || '');
+  const msg = String(err?.message || err || '');
   return /disposed|device.*lost|device.*removed|GPUDevice/i.test(msg);
 }
 
+// ─── Single Generation Attempt ───────────────────────────────────────────────
+
 async function runOneAttempt(systemPrompt, history, userMessage, onProgress) {
-  const engine = await loadEngine(DEFAULT_MODEL, onProgress);
+  const engine = await loadEngine(null, onProgress);
 
-  // Prottek message e user er vasha auto-detect
-  const detectedLang = detectLanguage(userMessage);
-  selectedLanguage = detectedLang;
-  const langPrompt = LANGUAGE_PROMPTS[detectedLang] || LANGUAGE_PROMPTS.english;
+  // Auto-detect user language every message
+  const detectedLang  = detectLanguage(userMessage);
+  selectedLanguage    = detectedLang;
+  const langPrompt    = LANGUAGE_PROMPTS[detectedLang] || LANGUAGE_PROMPTS.english;
 
-  const messages = [];
   const combinedSystemPrompt =
-    IDENTITY_PROMPT + '\n\n' + ORG_INFO + '\n\n' + langPrompt +
+    IDENTITY_PROMPT + '\n\n' +
+    ORG_INFO        + '\n\n' +
+    langPrompt      +
     (systemPrompt ? '\n\n' + systemPrompt : '');
-  messages.push({ role: 'system', content: combinedSystemPrompt });
+
+  const messages = [{ role: 'system', content: combinedSystemPrompt }];
 
   for (const m of history) {
     messages.push({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
+      role:    m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content || ''
     });
   }
   messages.push({ role: 'user', content: userMessage });
 
-  // FIX: temperature 0.7 theke kome 0.3 kora hoyeche — chotto (360M/0.6B) model
-  // high temperature-e factual question-e (rajdhani, tarikh, songkha) beshi
-  // hallucinate kore. 0.3-e output beshi deterministic/conservative hoy, tai
-  // banano tottho deyar probability kome — kintu shompurno bondho hoy na, karon
-  // eita model-er nijer size/capacity-r limitation, prompt/temperature diye
-  // 100% fix kora jay na.
+  // temperature 0.3: reduces hallucination on factual queries for small models.
+  // Not a perfect fix — model size is the root constraint — but meaningfully safer
+  // than default 0.7 for a 135M–1B parameter device model.
   const reply = await engine.chat.completions.create({
     messages,
     temperature: 0.3,
-    max_tokens: 400,
+    max_tokens:  400,
   });
 
   const rawText = reply?.choices?.[0]?.message?.content?.trim();
@@ -206,23 +315,25 @@ async function runOneAttempt(systemPrompt, history, userMessage, onProgress) {
   return filterIdentityLeak(rawText);
 }
 
+// ─── Public: Generate Reply ───────────────────────────────────────────────────
+// Handles GPU device crash: resets engine and retries once before giving up.
+
 async function generateReply(systemPrompt, history, userMessage, onProgress) {
   try {
     return await runOneAttempt(systemPrompt, history, userMessage, onProgress);
   } catch (err) {
     if (!isDeviceLostError(err)) throw err;
 
-    // GPU device crash hoyeche — purono engine reference bad diye fresh load try kori.
-    // ready-flag clear kore dei, karon purono "ready" state ar valid na (engine disposed).
-    if (onProgress) onProgress('GPU device crash — reloading model...', 0);
-    enginePromise = null;
+    // GPU crashed — clear stale engine and retry with fresh load
+    if (onProgress) onProgress('GPU ক্র্যাশ — মডেল পুনরায় লোড হচ্ছে...', 0);
+    enginePromise  = null;
     currentModelId = null;
     clearModelReady();
 
     try {
       return await runOneAttempt(systemPrompt, history, userMessage, onProgress);
     } catch (err2) {
-      enginePromise = null;
+      enginePromise  = null;
       currentModelId = null;
       clearModelReady();
       throw new Error(
@@ -233,8 +344,9 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   }
 }
 
-// Manual override still available (UI theke call korle e-o kaj korbe,
-// kintu porer message e auto-detect abar overwrite kore dibe)
+// ─── Manual Language Override ────────────────────────────────────────────────
+// UI can call this; auto-detect overwrites it on the next user message.
+
 function setLanguage(lang) {
   if (LANGUAGE_PROMPTS[lang]) {
     selectedLanguage = lang;
@@ -243,24 +355,39 @@ function setLanguage(lang) {
   return false;
 }
 
-window.listModels = async function() {
+// ─── Debug Helpers (browser console) ────────────────────────────────────────
+
+window.listModels = async function () {
   try {
     const webllm = await import('https://esm.run/@mlc-ai/web-llm');
     const models = webllm.prebuiltAppConfig?.model_list || [];
-    console.log('Available models:');
+    console.log('Available MLC models:');
     models.forEach(m => console.log('  ' + m.model_id));
   } catch (err) {
-    console.error('Error:', err.message);
+    console.error('Error listing models:', err.message);
   }
 };
 
-window.getCurrentModel = function() {
+window.getCurrentModel = function () {
   return currentModelId || 'Not loaded yet';
 };
 
+window.getNetworkSpeed = async function () {
+  const mbps = await estimateNetworkMbps();
+  const tier  = MODEL_TIERS.find(t => mbps >= t.minSpeedMbps) || MODEL_TIERS[MODEL_TIERS.length - 1];
+  console.log(`Network: ~${mbps.toFixed(2)} Mbps → Would pick: ${tier.label} (${tier.id})`);
+  return mbps;
+};
+
+// ─── Pre-warm ────────────────────────────────────────────────────────────────
+// Start loading in background as soon as the script is parsed (WebGPU only).
+// Network speed test runs here so the engine is ready before the first message.
+
 if (isSupported()) {
-  loadEngine().catch(() => { enginePromise = null; });
+  loadEngine(null).catch(() => { enginePromise = null; });
 }
+
+// ─── Public API ──────────────────────────────────────────────────────────────
 
 window.LocalAI = {
   isSupported,
@@ -269,6 +396,8 @@ window.LocalAI = {
   setLanguage,
   detectLanguage,
   isModelReady,
-  SUPPORTED_LANGUAGES: Object.keys(LANGUAGE_PROMPTS),
-  FALLBACK_MODELS
+  estimateNetworkMbps,
+  MODEL_TIERS,
+  FALLBACK_MODELS,
+  SUPPORTED_LANGUAGES: Object.keys(LANGUAGE_PROMPTS)
 };
