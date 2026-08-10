@@ -4341,23 +4341,6 @@ init();
  function speak(text, onDone) {
     var lang = langSelect.value;
 
-    // ResponsiveVoice voice map
-    var voiceMap = {
-      'bn-BD': 'Bangla Bangladesh Female',
-      'bn-IN': 'Bengali Female',
-      'en-US': 'US English Female',
-      'en-GB': 'UK English Female',
-      'hi-IN': 'Hindi Female',
-      'ur-PK': 'Urdu Female',
-      'ja-JP': 'Japanese Female',
-      'ar-SA': 'Arabic Female',
-      'fr-FR': 'French Female',
-      'es-ES': 'Spanish Female',
-      'zh-CN': 'Chinese Female',
-    };
-
-    var voiceName = voiceMap[lang] || 'UK English Female';
-
     // plain text বানাও (markdown/code strip)
     var plain = text
       .replace(/```[\s\S]*?```/g, 'code block.')
@@ -4367,38 +4350,18 @@ init();
       .trim();
     if (!plain) { if(onDone) onDone(); return; }
 
-    speaking = true;
-    setAvatar('speaking');
-    setStatus('Bot is speaking...', plain.slice(0,80) + (plain.length > 80 ? '…' : ''));
-    skipBtn.style.display = '';
-
-    if (window.responsiveVoice) {
-      responsiveVoice.speak(plain, voiceName, {
-        onend: function() {
-          speaking = false;
-          skipBtn.style.display = 'none';
-          if (vcActive && onDone) onDone();
-        },
-        onerror: function() {
-          speaking = false;
-          skipBtn.style.display = 'none';
-          if (vcActive && onDone) onDone();
-        }
-      });
+    // FIX: ResponsiveVoice-এর ?key=FREE demo key শুধু বেসিক English voice দেয়; বাংলা/হিন্দি/
+    // আরবি ইত্যাদির জন্য এই key দিয়ে হয় কোনো শব্দই বাজে না, নাহলে চুপচাপ fail করে (onerror এ
+    // onDone() কল হয়ে "শেষ হয়ে গেছে" দেখায়, ইউজার মনে করে bug)। এইটা সম্পূর্ণ ফ্রি রাখতে হলে
+    // ResponsiveVoice বাদ দিয়ে সরাসরি ব্রাউজারের নিজস্ব (বিল্ট-ইন, খরচহীন) speechSynthesis API
+    // ব্যবহার করা হচ্ছে — নিচে সেই ভাষার voice আসলেই ইনস্টলড আছে কিনা চেক করে, না থাকলে
+    // ইউজারকে স্পষ্ট করে জানানো হচ্ছে (silent fail না করে)।
+    if (!tts) {
+      setStatus('ভয়েস সাপোর্ট নেই', 'এই ব্রাউজার টেক্সট-টু-স্পিচ সাপোর্ট করে না।');
+      if (onDone) onDone();
       return;
     }
-
-    // Fallback: browser built-in TTS
-    if (!tts) { if(onDone) onDone(); return; }
     tts.cancel();
-    // plain text বানাও (markdown/code strip)
-    var plain = text
-      .replace(/```[\s\S]*?```/g, 'code block.')
-      .replace(/`[^`]+`/g, '')
-      .replace(/[#*_~>\[\]]/g, '')
-      .replace(/https?:\/\/\S+/g, 'link.')
-      .trim();
-    if (!plain) { if(onDone) onDone(); return; }
 
     speaking = true;
     setAvatar('speaking');
@@ -4406,42 +4369,53 @@ init();
     skipBtn.style.display = '';
 
     var utter = new SpeechSynthesisUtterance(plain);
-    var lang = langSelect.value;
     utter.lang = lang;
     utter.rate = 1.0;
     utter.pitch = 1.0;
 
-    // ভাষা অনুযায়ী voice বেছে নেওয়ার চেষ্টা
-   function assignVoiceAndSpeak() {
-  var voices = tts.getVoices();
-  var match = voices.find(function(v){ return v.lang === lang; }) ||
-              voices.find(function(v){ return v.lang.startsWith(lang.split('-')[0]); });
-  if (match) utter.voice = match;
-  tts.speak(utter);
-}
+    function finishSpeaking() {
+      speaking = false;
+      skipBtn.style.display = 'none';
+      currentUtterance = null;
+      if (vcActive && onDone) onDone();
+    }
 
-if (tts.getVoices().length === 0) {
-  tts.onvoiceschanged = function() {
-    tts.onvoiceschanged = null;
-    assignVoiceAndSpeak();
-  };
-} else {
-  assignVoiceAndSpeak();
-  return;
-}
-    utter.onend = function() {
-      speaking = false;
-      skipBtn.style.display = 'none';
-      currentUtterance = null;
-      if (vcActive && onDone) onDone();
-    };
-    utter.onerror = function() {
-      speaking = false;
-      skipBtn.style.display = 'none';
-      currentUtterance = null;
-      if (vcActive && onDone) onDone();
-    };
+    // FIX: আগে এইখানে attach করার আগেই early-return করে ফেলতো (voices আগে থেকে loaded থাকলে),
+    // ফলে onend/onerror কখনো attach-ই হতো না — speaking flag আটকে থাকতো, skip বাটন হাইড হতো
+    // না, onDone কখনো fire হতো না। এখন attach আগে করে নিচ্ছি, তারপর speak() কল করছি।
+    utter.onend = finishSpeaking;
+    utter.onerror = finishSpeaking;
     currentUtterance = utter;
+
+    // ভাষা অনুযায়ী voice বেছে নেওয়ার চেষ্টা, আর সেই ভাষায় সত্যিই কোনো voice ইনস্টলড আছে
+    // কিনা যাচাই করে ইউজারকে জানানো — silent fail-এর বদলে স্পষ্ট বার্তা।
+    function assignVoiceAndSpeak() {
+      var voices = tts.getVoices();
+      var langBase = lang.split('-')[0];
+      var exactMatch = voices.find(function(v){ return v.lang === lang; });
+      var looseMatch = voices.find(function(v){ return v.lang.toLowerCase().startsWith(langBase.toLowerCase()); });
+      var match = exactMatch || looseMatch;
+
+      if (match) {
+        utter.voice = match;
+      } else if (langBase !== 'en') {
+        // এই ভাষায় কোনো voice এই ডিভাইসে ইনস্টলড নাই — চুপচাপ fail করার বদলে সরাসরি বলে দিই
+        setStatus('এই ভাষার voice পাওয়া যায়নি', 'আপনার ব্রাউজার/ডিভাইসে "' + lang + '" ভাষার voice ইনস্টল করা নেই। অন্য ভাষা বেছে নিন অথবা ডিভাইসে এই ভাষার voice/TTS প্যাক ইনস্টল করুন।');
+        finishSpeaking();
+        return;
+      }
+      // match না পেলেও en/default voice দিয়ে speak() try করা হয় (একদমই চুপ থাকার চেয়ে ভালো)
+      tts.speak(utter);
+    }
+
+    if (tts.getVoices().length === 0) {
+      tts.onvoiceschanged = function() {
+        tts.onvoiceschanged = null;
+        assignVoiceAndSpeak();
+      };
+    } else {
+      assignVoiceAndSpeak();
+    }
   }
 
   function startListening() {
