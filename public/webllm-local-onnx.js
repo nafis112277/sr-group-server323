@@ -56,7 +56,13 @@ async function hasWorkingWebGPU() {
   }
   try {
     const adapterPromise = navigator.gpu.requestAdapter();
-    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 4000));
+    // FIX: was 4000ms. On some Android devices the FIRST (cold) requestAdapter() call after
+    // page load genuinely takes longer than 4s to resolve (GPU process warm-up), so the
+    // timeout was winning the race and returning a false negative — even though a second,
+    // later call (e.g. a standalone window.checkWebGPU() from console) would resolve fine
+    // because the adapter/GPU process was already warmed up by then. 15s gives the cold path
+    // room to finish while still bailing out for genuinely broken/hung drivers.
+    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 15000));
     const adapter = await Promise.race([adapterPromise, timeoutPromise]);
     return !!adapter;
   } catch (e) {
