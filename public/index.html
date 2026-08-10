@@ -4357,8 +4357,9 @@ init();
     // ব্যবহার করা হচ্ছে — নিচে সেই ভাষার voice আসলেই ইনস্টলড আছে কিনা চেক করে, না থাকলে
     // ইউজারকে স্পষ্ট করে জানানো হচ্ছে (silent fail না করে)।
     if (!tts) {
-      setStatus('ভয়েস সাপোর্ট নেই', 'এই ব্রাউজার টেক্সট-টু-স্পিচ সাপোর্ট করে না।');
-      if (onDone) onDone();
+      var noTtsMsg = 'এই ব্রাউজার টেক্সট-টু-স্পিচ সাপোর্ট করে না।';
+      setStatus('ভয়েস সাপোর্ট নেই', noTtsMsg);
+      if (onDone) onDone(noTtsMsg);
       return;
     }
     tts.cancel();
@@ -4373,18 +4374,23 @@ init();
     utter.rate = 1.0;
     utter.pitch = 1.0;
 
-    function finishSpeaking() {
+    // FIX: finishSpeaking এখন একটা optional errorMsg নেয় এবং সেটা onDone(errorMsg)-এ pass করে।
+    // আগে onDone() সবসময় no-arg কল হতো, তাই caller (sendVoiceMessage) কখনো জানতেই পারতো না
+    // speak() আসলে fail করেছিল কিনা — ফলে caller নিঃশর্তভাবে setStatus('Ready', ...) দিয়ে
+    // watchdog-এর দেখানো আসল error message-টাই মুছে "সব ঠিক আছে" দেখিয়ে দিতো। এখন caller
+    // errorMsg থাকলে সেটা ধরে রেখে ইউজারকে দেখাতে পারবে, না থাকলে স্বাভাবিক "Ready" দেখাবে।
+    function finishSpeaking(errorMsg) {
       speaking = false;
       skipBtn.style.display = 'none';
       currentUtterance = null;
-      if (vcActive && onDone) onDone();
+      if (vcActive && onDone) onDone(errorMsg);
     }
 
     // FIX: আগে এইখানে attach করার আগেই early-return করে ফেলতো (voices আগে থেকে loaded থাকলে),
     // ফলে onend/onerror কখনো attach-ই হতো না — speaking flag আটকে থাকতো, skip বাটন হাইড হতো
     // না, onDone কখনো fire হতো না। এখন attach আগে করে নিচ্ছি, তারপর speak() কল করছি।
-    utter.onend = finishSpeaking;
-    utter.onerror = finishSpeaking;
+    utter.onend = function () { finishSpeaking(); };
+    utter.onerror = function () { finishSpeaking(); };
     currentUtterance = utter;
 
     // ভাষা অনুযায়ী voice বেছে নেওয়ার চেষ্টা, আর সেই ভাষায় সত্যিই কোনো voice ইনস্টলড আছে
@@ -4400,8 +4406,9 @@ init();
         utter.voice = match;
       } else if (langBase !== 'en') {
         // এই ভাষায় কোনো voice এই ডিভাইসে ইনস্টলড নাই — চুপচাপ fail করার বদলে সরাসরি বলে দিই
-        setStatus('এই ভাষার voice পাওয়া যায়নি', 'আপনার ব্রাউজার/ডিভাইসে "' + lang + '" ভাষার voice ইনস্টল করা নেই। অন্য ভাষা বেছে নিন অথবা ডিভাইসে এই ভাষার voice/TTS প্যাক ইনস্টল করুন।');
-        finishSpeaking();
+        var noVoiceMsg = 'আপনার ব্রাউজার/ডিভাইসে "' + lang + '" ভাষার voice ইনস্টল করা নেই। অন্য ভাষা বেছে নিন অথবা ডিভাইসে এই ভাষার voice/TTS প্যাক ইনস্টল করুন।';
+        setStatus('এই ভাষার voice পাওয়া যায়নি', noVoiceMsg);
+        finishSpeaking(noVoiceMsg);
         return;
       }
 
@@ -4412,17 +4419,17 @@ init();
       var isRemoteVoice = match && match.localService === false;
 
       // FIX: watchdog — speak() কল করার একটু পরে চেক করি tts.speaking সত্যিই true হয়েছে কিনা।
-      // যদি না হয় (silent fail), onend-এর জন্য অপেক্ষা না করে সাথে সাথে ইউজারকে আসল কারণ জানাই।
+      // যদি না হয় (silent fail), onend-এর জন্য অপেক্ষা না করে সাথে সাথে ইউজারকে আসল কারণ জানাই,
+      // এবং এই errorMsg-টা onDone-এর মাধ্যমে caller পর্যন্ত পাঠাই যাতে caller সেটা overwrite
+      // না করে ফেলে (আগের বাগ — দেখুন উপরের finishSpeaking কমেন্ট)।
       var spokeStarted = false;
       var watchdogId = setTimeout(function () {
         if (!spokeStarted && !tts.speaking) {
-          setStatus(
-            'ভয়েস বাজানো যায়নি',
-            isRemoteVoice
-              ? 'এই ভাষার voice ইন্টারনেট-নির্ভর (Chrome remote voice) এবং এখন সাড়া দিচ্ছে না। ইন্টারনেট সংযোগ চেক করুন অথবা একটু পর আবার চেষ্টা করুন।'
-              : 'এই ডিভাইসে ভয়েস চালু করা যায়নি। পেজ রিফ্রেশ করে আবার চেষ্টা করুন।'
-          );
-          finishSpeaking();
+          var failMsg = isRemoteVoice
+            ? 'এই ভাষার voice ইন্টারনেট-নির্ভর (Chrome remote voice) এবং এখন সাড়া দিচ্ছে না। ইন্টারনেট সংযোগ চেক করুন অথবা একটু পর আবার চেষ্টা করুন। স্থায়ী সমাধানের জন্য Windows Settings → Time & Language → Speech থেকে এই ভাষার voice ডাউনলোড করে নিন (তাহলে অফলাইনেও কাজ করবে)।'
+            : 'এই ডিভাইসে ভয়েস চালু করা যায়নি। পেজ রিফ্রেশ করে আবার চেষ্টা করুন।';
+          setStatus('ভয়েস বাজানো যায়নি', failMsg);
+          finishSpeaking(failMsg);
         }
       }, 1200);
 
@@ -4532,10 +4539,18 @@ init();
       if (conv && data.title) { conv.title = data.title; if(typeof renderConvList==='function') renderConvList(); }
 
       addTranscript('bot', reply);
-      speak(reply, function() {
+      // FIX: speak()-এর onDone এখন একটা errorMsg pass করতে পারে (voice fail হলে)। আগে এই
+      // callback নিঃশর্তভাবে setStatus('Ready', ...) দিয়ে watchdog-এর দেখানো আসল error
+      // message মুছে ফেলতো, তাই ইউজার কখনো বুঝতেই পারতো না কেন বাংলা voice বাজলো না ("Ready"
+      // দেখে মনে হতো সব ঠিকঠাক শেষ হয়েছে)। এখন error থাকলে সেটাই দেখানো থাকবে।
+      speak(reply, function(speakErrorMsg) {
         if (vcActive) {
           setAvatar('idle');
-          setStatus('Ready', 'Press Start to speak again.');
+          if (speakErrorMsg) {
+            setStatus('ভয়েস সমস্যা (টেক্সট রিপ্লাই ঠিকই এসেছে)', speakErrorMsg);
+          } else {
+            setStatus('Ready', 'Press Start to speak again.');
+          }
         }
       });
     } catch(err) {
