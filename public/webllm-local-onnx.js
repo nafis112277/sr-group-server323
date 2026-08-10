@@ -354,6 +354,20 @@ function isAdapterUnavailableError(err) {
 
 // ─── Identity Leak Filter ────────────────────────────────────────────────────
 
+// FIX: new — Qwen3 models (e.g. Qwen3-0.6B, used as one of the WEBLLM_TIERS) emit their
+// reasoning inside <think>...</think> tags before the actual answer by default (same style as
+// DeepSeek-R1). Nothing was stripping this, so the raw internal reasoning was leaking straight
+// into the chat bubble shown to the user (e.g. "Okay, the user just said Hi. I need to
+// respond..."). This strips any <think>...</think> block (including an unclosed trailing
+// <think> if generation got cut off mid-thought) before the reply is shown or filtered for
+// identity leaks.
+function stripThinkTags(text) {
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*$/gi, '')
+    .trim();
+}
+
 function filterIdentityLeak(text) {
   return text
     .replace(/\b(Qwen2?\.?5?|SmolLM2?|Llama[\s-]?3\.?2?)\b/gi, AI_MODEL_NAME)
@@ -673,7 +687,7 @@ async function runOneAttempt(systemPrompt, history, userMessage, onProgress) {
   const rawText = reply?.choices?.[0]?.message?.content?.trim();
   if (!rawText) throw new Error('AI কোনো উত্তর দিতে পারেনি।');
 
-  return filterIdentityLeak(rawText);
+  return filterIdentityLeak(stripThinkTags(rawText));
 }
 
 // ─── Public: Generate Reply ───────────────────────────────────────────────────
