@@ -742,6 +742,23 @@ window.checkWebGPU = async function () {
   return works;
 };
 
+// FIX: diagnostic helper — hasWorkingWebGPU() swallows the actual error/timing so it's
+// impossible to tell from outside whether a false result was a genuine adapter failure, an
+// exception, or the 15s timeout winning. This logs exactly what happened.
+window.debugWebGPU = async function () {
+  console.time('requestAdapter');
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    console.timeEnd('requestAdapter');
+    console.log('adapter:', adapter);
+    return adapter;
+  } catch (e) {
+    console.timeEnd('requestAdapter');
+    console.error('requestAdapter threw:', e);
+    return null;
+  }
+};
+
 // FIX: ensureRuntime() caches its result forever (`if (runtime) return runtime`). If the very
 // first probe (e.g. the 5s pre-warm timer right after page load) hits a false negative —
 // adapter not fully ready yet, timing race inside the 4s hasWorkingWebGPU() timeout — the
