@@ -71,10 +71,19 @@ async function hasWorkingWebGPU() {
   }
 }
 
-// FIX: getRuntime() is now async because it needs to actually probe the GPU (see
-// hasWorkingWebGPU above) instead of just checking navigator.gpu existence. All call sites
-// below have been updated to `await getRuntime()`.
-async function getRuntime() {
+// FIX: renamed from getRuntime() to detectRuntime(). This function used to be named
+// `getRuntime`, same as the debug helper `window.getRuntime` defined further down this file.
+// Because this script runs as a classic (non-module) script, a top-level `async function
+// getRuntime() {...}` declaration creates a binding on `window` too — so when
+// `window.getRuntime = function () {...}` (the sync debug placeholder) executed later during
+// page load, it silently OVERWROTE the `getRuntime` identifier everywhere in this file,
+// including inside ensureRuntime(). From that point on, every "GPU probe" call was actually
+// invoking the sync placeholder (which just returns `runtime || {type:'unknown',...}`) instead
+// of the real async probe — meaning the real probe logic below almost never ran at all, and
+// loadEngine() always saw type !== 'webllm' and fell through to ONNX regardless of the actual
+// GPU/device. This is the actual root cause of every "still getting distilgpt2-onnx" result
+// seen while debugging this. Renaming this function removes the collision entirely.
+async function detectRuntime() {
   const ua = navigator.userAgent;
   const isMobile = /Mobile|Android|iPhone|iPad|tablet/i.test(ua);
   const isChrome = /Chrome|Chromium|CriOS/i.test(ua);
@@ -238,7 +247,7 @@ async function ensureRuntime() {
   if (runtime) return runtime;
   if (runtimePromise) return runtimePromise;
   const myGeneration = ++runtimeGeneration;
-  runtimePromise = getRuntime().then((result) => {
+  runtimePromise = detectRuntime().then((result) => {
     if (myGeneration === runtimeGeneration) {
       runtime = result;
       runtimePromise = null;
