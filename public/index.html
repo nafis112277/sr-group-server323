@@ -4404,7 +4404,33 @@ init();
         finishSpeaking();
         return;
       }
-      // match না পেলেও en/default voice দিয়ে speak() try করা হয় (একদমই চুপ থাকার চেয়ে ভালো)
+
+      // FIX: Chrome-এর বেশিরভাগ non-English voice (বাংলা, হিন্দি, আরবি ইত্যাদি) আসলে
+      // "remote/network voice" (localService: false) — ডিভাইসে ইনস্টলড না, Google-এর সার্ভার
+      // থেকে স্ট্রিম হয়। এই voice ইন্টারনেট/quota/policy সমস্যায় চুপচাপ fail করতে পারে (কোনো
+      // শব্দ বাজে না, কিন্তু onend ঠিকই fire হয়ে যায়, তাই সব "স্বাভাবিকভাবে শেষ" দেখায়)।
+      var isRemoteVoice = match && match.localService === false;
+
+      // FIX: watchdog — speak() কল করার একটু পরে চেক করি tts.speaking সত্যিই true হয়েছে কিনা।
+      // যদি না হয় (silent fail), onend-এর জন্য অপেক্ষা না করে সাথে সাথে ইউজারকে আসল কারণ জানাই।
+      var spokeStarted = false;
+      var watchdogId = setTimeout(function () {
+        if (!spokeStarted && !tts.speaking) {
+          setStatus(
+            'ভয়েস বাজানো যায়নি',
+            isRemoteVoice
+              ? 'এই ভাষার voice ইন্টারনেট-নির্ভর (Chrome remote voice) এবং এখন সাড়া দিচ্ছে না। ইন্টারনেট সংযোগ চেক করুন অথবা একটু পর আবার চেষ্টা করুন।'
+              : 'এই ডিভাইসে ভয়েস চালু করা যায়নি। পেজ রিফ্রেশ করে আবার চেষ্টা করুন।'
+          );
+          finishSpeaking();
+        }
+      }, 1200);
+
+      utter.onstart = function () {
+        spokeStarted = true;
+        clearTimeout(watchdogId);
+      };
+
       tts.speak(utter);
     }
 
