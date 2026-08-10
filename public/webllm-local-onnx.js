@@ -224,15 +224,28 @@ let selectedLanguage   = 'english';
 // is resolved lazily (and cached) by ensureRuntime() below, the first time it's actually needed.
 let runtime            = null;
 let runtimePromise     = null;
+// FIX: ensureRuntime() previously let ANY in-flight probe write to `runtime` whenever it
+// resolved — including a stale, slow probe that started earlier (e.g. the auto pre-warm probe
+// fired at page-load time, before the GPU/tab was fully ready) and only finishes AFTER a later,
+// faster, correct probe (e.g. triggered manually via resetRuntime()+waitUntilReady()) already
+// wrote the right value. Whichever probe happened to finish last would win, even if it was the
+// wrong/stale one — exactly what was happening here: an early failing probe overwrote a later
+// successful one. This generation counter makes only the most recently-STARTED probe allowed to
+// write the result; anything older that resolves late is discarded.
+let runtimeGeneration  = 0;
 
-// FIX: lazily resolves and caches `runtime`. Every place that used to read the module-level
-// `runtime` variable directly now calls `await ensureRuntime()` instead, so the real async
-// GPU probe always runs before any load decision is made.
 async function ensureRuntime() {
   if (runtime) return runtime;
-  if (!runtimePromise) runtimePromise = getRuntime();
-  runtime = await runtimePromise;
-  return runtime;
+  if (runtimePromise) return runtimePromise;
+  const myGeneration = ++runtimeGeneration;
+  runtimePromise = getRuntime().then((result) => {
+    if (myGeneration === runtimeGeneration) {
+      runtime = result;
+      runtimePromise = null;
+    }
+    return result;
+  });
+  return runtimePromise;
 }
 
 // ─── Identity + Scope Prompts ────────────────────────────────────────────────
@@ -769,6 +782,7 @@ window.debugWebGPU = async function () {
 window.resetRuntime = function () {
   runtime = null;
   runtimePromise = null;
+  runtimeGeneration++; // invalidate any still-pending stale probe from before reset
   enginePromise = null;
   currentModelId = null;
   currentEngineType = null;
