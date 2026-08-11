@@ -514,6 +514,11 @@
     font-family:'JetBrains Mono', monospace; font-size:11.5px; color:var(--accent-glow);
     background:rgba(63,225,198,0.1); border-radius:6px; padding:2px 8px; flex-shrink:0;
   }
+  .tq-to-facts-btn{
+    flex-shrink:0; background:none; border:1px solid var(--border-glass); color:var(--text-soft);
+    border-radius:6px; padding:3px 9px; font-size:11px; cursor:pointer; font-family:'JetBrains Mono',monospace;
+  }
+  .tq-to-facts-btn:hover{ border-color:var(--accent-a); color:var(--text-primary); }
 
   /* ---------- Admin accounts (role-based) ---------- */
   .role-badge{
@@ -3789,11 +3794,39 @@ async function loadAnalyticsPanel() {
         <h4>Top questions</h4>
         <div class="top-questions-list">
           ${topQuestions.length
-            ? topQuestions.map((q) => `<div class="top-questions-row"><span class="tq-text">${escapeHtml(q.question)}</span><span class="tq-count">${q.count}×</span></div>`).join('')
+            ? topQuestions.map((q, i) => `<div class="top-questions-row">
+                <span class="tq-text">${escapeHtml(q.question)}</span>
+                <span class="tq-count">${q.count}×</span>
+                <button type="button" class="tq-to-facts-btn" data-q="${escapeHtml(q.question)}" title="এই প্রশ্নটা Facts-এ Q/A হিসেবে যোগ করো">+ Facts</button>
+              </div>`).join('')
             : '<div class="empty-state">No questions logged yet.</div>'}
         </div>
       </div>
     `;
+
+    // FIX: প্রতিটা top question এর পাশে "+ Facts" বাটন যোগ করা হলো — আগে এই সেকশন শুধু
+    // count দেখাতো, কোনো action ছিল না। ক্লিক করলে Settings ট্যাবে চলে যাবে, Facts টেক্সটএরিয়ায়
+    // "Q: <প্রশ্ন>\nA: " টেমপ্লেট বসিয়ে দিবে (আগের facts এর নিচে, ওভাররাইট না করে), admin শুধু
+    // উত্তরটা লিখে Save করলেই হবে — এইভাবে বারবার জিজ্ঞেস করা প্রশ্নগুলো সহজেই AI-এর জানা
+    // তথ্যে (system prompt এ) পরিণত হয়ে যায়, ম্যানুয়াল কিন্তু দ্রুত ও নিয়ন্ত্রণযোগ্য।
+    content.querySelectorAll('.tq-to-facts-btn').forEach((btn) => {
+      btn.onclick = async () => {
+        const question = btn.dataset.q;
+        document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+        document.querySelector('.tab-btn[data-tab="settings"]').classList.add('active');
+        document.querySelectorAll('.admin-panel').forEach((p) => p.classList.remove('active'));
+        document.getElementById('panel-settings').classList.add('active');
+        await loadSettingsPanel();
+        const factsEl = document.getElementById('setFacts');
+        const template = `Q: ${question}\nA: `;
+        factsEl.value = factsEl.value && factsEl.value.trim()
+          ? factsEl.value.replace(/\n*$/, '') + '\n\n' + template
+          : template;
+        factsEl.focus();
+        factsEl.setSelectionRange(factsEl.value.length, factsEl.value.length);
+      };
+    });
+    return;
   } catch (err) {
     content.innerHTML = '<div class="empty-state">Couldn\'t load analytics.</div>';
     console.error(err);
