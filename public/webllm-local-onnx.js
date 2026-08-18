@@ -7,22 +7,21 @@
 //   • Firefox Desktop       → ONNX Runtime + WASM (if available)
 //   • Any device where WebGPU exists but requestAdapter() fails ("No available adapters",
 //     Chrome/Windows powerPreference bug, disabled flags, blocklisted driver, etc.)
-//     → ONNX Runtime + WASM/CPU (fixed in this version — see FIX comments below)
+//     → ONNX Runtime + WASM/CPU
+//   • Any device where the GPU/adapter works fine but the model shard CDN download itself
+//     fails (net::ERR_FAILED, "Failed to fetch", etc. — e.g. Hugging Face Xet CDN hiccup)
+//     → ONNX Runtime + WASM/CPU (NEW — see isNetworkFetchError FIX comments below)
 //
 // Features:
 //   - Auto platform detection
-//   - FIX: real WebGPU capability probe (navigator.gpu.requestAdapter()) instead of just
-//     checking that navigator.gpu exists. Some Chrome/Windows setups expose navigator.gpu
-//     and even report "Hardware accelerated" in chrome://gpu, yet requestAdapter() still
-//     fails ("No available adapters"). Previously we only checked `!!navigator.gpu`, so we
-//     always tried WebLLM on Desktop Chrome, WebLLM failed deep inside model loading, and the
-//     fallback chain re-threw the original server error instead of moving to ONNX. Now we
-//     actually request an adapter up front and only pick WebLLM if that succeeds.
+//   - Real WebGPU capability probe (navigator.gpu.requestAdapter()) instead of just
+//     checking that navigator.gpu exists.
 //   - Per-tier timeout (no infinite spinners)
 //   - Race condition fix (isLoading lock)
 //   - Identity leak filter
 //   - Multilingual support
 //   - GPU crash recovery
+//   - NEW: CDN/network fetch-failure recovery (shard download fails mid-transfer → ONNX)
 
 // ─── Model Ready Flag ────────────────────────────────────────────────────────
 
@@ -45,56 +44,26 @@ const AI_CREATOR    = 'SR Group';
 
 // ─── Platform Detection ──────────────────────────────────────────────────────
 
-// FIX: this used to be synchronous and only checked `!!navigator.gpu`. That tells you the
-// WebGPU *API* exists, not that a GPU adapter is actually obtainable — which is exactly the
-// case that broke on the reported machine (WebGPU shows "Hardware accelerated" in chrome://gpu,
-// but requestAdapter() still returns null / throws "No available adapters"). We now actually
-// probe for a real adapter, with a short timeout so a hung/broken driver can't stall page load.
 async function hasWorkingWebGPU() {
   if (typeof navigator === 'undefined' || !navigator.gpu || !navigator.gpu.requestAdapter) {
     return false;
   }
   try {
     const adapterPromise = navigator.gpu.requestAdapter();
-    // FIX: was 4000ms. On some Android devices the FIRST (cold) requestAdapter() call after
-    // page load genuinely takes longer than 4s to resolve (GPU process warm-up), so the
-    // timeout was winning the race and returning a false negative — even though a second,
-    // later call (e.g. a standalone window.checkWebGPU() from console) would resolve fine
-    // because the adapter/GPU process was already warmed up by then. 15s gives the cold path
-    // room to finish while still bailing out for genuinely broken/hung drivers.
     const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 15000));
     const adapter = await Promise.race([adapterPromise, timeoutPromise]);
     return !!adapter;
   } catch (e) {
-    // e.g. "No available adapters." thrown directly by some Chrome/driver combinations
     return false;
   }
 }
 
-// FIX: renamed from getRuntime() to detectRuntime(). This function used to be named
-// `getRuntime`, same as the debug helper `window.getRuntime` defined further down this file.
-// Because this script runs as a classic (non-module) script, a top-level `async function
-// getRuntime() {...}` declaration creates a binding on `window` too — so when
-// `window.getRuntime = function () {...}` (the sync debug placeholder) executed later during
-// page load, it silently OVERWROTE the `getRuntime` identifier everywhere in this file,
-// including inside ensureRuntime(). From that point on, every "GPU probe" call was actually
-// invoking the sync placeholder (which just returns `runtime || {type:'unknown',...}`) instead
-// of the real async probe — meaning the real probe logic below almost never ran at all, and
-// loadEngine() always saw type !== 'webllm' and fell through to ONNX regardless of the actual
-// GPU/device. This is the actual root cause of every "still getting distilgpt2-onnx" result
-// seen while debugging this. Renaming this function removes the collision entirely.
 async function detectRuntime() {
   const ua = navigator.userAgent;
   const isMobile = /Mobile|Android|iPhone|iPad|tablet/i.test(ua);
   const isChrome = /Chrome|Chromium|CriOS/i.test(ua);
   const isFirefox = /Firefox/i.test(ua);
 
-  // FIX: mobile used to short-circuit straight to ONNX/CPU before any GPU probe ran at all —
-  // so a capable device (e.g. Pixel 9 / Android Chrome 151, confirmed `navigator.gpu
-  // .requestAdapter()` succeeds) was always forced onto tiny ONNX models even though it could
-  // run WebLLM fine. Now mobile Chrome also gets a real adapter probe; only mobile browsers
-  // that genuinely lack a working adapter (older devices, Firefox Android, in-app webviews,
-  // etc.) fall back to ONNX.
   if (isMobile) {
     if (isChrome) {
       const gpuWorks = await hasWorkingWebGPU();
@@ -110,9 +79,6 @@ async function detectRuntime() {
     if (gpuWorks) {
       return { type: 'webllm', backend: 'webgpu', label: 'Desktop Chrome/Edge + WebGPU' };
     }
-    // FIX: this is the branch that used to be missing. Desktop Chrome with navigator.gpu
-    // present but no real adapter (driver/flag/blocklist issue) now correctly falls back to
-    // ONNX instead of being routed into WebLLM and failing deep inside model load.
     return { type: 'onnx', backend: 'wasm', label: 'Desktop Chrome (WebGPU unavailable) + ONNX WASM' };
   }
 
@@ -228,19 +194,8 @@ let isLoading          = false;
 let engineReady        = false;
 let selectedLanguage   = 'english';
 
-// FIX: runtime used to be computed synchronously at script load (`let runtime = getRuntime();`)
-// which meant it was captured before we could actually test the GPU. Now it starts as null and
-// is resolved lazily (and cached) by ensureRuntime() below, the first time it's actually needed.
 let runtime            = null;
 let runtimePromise     = null;
-// FIX: ensureRuntime() previously let ANY in-flight probe write to `runtime` whenever it
-// resolved — including a stale, slow probe that started earlier (e.g. the auto pre-warm probe
-// fired at page-load time, before the GPU/tab was fully ready) and only finishes AFTER a later,
-// faster, correct probe (e.g. triggered manually via resetRuntime()+waitUntilReady()) already
-// wrote the right value. Whichever probe happened to finish last would win, even if it was the
-// wrong/stale one — exactly what was happening here: an early failing probe overwrote a later
-// successful one. This generation counter makes only the most recently-STARTED probe allowed to
-// write the result; anything older that resolves late is discarded.
 let runtimeGeneration  = 0;
 
 async function ensureRuntime() {
@@ -342,26 +297,28 @@ function isDeviceLostError(err) {
   return /disposed|device.*lost|device.*removed|GPUDevice/i.test(msg);
 }
 
-// FIX: new helper — recognizes the "adapter never available in the first place" failure mode
-// (as opposed to a device that was working and then crashed/was lost mid-session). This is
-// exactly the case from the reported logs: "No available adapters." thrown directly out of
-// requestAdapter(), sometimes tied to Chrome's Windows powerPreference bug. We treat this the
-// same way we treat a lost device: reset engine state and drop straight to ONNX instead of
-// burning through retries against a GPU that was never going to answer.
 function isAdapterUnavailableError(err) {
   const msg = String(err?.message || err || '');
   return /no available adapters?/i.test(msg);
 }
 
+// FIX (NEW): detects browser-level network/CDN fetch failures during shard download — e.g.
+// net::ERR_FAILED from Hugging Face's Xet CDN, where the request gets a 302 redirect to a
+// signed URL, that signed URL responds 200, but the actual byte transfer stalls at ~0.5 kB
+// "Pending" and finally fails. This is distinct from isAdapterUnavailableError (GPU never
+// available) and isDeviceLostError (GPU crashed mid-session) — the GPU is fine here, it's the
+// download itself that's broken. Retrying the same WebLLM tier or a smaller tier won't help
+// since the CDN issue affects every shard equally; the caller should fall straight to ONNX.
+function isNetworkFetchError(err) {
+  const msg = String(err?.message || err || '');
+  if (/failed to fetch|net::err_failed|networkerror|load failed|err_failed/i.test(msg)) {
+    return true;
+  }
+  return err?.name === 'TypeError' && /fetch/i.test(msg);
+}
+
 // ─── Identity Leak Filter ────────────────────────────────────────────────────
 
-// FIX: new — Qwen3 models (e.g. Qwen3-0.6B, used as one of the WEBLLM_TIERS) emit their
-// reasoning inside <think>...</think> tags before the actual answer by default (same style as
-// DeepSeek-R1). Nothing was stripping this, so the raw internal reasoning was leaking straight
-// into the chat bubble shown to the user (e.g. "Okay, the user just said Hi. I need to
-// respond..."). This strips any <think>...</think> block (including an unclosed trailing
-// <think> if generation got cut off mid-thought) before the reply is shown or filtered for
-// identity leaks.
 function stripThinkTags(text) {
   return text
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
@@ -397,10 +354,6 @@ async function loadWebLLMEngine(modelId = null, onProgress) {
       targetTier = await pickWebLLMForNetwork(onProgress);
     }
 
-    // Retry chain: FIXED sequential fallback — Big → Medium → Qwen2.5 → Compact → Emergency.
-    // targetTier (network-picked) decides where to START in that fixed chain, not the order
-    // itself — chain always big-first, never reversed. Model below start tier not retried
-    // (already smaller than what network can handle), model above start tier also skipped.
     const startIdx = WEBLLM_TIERS.findIndex(t => t.id === targetTier.id);
     const tryOrder = WEBLLM_TIERS.slice(startIdx >= 0 ? startIdx : 0);
 
@@ -425,12 +378,11 @@ async function loadWebLLMEngine(modelId = null, onProgress) {
             if (onProgress) onProgress(`প্রস্তুত: ${shortName}`, 100);
             return engine;
           } catch (err) {
-            // FIX: if the adapter genuinely isn't available (e.g. "No available adapters."),
-            // retrying the same tier or trying smaller tiers won't help — it's not a
-            // model-size problem, it's a GPU-access problem. Bail out of the whole WebLLM
-            // attempt immediately so the caller can fall back to ONNX right away, instead of
-            // burning through MAX_RETRIES × every tier for a GPU that will never respond.
-            if (isAdapterUnavailableError(err)) {
+            // FIX: adapter unavailable OR CDN/network fetch failure — neither is a
+            // model-size problem, so retrying this tier (or trying smaller tiers) is
+            // pointless. Bail out of the whole WebLLM attempt immediately so the caller
+            // can fall back to ONNX right away.
+            if (isAdapterUnavailableError(err) || isNetworkFetchError(err)) {
               throw err;
             }
             if (err.message && err.message.includes('timeout')) {
@@ -444,8 +396,9 @@ async function loadWebLLMEngine(modelId = null, onProgress) {
           }
         }
       } catch (err) {
-        if (isAdapterUnavailableError(err)) {
-          throw err; // propagate immediately, see comment above
+        // FIX: same bail-immediately behavior at the per-tier loop level.
+        if (isAdapterUnavailableError(err) || isNetworkFetchError(err)) {
+          throw err;
         }
         if (onProgress) onProgress('পরবর্তী মডেলে যাচ্ছি...', 0);
       }
@@ -467,14 +420,11 @@ let onnxTokenizer = null;
 async function loadONNXEngine(modelId = null, onProgress) {
   try {
     if (onProgress) onProgress('ONNX Runtime লোড হচ্ছে...', 5);
-
-    // Try Transformers.js with better error handling
     if (onProgress) onProgress('Text Generation Tool লোড হচ্ছে...', 20);
 
     let generator = null;
 
     try {
-      // Try dynamic import with timeout
       const transformers = await withTimeout(
         import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0'),
         30_000,
@@ -483,7 +433,6 @@ async function loadONNXEngine(modelId = null, onProgress) {
 
       if (onProgress) onProgress('মডেল ক্যাশ করা হচ্ছে...', 40);
 
-      // Load model with timeout
       generator = await withTimeout(
         transformers.pipeline('text-generation', 'Xenova/distilgpt2'),
         60_000,
@@ -497,7 +446,6 @@ async function loadONNXEngine(modelId = null, onProgress) {
 
       if (onProgress) onProgress('প্রস্তুত: DistilGPT-2', 100);
 
-      // Return wrapper object
       return {
         chat: {
           completions: {
@@ -543,7 +491,6 @@ async function loadONNXEngine(modelId = null, onProgress) {
       };
 
     } catch (transformersErr) {
-      // Fallback: Simple text-based response generator
       if (onProgress) onProgress('Fallback mode: সাধারণ উত্তর', 80);
 
       currentModelId = 'fallback-text';
@@ -562,7 +509,6 @@ async function loadONNXEngine(modelId = null, onProgress) {
                 .filter(m => m.role === 'user')
                 .slice(-1)[0]?.content || '';
 
-              // Simple response based on keywords
               const responses = {
                 'কোন': 'আমি আপনার প্রশ্নের উত্তর দিতে প্রস্তুত।',
                 'কি': 'এটি একটি ভালো প্রশ্ন। আরও বিস্তারিত বলুন।',
@@ -602,14 +548,12 @@ async function loadONNXEngine(modelId = null, onProgress) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function loadEngine(modelId = null, onProgress) {
-  // Concurrency lock
   if (isLoading && enginePromise) return enginePromise;
 
-  // FIX: must resolve the real runtime (async GPU probe) before comparing / deciding anything.
   const rt = await ensureRuntime();
 
   if (enginePromise && currentEngineType === rt.type && currentModelId === modelId) {
-    return enginePromise; // Reuse
+    return enginePromise;
   }
 
   isLoading = true;
@@ -624,14 +568,13 @@ async function loadEngine(modelId = null, onProgress) {
         try {
           return await loadWebLLMEngine(modelId, onProgress);
         } catch (err) {
-          // FIX: this is the key behavior change. Previously, if runtime.type was 'webllm'
-          // and it failed for any reason (including "No available adapters"), the error was
-          // simply thrown — there was no code path that dropped down to ONNX afterwards.
-          // Now, if WebLLM fails specifically because the GPU adapter genuinely isn't
-          // available, we transparently retry with ONNX instead of surfacing a dead end.
-          if (isAdapterUnavailableError(err) || isDeviceLostError(err)) {
-            if (onProgress) onProgress('WebGPU পাওয়া যায়নি, ONNX-এ যাচ্ছি...', 0);
-            runtime = { type: 'onnx', backend: 'wasm', label: 'Desktop (WebGPU unavailable) + ONNX WASM' };
+          // FIX: now also catches CDN/network fetch failures (isNetworkFetchError), not just
+          // adapter-unavailable and device-lost. GPU works fine here — the shard download
+          // itself failed (e.g. net::ERR_FAILED from Hugging Face's Xet CDN) — so fall to
+          // ONNX transparently instead of surfacing a dead-end error.
+          if (isAdapterUnavailableError(err) || isDeviceLostError(err) || isNetworkFetchError(err)) {
+            if (onProgress) onProgress('নেটওয়ার্ক/GPU সমস্যা, ONNX-এ যাচ্ছি...', 0);
+            runtime = { type: 'onnx', backend: 'wasm', label: 'Desktop (WebLLM unavailable) + ONNX WASM' };
             return await loadONNXEngine(modelId, onProgress);
           }
           throw err;
@@ -697,15 +640,12 @@ async function generateReply(systemPrompt, history, userMessage, onProgress) {
   try {
     return await runOneAttempt(systemPrompt, history, userMessage, onProgress);
   } catch (err) {
-    if (!isDeviceLostError(err) && !isAdapterUnavailableError(err)) throw err;
+    // FIX: now also resets/retries on a CDN/network fetch failure, not just device-lost or
+    // adapter-unavailable. Previously a net::ERR_FAILED here would skip straight to the final
+    // catch below and throw a hard "GPU ক্র্যাশ" error even though the GPU was never the issue.
+    if (!isDeviceLostError(err) && !isAdapterUnavailableError(err) && !isNetworkFetchError(err)) throw err;
 
-    // GPU crashed, or was never available in the first place — reset and retry.
-    // FIX: previously only isDeviceLostError() triggered this reset/retry path, so
-    // "No available adapters" (thrown up front, not mid-session) skipped straight to the
-    // final catch below and threw a hard "GPU ক্র্যাশ — পেজ রিফ্রেশ করুন" error. Now both
-    // cases reset engine state and retry once, which (thanks to the loadEngine fix above)
-    // will correctly land on ONNX this time instead of hitting WebGPU again.
-    if (onProgress) onProgress('GPU রিসেট হচ্ছে...', 0);
+    if (onProgress) onProgress('রিসেট হচ্ছে...', 0);
     enginePromise = null;
     currentModelId = null;
     currentEngineType = null;
@@ -751,9 +691,6 @@ async function waitUntilReady(onProgress) {
 // ─── Debug Helpers ───────────────────────────────────────────────────────────
 
 window.getRuntime = function () {
-  // FIX: kept synchronous for backwards compatibility with any code/console usage that expects
-  // an immediate value, but now returns the *resolved* runtime if already probed, otherwise a
-  // clearly-labeled "not probed yet" placeholder instead of a stale synchronous guess.
   return runtime || { type: 'unknown', backend: 'unknown', label: 'Not probed yet — call window.LocalAI.waitUntilReady() first' };
 };
 
@@ -771,17 +708,12 @@ window.getNetworkSpeed = async function () {
   return mbps;
 };
 
-// FIX: added for easy manual debugging from the console — lets you check
-// `await window.checkWebGPU()` directly without digging through the module.
 window.checkWebGPU = async function () {
   const works = await hasWorkingWebGPU();
   console.log('Real WebGPU adapter available:', works);
   return works;
 };
 
-// FIX: diagnostic helper — hasWorkingWebGPU() swallows the actual error/timing so it's
-// impossible to tell from outside whether a false result was a genuine adapter failure, an
-// exception, or the 15s timeout winning. This logs exactly what happened.
 window.debugWebGPU = async function () {
   console.time('requestAdapter');
   try {
@@ -796,17 +728,10 @@ window.debugWebGPU = async function () {
   }
 };
 
-// FIX: ensureRuntime() caches its result forever (`if (runtime) return runtime`). If the very
-// first probe (e.g. the 5s pre-warm timer right after page load) hits a false negative —
-// adapter not fully ready yet, timing race inside the 4s hasWorkingWebGPU() timeout — the
-// runtime gets permanently cached as 'onnx' for the rest of the page's life, even though a
-// later manual checkWebGPU() call confirms the adapter works fine. This gives a manual escape
-// hatch: clear the cache and force a fresh probe on the next loadEngine()/waitUntilReady() call,
-// without needing a full page reload.
 window.resetRuntime = function () {
   runtime = null;
   runtimePromise = null;
-  runtimeGeneration++; // invalidate any still-pending stale probe from before reset
+  runtimeGeneration++;
   enginePromise = null;
   currentModelId = null;
   currentEngineType = null;
@@ -818,10 +743,6 @@ window.resetRuntime = function () {
 
 // ─── Pre-warm (5s delay to let page settle) ──────────────────────────────────
 
-// FIX: pre-warm now waits for ensureRuntime() (the real async GPU probe) before deciding
-// whether to kick off a WebLLM pre-load. Previously this checked the old synchronous
-// `runtime.type === 'webllm'` immediately at script-load time, before any GPU probing could
-// happen, so it could never have been correct anyway on a page that hadn't probed yet.
 (async () => {
   try {
     const rt = await ensureRuntime();
@@ -843,11 +764,6 @@ window.resetRuntime = function () {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 window.LocalAI = {
-  // FIX: isSupported() used to synchronously check `runtime.type === 'webllm' ? !!navigator.gpu
-  // : true`, which (a) read the stale synchronous `runtime` and (b) always returned true for the
-  // non-WebGPU path anyway. ONNX (CPU/WASM) works essentially everywhere, so this now simply
-  // always returns true — the real "can we actually use the GPU" decision now correctly lives
-  // inside getRuntime()/hasWorkingWebGPU(), not here.
   isSupported: () => true,
   getRuntime: ensureRuntime,
   loadEngine,
@@ -866,9 +782,6 @@ window.LocalAI = {
 
 // ─── Init Message ────────────────────────────────────────────────────────────
 
-// FIX: the init log used to print the (incorrectly synchronous) runtime guess immediately.
-// Now it waits for the real probe so the console log reflects the runtime that will actually
-// be used, which is a lot less confusing when debugging exactly the issue reported here.
 (async () => {
   const rt = await ensureRuntime();
   console.log(`🚀 LocalAI Hybrid initialized: ${rt.label}`);
