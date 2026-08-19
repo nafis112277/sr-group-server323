@@ -403,8 +403,9 @@ async function loadWebLLMEngine(modelId = null, onProgress) {
         if (onProgress) onProgress('পরবর্তী মডেলে যাচ্ছি...', 0);
       }
     }
-
-    throw new Error('WebLLM সব মডেল ব্যর্থ');
+    const exhaustedErr = new Error('WebLLM সব মডেল ব্যর্থ');
+    exhaustedErr.isFallbackEligible = true;
+    throw exhaustedErr;
   } catch (err) {
     throw err;
   }
@@ -572,7 +573,7 @@ async function loadEngine(modelId = null, onProgress) {
           // adapter-unavailable and device-lost. GPU works fine here — the shard download
           // itself failed (e.g. net::ERR_FAILED from Hugging Face's Xet CDN) — so fall to
           // ONNX transparently instead of surfacing a dead-end error.
-          if (isAdapterUnavailableError(err) || isDeviceLostError(err) || isNetworkFetchError(err)) {
+                  if (isAdapterUnavailableError(err) || isDeviceLostError(err) || isNetworkFetchError(err) || err.isFallbackEligible) {
             if (onProgress) onProgress('নেটওয়ার্ক/GPU সমস্যা, ONNX-এ যাচ্ছি...', 0);
             runtime = { type: 'onnx', backend: 'wasm', label: 'Desktop (WebLLM unavailable) + ONNX WASM' };
             return await loadONNXEngine(modelId, onProgress);
